@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
@@ -52,7 +52,7 @@ class Base(DeclarativeBase):
     def soft_delete(self, user_id: int | None = None) -> None:
         self.is_deleted = True
         self.is_active = False
-        self.deleted_at = datetime.now(UTC)
+        self.deleted_at = datetime.now(timezone.utc)
         self.deleted_by_id = user_id
 
     def restore(self, user_id: int | None = None) -> None:
