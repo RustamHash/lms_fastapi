@@ -1,0 +1,11 @@
+/* Глобальные стили приложения: порядок @import совпадает с бывшим монолитом (каскад).
+   Базовые блоки синхронизируются с app/interface/web/static/css/base.css где применимо. */
+
+@import './styles/app-layout.css';
+@import './styles/app-cards.css';
+@import './styles/list-pages.css';
+@import './styles/list-table.css';
+@import './styles/context-menu.css';
+@import './styles/dialogs.css';
+@import './styles/forms-wh.css';
+@import './styles/topology-hierarchy.css';

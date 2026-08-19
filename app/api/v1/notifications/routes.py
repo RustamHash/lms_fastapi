@@ -1,0 +1,81 @@
+"""API для модуля notifications."""
+
+from __future__ import annotations
+
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.api.v1.notifications import schemas
+from app.core.dependencies import get_current_user_id, get_session
+from app.notifications.services import NotificationService
+
+router = APIRouter(prefix="/notifications", tags=["notifications"])
+
+SessionDep = Annotated[AsyncSession, Depends(get_session)]
+UserDep = Annotated[int | None, Depends(get_current_user_id)]
+
+
+@router.get("", response_model=list[schemas.NotificationRead])
+async def list_notifications(
+    session: SessionDep,
+    user_id: UserDep,
+) -> list[schemas.NotificationRead]:
+    if user_id is None:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="Не авторизован")
+    service = NotificationService(session)
+    rows = await service.list_by_user(user_id)
+    return [schemas.NotificationRead.model_validate(r) for r in rows]
+
+
+@router.get("/unread", response_model=list[schemas.NotificationRead])
+async def unread_notifications(
+    session: SessionDep,
+    user_id: UserDep,
+) -> list[schemas.NotificationRead]:
+    if user_id is None:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="Не авторизован")
+    service = NotificationService(session)
+    rows = await service.get_unread(user_id)
+    return [schemas.NotificationRead.model_validate(r) for r in rows]
+
+
+@router.post("", response_model=schemas.NotificationRead, status_code=status.HTTP_201_CREATED)
+async def create_notification(
+    body: schemas.NotificationCreate,
+    session: SessionDep,
+) -> schemas.NotificationRead:
+    service = NotificationService(session)
+    notification = await service.create(
+        user_id=body.user_id,
+        title=body.title,
+        text=body.text,
+        notification_type=body.notification_type,
+        link=body.link,
+    )
+    return schemas.NotificationRead.model_validate(notification)
+
+
+@router.post("/{notification_id}/read", response_model=schemas.NotificationRead)
+async def mark_read(
+    notification_id: int,
+    session: SessionDep,
+) -> schemas.NotificationRead:
+    service = NotificationService(session)
+    notification = await service.mark_read(notification_id)
+    if notification is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Уведомление не найдено")
+    return schemas.NotificationRead.model_validate(notification)
+
+
+@router.post("/mark-all-read")
+async def mark_all_read(
+    session: SessionDep,
+    user_id: UserDep,
+) -> dict:
+    if user_id is None:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="Не авторизован")
+    service = NotificationService(session)
+    count = await service.mark_all_read(user_id)
+    return {"marked": count}

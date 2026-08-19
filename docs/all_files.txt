@@ -1,0 +1,715 @@
+=== /home/rustam/Data/test/lms_fastapi/docs/06_database.md ===
+# База данных — модели
+
+## Базовые поля (Base)
+
+Все модели наследуют:
+
+- id — integer, autoincrement
+- is_active — boolean, default true
+- created_at — datetime
+- updated_at — datetime
+- created_by_id — FK на accounts_user
+- updated_by_id — FK на accounts_user
+- is_deleted — boolean, soft delete
+- deleted_at — datetime
+- deleted_by_id — FK на accounts_user
+
+## Методы Base
+
+- activate(user_id) — включить
+- deactivate(user_id) — выключить
+- soft_delete(user_id) — удалить
+- restore(user_id) — восстановить
+
+## Связи
+
+accounts_user → accounts_user_roles → accounts_role
+accounts_user → accounts_user_depositor → parties_depositor
+accounts_user → accounts_user_trade_point → parties_trade_point
+
+parties_legal_entity → parties_depositor (OneToOne)
+parties_legal_entity → parties_keeper (OneToOne)
+parties_legal_entity → parties_carrier (OneToOne)
+parties_depositor → parties_client → parties_trade_point
+parties_legal_entity → parties_contract → parties_tariff_document → parties_tariff
+
+parties_address → parties_raw_address
+parties_address → parties_trade_point
+parties_delivery_zone → parties_address
+
+warehouse_warehouse → warehouse_virtual_warehouse
+warehouse_warehouse → warehouse_zone → warehouse_row → warehouse_location
+warehouse_product → warehouse_package
+warehouse_product → warehouse_batch
+warehouse_product → warehouse_stock_balance
+warehouse_product → warehouse_stock_movement
+warehouse_product → warehouse_task_line
+
+documents_document → documents_document_line
+documents_document → warehouse_task
+documents_document_line → warehouse_task_line
+
+delivery_order → delivery_route_line
+delivery_route → delivery_route_line
+delivery_driver → delivery_route
+delivery_vehicle → delivery_route
+
+=== /home/rustam/Data/test/lms_fastapi/docs/08_how_to_study.md ===
+# Как изучать проект
+
+## Порядок изучения
+
+1. Начните с README.md
+2. Изучите архитектуру (01_architecture.md)
+3. Посмотрите структуру бэкенда (02_backend.md)
+4. Разберитесь с алгоритмами (03_algorithms.md)
+5. Изучите фронтенд (04_frontend.md, 05_add_page.md)
+6. Изучите модели БД (06_database.md)
+7. Посмотрите API (07_api.md)
+
+## Практические задачи
+
+1. Добавить новый справочник
+2. Добавить новую роль
+3. Создать отчёт
+4. Импорт из Excel
+5. Добавить поле в модель
+
+## Полезные команды
+
+- Запуск бэкенда: uvicorn app.main:app --reload
+- Запуск фронтенда: cd frontend && npm run dev
+- Миграции: alembic upgrade head
+
+=== /home/rustam/Data/test/lms_fastapi/docs/02_backend.md ===
+# Бэкенд — структура и модули
+
+## Структура модуля
+
+app/{module}/
+├── models/ # ORM-модели SQLAlchemy
+│ └── init.py # экспорт всех моделей
+├── services/ # бизнес-логика
+│ └── init.py # экспорт сервисов
+└── repository.py # SQL-запросы
+
+## Модуль accounts
+
+app/accounts/
+├── models/
+│ ├── user.py # User — пользователь
+│ ├── role.py # Role — роли, M2M через user_roles
+│ ├── audit.py # Audit — журнал действий
+│ ├── user_settings.py # UserSettings — настройки UI
+│ ├── user_table_settings.py # UserTableSettings — настройки таблиц
+│ ├── user_depositor.py # UserDepositor — привязка к поклажедателю
+│ └── user_trade_point.py # UserTradePoint — привязка к ТТ
+├── services/
+│ ├── user_service.py # создание, аутентификация, JWT
+│ ├── role_service.py # роли и права
+│ ├── audit_service.py # запись аудита
+│ └── table_settings_service.py # настройки таблиц
+└── repository.py # UserRepository, RoleRepository, AuditRepository, etc.
+
+## Модуль parties
+
+app/parties/
+├── models/
+│ ├── address.py # Address, RawAddress, DeliveryZone
+│ ├── legal_entity.py # LegalEntity — юрлицо
+│ ├── counterparty.py # Depositor, Keeper, Carrier
+│ ├── client.py # Client, TradePoint
+│ ├── contract.py # Contract
+│ └── tariff.py # TariffDocument, Tariff
+├── services/
+│ ├── address_service.py # создание адресов, DaData, hash
+│ ├── legal_entity_service.py
+│ ├── client_service.py # ClientService + TradePointService
+│ ├── contract_service.py
+│ ├── tariff_service.py
+│ └── depositor_service.py
+└── repository.py # AddressRepository, LegalEntityRepository, etc.
+
+## Модуль warehouse
+
+app/warehouse/
+├── models/
+│ ├── topology.py # Warehouse, VirtualWarehouse, Zone, Row, Location
+│ ├── product.py # ProductGroup, Product
+│ ├── package.py # Package — упаковка
+│ ├── batch.py # Batch — партия
+│ ├── lpn.py # LPN — паллета
+│ ├── stock_balance.py # StockBalance — остатки
+│ ├── stock_movement.py # StockMovement — движения
+│ ├── task.py # Task, TaskLine — задания
+│ └── product_location.py # ProductLocation — товар-ячейка
+├── services/
+│ ├── stock_service.py # приход, расход, перемещение, резерв
+│ ├── batch_service.py # партии
+│ ├── lpn_service.py # паллеты
+│ ├── placement_service.py # FEFO размещение
+│ ├── product_service.py # товары
+│ └── task_service.py # задания с фактом
+└── repository.py
+
+## Модуль documents
+
+app/documents/
+├── models/
+│ └── document.py # Document, DocumentLine
+├── services/
+│ └── document_service.py # создание, статусы, строки
+└── repository.py
+
+## Модуль delivery
+
+app/delivery/
+├── models/
+│ ├── delivery_order.py # DeliveryOrder, DeliveryDeviation
+│ ├── driver.py # Driver, Vehicle
+│ └── route.py # Route, RouteLine
+├── services/
+│ └── delivery_order_service.py # статусы, создание
+└── repository.py
+
+## Модуль integration
+
+app/integration/
+├── models/
+│ └── integration_profile.py # IntegrationProfile, IntegrationLog, IntegrationError
+├── services/
+│ ├── ftp_service.py # FTP-клиент
+│ └── integration_service.py # IntegrationService + AdapterService
+├── adapters/
+│ ├── base.py # BaseAdapter
+│ └── zln_adapter.py # ZLNAdapter — парсинг XML
+└── repository.py
+
+## Модуль notifications
+
+app/notifications/
+├── models/
+│ └── notification.py
+├── services/
+│ └── notification_service.py
+└── repository.py
+
+## Инфраструктура
+
+app/infrastructure/
+├── orm_base.py # Base — базовый класс с audit-полями
+├── uow.py # UnitOfWork — транзакции
+├── audit/
+│ ├── events.py
+│ └── service.py
+├── files/
+│ └── models.py # File — файлы
+├── logging/
+│ └── setup.py # настройка логирования
+└── external/
+ └── dadata.py # DaDataClient — геокодинг
+
+## Ядро
+
+app/core/
+├── config.py # Settings — из .env
+├── database.py # async engine, session factory
+├── dependencies.py # get_session, get_current_user, require_permission
+├── security.py # JWT, bcrypt
+└── middleware.py # не используется, можно удалить
+
+## API
+
+app/api/v1/
+├── router.py # главный роутер
+├── accounts/
+│ ├── schemas.py # Pydantic-схемы
+│ └── routes.py # auth, users, roles, table-settings
+├── parties/
+│ ├── schemas.py
+│ └── routes.py # addresses, aliases, legal-entities, depositors, clients, trade-points, contracts, tariffs
+├── warehouse/
+│ ├── schemas.py
+│ └── routes.py # products, batches, lpns, stock, tasks
+├── documents/
+│ ├── schemas.py
+│ └── routes.py
+├── delivery/
+│ ├── schemas.py
+│ └── routes.py
+├── integration/
+│ ├── schemas.py
+│ └── routes.py
+├── notifications/
+│ ├── schemas.py
+│ └── routes.py
+└── files/
+ ├── schemas.py
+ └── routes.py
+
+=== /home/rustam/Data/test/lms_fastapi/docs/01_architecture.md ===
+# Общая архитектура
+
+## Слои
+
+HTTP Request → FastAPI Router (app/api/v1/) → Service (app//services/) → Repository (app//repository.py) → ORM Model (app/*/models/) → PostgreSQL
+
+## Модули
+
+| Модуль | Назначение |
+|--------|------------|
+| accounts | Пользователи, роли, аудит, настройки таблиц |
+| parties | Адреса, юрлица, поклажедатели, клиенты, договоры, тарифы |
+| warehouse | Топология склада, товары, партии, LPN, остатки, задания |
+| documents | Документы прихода/расхода/перемещения |
+| delivery | Доставка, водители, транспорт, маршруты |
+| integration | FTP, адаптеры, импорт заказов |
+| notifications | Уведомления |
+| files | Загрузка/скачивание файлов |
+| infrastructure | Базовые классы, UoW, аудит, логирование |
+| core | Конфигурация, БД, безопасность, зависимости |
+
+## Принципы
+
+1. Router → Service → Repository → DB
+2. Все запросы асинхронные
+3. Soft delete через Base.soft_delete()
+4. UoW управляет транзакциями
+5. Валидация через Pydantic-схемы
+
+=== /home/rustam/Data/test/lms_fastapi/docs/README.md ===
+# Документация проекта LMS FastAPI
+
+## Содержание
+
+- Общая архитектура
+- Бэкенд — структура и модули
+- Бэкенд — алгоритмы
+- Фронтенд — структура
+- Фронтенд — как добавить страницу
+- База данных — модели
+- API — эндпоинты
+- Как изучать проект
+
+=== /home/rustam/Data/test/lms_fastapi/docs/07_api.md ===
+# API — эндпоинты
+
+## Auth
+
+- POST /api/v1/auth/token — вход, получение JWT
+- POST /api/v1/auth/register — регистрация
+- GET /api/v1/auth/me — текущий пользователь + permissions
+
+## Users
+
+- GET /api/v1/users — список
+- GET /api/v1/users/{id} — один
+- PATCH /api/v1/users/{id} — обновить
+
+## Roles
+
+- GET /api/v1/roles — список
+- POST /api/v1/roles — создать
+
+## Table Settings
+
+- GET /api/v1/table-settings/{table_id} — получить
+- PUT /api/v1/table-settings/{table_id} — сохранить
+
+## Parties — Addresses
+
+- GET /api/v1/parties/addresses — список
+- POST /api/v1/parties/addresses/resolve — создать/найти
+- GET /api/v1/parties/addresses/{id} — один
+- PATCH /api/v1/parties/addresses/{id} — обновить
+- DELETE /api/v1/parties/addresses/{id} — удалить
+
+## Parties — Aliases
+
+- GET /api/v1/parties/aliases — список
+- GET /api/v1/parties/aliases/{id} — один
+- DELETE /api/v1/parties/aliases/{id} — удалить
+
+## Parties — Legal Entities
+
+- GET /api/v1/parties/legal-entities — список
+- POST /api/v1/parties/legal-entities — создать
+- GET /api/v1/parties/legal-entities/{id} — один
+- PATCH /api/v1/parties/legal-entities/{id} — обновить
+- DELETE /api/v1/parties/legal-entities/{id} — удалить
+
+## Parties — Depositors
+
+- GET /api/v1/parties/depositors — список
+- POST /api/v1/parties/depositors — создать
+- GET /api/v1/parties/depositors/{id} — один
+- PATCH /api/v1/parties/depositors/{id} — обновить
+- DELETE /api/v1/parties/depositors/{id} — удалить
+
+## Parties — Clients
+
+- GET /api/v1/parties/clients — список
+- POST /api/v1/parties/clients — создать
+- GET /api/v1/parties/clients/{id} — один
+- PATCH /api/v1/parties/clients/{id} — обновить
+- DELETE /api/v1/parties/clients/{id} — удалить
+
+## Parties — Trade Points
+
+- GET /api/v1/parties/trade-points — список
+- POST /api/v1/parties/trade-points/resolve — создать/найти
+- GET /api/v1/parties/trade-points/{id} — один
+- PATCH /api/v1/parties/trade-points/{id} — обновить
+- DELETE /api/v1/parties/trade-points/{id} — удалить
+
+## Parties — Contracts
+
+- GET /api/v1/parties/contracts — список
+- POST /api/v1/parties/contracts — создать
+- GET /api/v1/parties/contracts/{id} — один
+- PATCH /api/v1/parties/contracts/{id} — обновить
+- DELETE /api/v1/parties/contracts/{id} — удалить
+
+## Parties — Tariffs
+
+- GET /api/v1/parties/tariff-documents — список
+- POST /api/v1/parties/tariff-documents — создать
+- GET /api/v1/parties/tariff-documents/{id} — один
+- PATCH /api/v1/parties/tariff-documents/{id} — обновить
+- DELETE /api/v1/parties/tariff-documents/{id} — удалить
+- GET /api/v1/parties/tariffs — список
+- POST /api/v1/parties/tariffs — создать
+- GET /api/v1/parties/tariffs/{id} — один
+- PATCH /api/v1/parties/tariffs/{id} — обновить
+- DELETE /api/v1/parties/tariffs/{id} — удалить
+
+## Warehouse — Products
+
+- GET /api/v1/warehouse/products — список
+- POST /api/v1/warehouse/products — создать
+- GET /api/v1/warehouse/products/{id} — один
+- PATCH /api/v1/warehouse/products/{id} — обновить
+- DELETE /api/v1/warehouse/products/{id} — удалить
+
+## Warehouse — Batches
+
+- GET /api/v1/warehouse/batches — список
+- POST /api/v1/warehouse/batches — создать
+- GET /api/v1/warehouse/batches/{id} — один
+- DELETE /api/v1/warehouse/batches/{id} — удалить
+
+## Warehouse — LPN
+
+- GET /api/v1/warehouse/lpns — список
+- POST /api/v1/warehouse/lpns — создать
+- GET /api/v1/warehouse/lpns/{id} — один
+- DELETE /api/v1/warehouse/lpns/{id} — удалить
+
+## Warehouse — Stock
+
+- POST /api/v1/warehouse/stock/add — приход
+- POST /api/v1/warehouse/stock/remove — расход
+- POST /api/v1/warehouse/stock/move — перемещение
+
+## Warehouse — Tasks
+
+- GET /api/v1/warehouse/tasks — список
+- POST /api/v1/warehouse/tasks — создать
+- GET /api/v1/warehouse/tasks/{id} — один
+- DELETE /api/v1/warehouse/tasks/{id} — удалить
+- POST /api/v1/warehouse/tasks/{id}/lines — добавить строку
+- POST /api/v1/warehouse/tasks/{id}/start — начать
+- POST /api/v1/warehouse/tasks/{id}/complete — завершить
+- POST /api/v1/warehouse/task-lines/{id}/complete — выполнить строку
+
+## Documents
+
+- GET /api/v1/documents — список
+- POST /api/v1/documents — создать
+- GET /api/v1/documents/{id} — один
+- DELETE /api/v1/documents/{id} — удалить
+- POST /api/v1/documents/{id}/lines — добавить строку
+- PATCH /api/v1/documents/{id}/status — сменить статус
+
+## Delivery
+
+- GET /api/v1/delivery/orders — список
+- POST /api/v1/delivery/orders — создать
+- GET /api/v1/delivery/orders/{id} — один
+- PATCH /api/v1/delivery/orders/{id}/status — статус
+
+## Notifications
+
+- GET /api/v1/notifications — список
+- GET /api/v1/notifications/unread — непрочитанные
+- POST /api/v1/notifications — создать
+- POST /api/v1/notifications/{id}/read — отметить прочитанным
+- POST /api/v1/notifications/{id}/unread — отметить непрочитанным
+
+=== /home/rustam/Data/test/lms_fastapi/docs/04_frontend.md ===
+# Фронтенд — структура
+
+## Каталоги
+
+frontend/src/
+├── App.tsx # маршруты
+├── main.tsx # точка входа
+├── auth/
+│ └── AuthContext.tsx # JWT, пользователь, permissions
+├── components/
+│ ├── DetailPageShell.tsx # обёртка detail-страниц, кнопка назад, хлебные крошки
+│ ├── EntityListPage.tsx # универсальный список
+│ ├── ListTableShell.tsx # таблица со сортировкой, фильтрами, колонками
+│ ├── ListFilterCell.tsx # ячейка фильтра
+│ ├── Layout.tsx # общий layout + notice strip
+│ ├── Navbar.tsx # навигация
+│ ├── RequireAuth.tsx # защита маршрутов
+│ └── TableCellContextMenu.tsx # контекстное меню
+├── features/
+│ ├── entity-list/
+│ │ ├── types.ts # ListPageConfig
+│ │ ├── useEntityList.tsx # хук загрузки и фильтрации
+│ │ ├── EntityListPage.tsx # рендер списка
+│ │ └── columnUtils.ts # форматирование
+│ ├── addresses/
+│ │ ├── config.ts # конфиг списка адресов
+│ │ └── addressInputAliasConfig.ts # конфиг алиасов
+│ ├── legal-entities/
+│ │ └── config.ts
+│ ├── depositors/
+│ │ └── config.ts
+│ ├── clients/
+│ │ └── config.ts
+│ ├── trade-points/
+│ │ └── config.ts
+│ ├── contracts/
+│ │ └── config.ts
+│ └── tariffs/
+│ └── config.ts
+├── hooks/
+│ ├── useColumnPrefs.ts # сохранение настроек колонок
+│ └── useListController.ts # состояние списка
+├── lib/
+│ ├── http.ts # apiFetch с Bearer
+│ └── token.ts # работа с sessionStorage
+├── pages/
+│ ├── ReferencesPage.tsx # страница справочников
+│ ├── AddressesPage.tsx
+│ ├── AddressDetailPage.tsx
+│ ├── LegalEntitiesPage.tsx
+│ ├── LegalEntityDetailPage.tsx
+│ ├── LegalEntityCreatePage.tsx
+│ ├── LegalEntityEditPage.tsx
+│ └── ... другие страницы
+└── styles/
+ ├── app-layout.css
+ └── list-pages.css
+
+## Как работает список
+
+1. Страница вызывает EntityListPage с config
+2. useEntityList загружает данные через apiFetch
+3. useColumnPrefs загружает/сохраняет настройки колонок
+4. ListTableShell рендерит таблицу, фильтры, сортировку
+5. Конфиг определяет: колонки, фильтры, URL, ссылки
+
+=== /home/rustam/Data/test/lms_fastapi/docs/05_add_page.md ===
+# Как добавить новую страницу
+
+## Шаг 1: Конфиг
+
+Создать frontend/src/features/{entity}/config.ts:
+
+typescript
+import type { ListPageConfig } from '../entity-list/types'
+
+type EntityRow = {
+ id: number
+ name: string
+ // поля из API
+}
+
+export const entityConfig = {
+ list: {
+ entityKey: 'entities',
+ title: 'Название',
+ apiUrl: '/api/v1/...',
+ columns: [
+ { id: 'id', label: 'ID', type: 'number' },
+ { id: 'name', label: 'Название', type: 'text' },
+ ],
+ filters: [
+ { id: 'name', type: 'text', label: 'Название' },
+ ],
+ toolbar: {
+ createHref: '/reference/entities/new',
+ },
+ columnOverrides: {
+ name: { href: (row) => `/reference/entities/${row.id}` },
+ },
+ } as ListPageConfig<EntityRow>,
+}
+
+
+## Шаг 2: Страница списка
+
+Создать frontend/src/pages/EntitiesPage.tsx:
+typescript
+import { useNavigate } from 'react-router-dom'
+import { EntityListPage } from '../features/entity-list/EntityListPage'
+import { entityConfig } from '../features/entities/config'
+
+export function EntitiesPage() {
+ const navigate = useNavigate()
+ return (
+ <EntityListPage
+ config={entityConfig.list}
+ onBack={() => navigate('/references')}
+ breadcrumbs={[
+ { label: 'Справочники', to: '/references' },
+ { label: 'Название' },
+ ]}
+ />
+ )
+}
+
+
+## Шаг 3: Detail-страница
+
+Создать frontend/src/pages/EntityDetailPage.tsx:
+typescript
+import { useEffect, useState } from 'react'
+import { useParams } from 'react-router-dom'
+import { DetailPageShell } from '../components/DetailPageShell'
+import { apiFetch } from '../lib/http'
+
+export function EntityDetailPage() {
+ const { entityId } = useParams()
+ const [entity, setEntity] = useState(null)
+ 
+ useEffect(() => {
+ apiFetch(`/api/v1/.../${entityId}`)
+ .then(r => r.json())
+ .then(setEntity)
+ }, [entityId])
+
+ return (
+ <DetailPageShell
+ title={entity?.name}
+ breadcrumbs={[
+ { label: 'Справочники', to: '/references' },
+ { label: 'Название', to: '/reference/entities' },
+ { label: `#${entityId}` },
+ ]}
+ >
+ {/* поля */}
+ </DetailPageShell>
+ )
+}
+
+
+## Шаг 4: Маршрут
+
+В App.tsx добавить:
+typescript
+<Route path="/reference/entities" element={<EntitiesPage />} />
+<Route path="/reference/entities/:entityId" element={<EntityDetailPage />} />
+
+
+## Шаг 5: Справочники
+
+В ReferencesPage.tsx добавить карточку в группу.
+
+=== /home/rustam/Data/test/lms_fastapi/docs/03_algorithms.md ===
+# Бэкенд — алгоритмы
+
+## 1. Создание адреса
+
+AddressService.get_or_create:
+
+1. Нормализация текста: " ".join(text.lower().strip().split())
+2. Хеш SHA256 от нормализованного
+3. Поиск в RawAddress по raw_text
+4. Поиск в RawAddress по hash
+5. DaData clean_address — получить нормализованный
+6. Поиск в Address по fias_id
+7. Поиск в Address по full_address
+8. Создание Address + RawAddress
+
+## 2. Приход товара
+
+StockService.add_stock:
+
+1. Найти StockBalance по (product, location, lpn, batch)
+2. Если есть — увеличить quantity
+3. Если нет — создать
+4. Создать StockMovement (direction=in)
+
+## 3. Расход товара
+
+StockService.remove_stock:
+
+1. Найти StockBalance
+2. Проверить остаток
+3. Уменьшить quantity
+4. Создать StockMovement (direction=out)
+
+## 4. Перемещение
+
+StockService.move_stock:
+
+1. remove_stock из from_location
+2. add_stock в to_location
+
+## 5. Резервирование
+
+StockService.reserve:
+
+1. Найти StockBalance
+2. Проверить available = quantity - reserved_quantity
+3. Увеличить reserved_quantity
+
+## 6. FEFO размещение
+
+PlacementService.find_location:
+
+1. Получить закреплённые ячейки отбора (ProductLocation)
+2. Для каждой проверить:
+ - пустая → place
+ - та же партия → place
+ - другая партия, свежее → replace
+ - другая партия, хуже → skip
+3. Если ни одна не подошла — первая свободная ячейка хранения
+
+## 7. Задания
+
+TaskService.complete_line:
+
+1. Автостарт задания (new → in_progress)
+2. В зависимости от типа:
+ - receiving/putaway → add_stock
+ - picking/shipping → remove_stock
+ - movement → move_stock
+3. Накопить fact_qty
+4. При завершении задания:
+ - нет отклонений → completed
+ - есть отклонения + force → completed_with_deviations
+
+## 8. Импорт заказов
+
+1. FTP: скачать файл
+2. Adapter: парсинг XML → UniversalDoc
+3. Для каждого товара: find or create Product
+4. Создать Document
+5. Для каждой строки: create DocumentLine
+6. Если доставка: create DeliveryOrder
+
+## 9. Аутентификация
+
+1. POST /auth/token: username + password
+2. Проверить bcrypt hash
+3. Создать JWT (sub=user_id, exp=24h)
+4. При каждом запросе: decode JWT, получить user
+5. Проверить has_permission для действий
+

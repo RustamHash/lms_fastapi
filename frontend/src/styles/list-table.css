@@ -1,0 +1,356 @@
+/* Таблица списков (палитра как в WMS_New), фильтры колонок */
+
+.list-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+  line-height: 1.1;
+  background: #fff;
+}
+
+.list-table.list-table--col-size {
+  table-layout: fixed;
+  min-width: 100%;
+  width: fit-content;
+  /* width: max-content; */
+}
+
+col.list-table__col-cb {
+  width: 26px;
+}
+
+.list-table__th-col {
+  position: relative;
+  vertical-align: middle;
+}
+
+.list-table__col-resize {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 6px;
+  height: 100%;
+  cursor: col-resize;
+  touch-action: none;
+  user-select: none;
+  z-index: 4;
+  box-sizing: border-box;
+}
+
+.list-table__col-resize:hover {
+  background: rgba(240, 175, 137, 0.35);
+}
+
+.list-table--col-size thead tr.list-filter-row th {
+  min-width: 0;
+}
+
+.list-table--col-size thead tr.list-filter-row th:has(.list-filter-cell--datetime) {
+  min-width: 0;
+}
+
+.list-table--col-size .list-filter-cell {
+  max-width: none;
+  min-width: 0;
+}
+
+/* Иначе th/td держат min-width: auto от содержимого — <col> не может сузить колонку (в т.ч. ID). */
+.list-table--col-size thead th:not(.list-table__cb),
+.list-table--col-size tbody td:not(.list-table__cb) {
+  min-width: 26;
+}
+
+.list-table th,
+.list-table td {
+  border: 1px solid #ddd;
+  padding: 1px 4px;
+  text-align: left;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.list-table thead tr.list-table__head-row th {
+  background: #2c3e50;
+  color: #fff;
+  font-weight: 500;
+  font-size: 11px;
+  line-height: 1.1;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.12);
+}
+
+/* Вторая строка заголовка (фильтры) закрепляется сразу под первой. */
+.list-table thead tr.list-filter-row th {
+  position: sticky;
+  top: 22px;
+  z-index: 1;
+}
+
+.list-table thead tr.list-table__head-row th:has(.list-table__sort-btn) {
+  padding: 0;
+  vertical-align: middle;
+}
+
+.list-table__sort-btn {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 2px;
+  width: 100%;
+  min-height: 100%;
+  margin: 0;
+  padding: 1px 4px;
+  box-sizing: border-box;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.list-table__sort-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.list-table__sort-btn:focus-visible {
+  outline: 2px solid #f0af89;
+  outline-offset: -2px;
+}
+
+.list-table__sort-arrow {
+  font-size: 8px;
+  opacity: 0.95;
+  flex-shrink: 0;
+}
+
+.list-table thead tr.list-filter-row {
+  --list-filter-focus: #f0af89;
+}
+
+.list-table thead tr.list-filter-row th {
+  background: #34495e;
+  color: #fff;
+  font-weight: normal;
+  vertical-align: middle;
+  padding: 1px 3px;
+}
+
+.list-table thead tr.list-filter-row th:has(.list-filter-cell__row) {
+  min-width: 0;
+}
+
+.list-table thead tr.list-filter-row th:has(.list-filter-cell--datetime) {
+  min-width: 0;
+}
+
+.list-table thead .list-table__cb input {
+  accent-color: #3498db;
+  width: 12px;
+  height: 12px;
+}
+
+.list-table tbody tr {
+  transition: background-color 0.15s ease;
+}
+
+.list-table tbody td {
+  background: #fff;
+  color: #222;
+  font-size: 11px;
+}
+
+.list-table tbody td.list-table__empty {
+  text-align: center;
+  padding: 28px 16px;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.45;
+  background: #f8fafc;
+  white-space: normal;
+}
+
+.list-table tbody tr:hover td {
+  background: #e8f4f8;
+}
+
+.list-table tbody tr:has(> td.list-table__empty):hover td {
+  background: #f8fafc;
+}
+
+.list-table th.list-table__cb,
+.list-table td.list-table__cb {
+  width: 14px;
+  min-width: 0;
+  max-width: 14px;
+  box-sizing: border-box;
+  padding: 0;
+  overflow: hidden;
+  text-align: center;
+  vertical-align: middle;
+}
+
+.list-table tbody .list-table__cb input {
+  width: 12px;
+  height: 12px;
+  accent-color: #3498db;
+  vertical-align: middle;
+}
+
+.list-filter-cell {
+  position: relative;
+  width: 100%;
+  max-width: 12rem;
+  min-width: 0;
+}
+
+.list-filter-cell--datetime {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-width: 14rem;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.list-filter-cell__row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+
+.list-filter-cell__row > .list-filter-cell__field {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: auto;
+}
+
+.list-filter-cell__clear--inline {
+  position: static;
+  transform: none;
+  flex: 0 0 18px;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
+.list-filter-cell__dt-input {
+  min-width: 0;
+}
+
+.list-filter-cell__dt-range {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.list-filter-cell__field {
+  width: 100%;
+  box-sizing: border-box;
+  font-size: 10px;
+  line-height: 1.15;
+  padding: 0 3px;
+  min-height: 18px;
+  border: 1px solid #cbd5e1;
+  border-radius: 2px;
+  background: #fff;
+  color: #1e293b;
+}
+
+.list-filter-cell--dirty .list-filter-cell__field {
+  padding-right: 18px;
+}
+
+.list-filter-cell--datetime.list-filter-cell--dirty .list-filter-cell__field {
+  padding-right: 3px;
+}
+
+.list-filter-cell--dirty .list-filter-cell__row .list-filter-cell__field {
+  padding-right: 3px;
+}
+
+.list-filter-cell__field:focus,
+.list-filter-cell__field:focus-visible {
+  outline: none;
+  border-color: var(--list-filter-focus, #f0af89);
+  box-shadow: 0 0 0 1px var(--list-filter-focus, #f0af89);
+}
+
+.list-table thead tr.list-filter-row .list-filter-cell--dirty .list-filter-cell__field {
+  border-color: var(--list-filter-focus, #f0af89);
+  box-shadow: 0 0 0 1px var(--list-filter-focus, #f0af89);
+}
+
+.list-table thead tr.list-filter-row .list-filter-cell--datetime.list-filter-cell--dirty .list-filter-cell__field {
+  padding-right: 3px;
+}
+
+.list-table thead tr.list-filter-row .list-filter-cell--dirty .list-filter-cell__row .list-filter-cell__field {
+  padding-right: 3px;
+}
+
+.list-filter-cell__field--select {
+  cursor: pointer;
+  appearance: auto;
+}
+
+.list-table thead tr.list-filter-row .list-filter-cell__field--select:hover {
+  background-color: #f8fafc;
+}
+
+.list-filter-cell__clear {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 2px;
+  background: transparent;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.list-filter-cell__clear:hover {
+  background: #e2e8f0;
+  color: #1e293b;
+}
+
+.list-table thead tr.list-filter-row .list-filter-cell__clear {
+  color: #94a3b8;
+}
+
+.list-table thead tr.list-filter-row .list-filter-cell__clear:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+}
+
+.list-table thead tr.list-filter-row .list-filter-cell__clear--inline {
+  color: #e2e8f0;
+}
+
+.list-table thead tr.list-filter-row .list-filter-cell__clear--inline:hover {
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+}
+
+/* Одна строка в ячейке — без переноса; лишнее обрезается (горизонтальный скролл у .table-wrap). */
+.list-table--col-size tbody td:not(.list-table__cb) {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

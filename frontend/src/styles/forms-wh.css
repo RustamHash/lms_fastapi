@@ -1,0 +1,55 @@
+/* Форма создания/редактирования склада */
+
+.wh-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 24rem;
+}
+
+.wh-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 14px;
+}
+
+.wh-form__hint {
+  font-size: 12px;
+  line-height: 1.4;
+  color: #64748b;
+  font-weight: 400;
+}
+
+.wh-form input[type='text'] {
+  padding: 6px 8px;
+  font-size: 14px;
+}
+
+.wh-form__check {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+
+.wh-form__err {
+  color: #b91c1c;
+  margin: 0;
+  font-size: 14px;
+}
+
+.wh-form__actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.wh-form__actions button {
+  padding: 8px 14px;
+  cursor: pointer;
+}
+
+.wh-form__actions a {
+  color: #2c7be5;
+  text-decoration: none;
+}

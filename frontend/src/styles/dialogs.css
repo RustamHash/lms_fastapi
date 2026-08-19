@@ -1,0 +1,184 @@
+/* Модальные окна (в т.ч. «Вид» колонок) */
+
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+  padding: 16px;
+}
+
+/* Окно «Вид»: не центрировать по вертикали при нехватке места — шапка остаётся в зоне экрана */
+.dialog-backdrop--cols {
+  align-items: flex-start;
+  padding-top: max(12px, env(safe-area-inset-top, 0px));
+  overflow-y: auto;
+}
+
+.dialog {
+  background: #fff;
+  border-radius: 8px;
+  padding: 16px;
+  max-width: 28rem;
+  width: 100%;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+}
+
+/* «Вид» колонок: компактная шапка, прокрутка списка, кнопки всегда внизу модалки */
+.dialog--column-picker {
+  display: flex;
+  flex-direction: column;
+  max-height: min(82vh, 520px);
+  padding: 12px 14px;
+  max-width: 24rem;
+  min-height: 0;
+  margin-bottom: auto;
+}
+
+.dialog-column-picker__head {
+  flex-shrink: 0;
+}
+
+.dialog-column-picker__title {
+  margin: 0 0 4px;
+  font-size: 1.05rem;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.dialog-column-picker__hint {
+  font-size: 12px;
+  line-height: 1.35;
+  margin: 0 0 8px;
+}
+
+.dialog-column-picker__select-all {
+  margin: 0 0 6px;
+  padding-bottom: 6px;
+}
+
+.dialog-column-picker__scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  margin: 0 -2px;
+  padding: 0 2px 4px;
+}
+
+.dialog-cols--in-picker {
+  margin-bottom: 0;
+}
+
+.dialog-cols--in-picker .dialog-cols__row {
+  padding: 2px 0;
+}
+
+.dialog-column-picker__actions {
+  flex-shrink: 0;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.dialog--wide {
+  max-width: min(44rem, calc(100vw - 32px));
+}
+
+.dialog__hint {
+  font-size: 13px;
+  color: #64748b;
+  margin: 0 0 12px;
+}
+
+.dialog-cols__select-all {
+  margin: 0 0 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #e2e8f0;
+  font-size: 13px;
+}
+
+.dialog-cols__select-all label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.dialog-cols {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+}
+
+.dialog-cols__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.dialog-cols__row--drop-over {
+  background: #f1f5f9;
+  box-shadow: inset 0 0 0 1px #94a3b8;
+  border-radius: 4px;
+}
+
+.dialog-cols__row--dragging {
+  opacity: 0.55;
+}
+
+.dialog-cols__drag-handle {
+  flex-shrink: 0;
+  cursor: grab;
+  user-select: none;
+  padding: 2px 4px;
+  margin: 0;
+  font-size: 14px;
+  line-height: 1;
+  color: #94a3b8;
+  letter-spacing: -2px;
+}
+
+.dialog-cols__drag-handle:active {
+  cursor: grabbing;
+}
+
+.dialog-cols__label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1 1 auto;
+  min-width: 0;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.dialog-cols__width {
+  flex-shrink: 0;
+}
+
+.dialog-cols__width-input {
+  width: 4.25rem;
+  box-sizing: border-box;
+  font-size: 12px;
+  line-height: 1.2;
+  padding: 2px 4px;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+}
+
+.dialog-cols__width-input::placeholder {
+  color: #94a3b8;
+  font-size: 11px;
+}
+
+.dialog__actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}

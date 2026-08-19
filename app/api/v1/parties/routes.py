@@ -1,0 +1,572 @@
+"""API для модуля parties."""
+
+from __future__ import annotations
+
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.api.v1.parties import schemas
+from app.core.dependencies import get_current_user_id, get_session
+from app.parties.models import RawAddress
+from app.parties.repository import (
+    AddressRepository,
+    ClientRepository,
+    ContractRepository,
+    DepositorRepository,
+    LegalEntityRepository,
+    TariffRepository,
+    TradePointRepository,
+)
+from app.parties.services import (
+    AddressService,
+    ClientService,
+    ContractService,
+    DepositorService,
+    LegalEntityService,
+    TariffService,
+    TradePointService,
+)
+
+router = APIRouter(prefix="/parties", tags=["parties"])
+
+SessionDep = Annotated[AsyncSession, Depends(get_session)]
+UserDep = Annotated[int | None, Depends(get_current_user_id)]
+
+
+# ========== Адреса ==========
+
+@router.get("/addresses", response_model=list[schemas.AddressRead])
+async def list_addresses(session: SessionDep) -> list[schemas.AddressRead]:
+    service = AddressService(AddressRepository(session))
+    rows = await service.list_all()
+    return [schemas.AddressRead.model_validate(r) for r in rows]
+
+
+@router.post("/addresses/resolve", response_model=schemas.AddressRead)
+async def resolve_address(
+    body: schemas.AddressResolve,
+    session: SessionDep,
+    user_id: UserDep,
+) -> schemas.AddressRead:
+    service = AddressService(AddressRepository(session))
+    address = await service.get_or_create(body.raw_text, body.source, user_id)
+    return schemas.AddressRead.model_validate(address)
+
+
+@router.get("/addresses/{address_id}", response_model=schemas.AddressRead)
+async def get_address(address_id: int, session: SessionDep) -> schemas.AddressRead:
+    service = AddressService(AddressRepository(session))
+    row = await service.get_by_id(address_id)
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Адрес не найден")
+    return schemas.AddressRead.model_validate(row)
+
+
+@router.patch("/addresses/{address_id}", response_model=schemas.AddressRead)
+async def update_address(
+    address_id: int,
+    body: schemas.AddressUpdate,
+    session: SessionDep,
+    user_id: UserDep,
+) -> schemas.AddressRead:
+    service = AddressService(AddressRepository(session))
+    address = await service.update(address_id, user_id, body.model_dump(exclude_unset=True))
+    if address is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Адрес не найден")
+    return schemas.AddressRead.model_validate(address)
+
+
+@router.delete("/addresses/{address_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_address(
+    address_id: int,
+    session: SessionDep,
+    user_id: UserDep,
+) -> None:
+    service = AddressService(AddressRepository(session))
+    ok = await service.soft_delete(address_id, user_id)
+    if not ok:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Адрес не найден")
+
+
+# ========== Алиасы (сырые адреса) ==========
+
+@router.get("/aliases", response_model=list[schemas.RawAddressRead])
+async def list_aliases(
+    session: SessionDep,
+    limit: int = 1000,
+    offset: int = 0,
+) -> list[schemas.RawAddressRead]:
+    from sqlalchemy import select
+    stmt = (
+        select(RawAddress)
+        .where(RawAddress.is_deleted.is_(False))
+        .order_by(RawAddress.id.desc())
+        .limit(limit)
+        .offset(offset)
+    )
+    rows = list(await session.scalars(stmt))
+    result = []
+    for r in rows:
+        from app.parties.models import Address
+        address = await session.get(Address, r.normalized_address_id)
+        result.append(
+            schemas.RawAddressRead(
+                id=r.id,
+                raw_text=r.raw_text,
+                hash=r.hash,
+                normalized_address_id=r.normalized_address_id,
+                source=r.source,
+                full_address=address.full_address if address else None,
+            )
+        )
+    return result
+
+
+@router.get("/aliases/{alias_id}", response_model=schemas.RawAddressRead)
+async def get_alias(alias_id: int, session: SessionDep) -> schemas.RawAddressRead:
+    from app.parties.models import RawAddress
+    raw = await session.get(RawAddress, alias_id)
+    if raw is None or raw.is_deleted:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Вариант ввода не найден")
+    return schemas.RawAddressRead(
+        id=raw.id,
+        raw_text=raw.raw_text,
+        hash=raw.hash,
+        normalized_address_id=raw.normalized_address_id,
+        source=raw.source,
+    )
+
+
+@router.delete("/aliases/{alias_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_alias(alias_id: int, session: SessionDep, user_id: UserDep) -> None:
+    from app.parties.models import RawAddress
+    raw = await session.get(RawAddress, alias_id)
+    if raw is None or raw.is_deleted:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Вариант ввода не найден")
+    raw.soft_delete(user_id)
+    await session.flush()
+
+
+# ========== Юрлица ==========
+
+@router.get("/legal-entities", response_model=list[schemas.LegalEntityRead])
+async def list_legal_entities(session: SessionDep) -> list[schemas.LegalEntityRead]:
+    service = LegalEntityService(LegalEntityRepository(session))
+    rows = await service.list_all()
+    return [schemas.LegalEntityRead.model_validate(r) for r in rows]
+
+
+@router.post("/legal-entities", response_model=schemas.LegalEntityRead, status_code=status.HTTP_201_CREATED)
+async def create_legal_entity(
+    body: schemas.LegalEntityCreate,
+    session: SessionDep,
+    user_id: UserDep,
+) -> schemas.LegalEntityRead:
+    service = LegalEntityService(LegalEntityRepository(session))
+    try:
+        row = await service.create(user_id, **body.model_dump())
+    except ValueError as e:
+        raise HTTPException(status.HTTP_409_CONFLICT, detail=str(e)) from e
+    return schemas.LegalEntityRead.model_validate(row)
+
+
+@router.patch("/legal-entities/{entity_id}", response_model=schemas.LegalEntityRead)
+async def update_legal_entity(
+    entity_id: int,
+    body: schemas.LegalEntityUpdate,
+    session: SessionDep,
+    user_id: UserDep,
+) -> schemas.LegalEntityRead:
+    service = LegalEntityService(LegalEntityRepository(session))
+    row = await service.update(entity_id, user_id, **body.model_dump(exclude_unset=True))
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Юрлицо не найдено")
+    return schemas.LegalEntityRead.model_validate(row)
+
+
+@router.delete("/legal-entities/{entity_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_legal_entity(entity_id: int, session: SessionDep, user_id: UserDep) -> None:
+    service = LegalEntityService(LegalEntityRepository(session))
+    ok = await service.soft_delete(entity_id, user_id)
+    if not ok:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Юрлицо не найдено")
+
+
+@router.get("/legal-entities/{entity_id}", response_model=schemas.LegalEntityRead)
+async def get_legal_entity(entity_id: int, session: SessionDep) -> schemas.LegalEntityRead:
+    service = LegalEntityService(LegalEntityRepository(session))
+    row = await service.get_by_id(entity_id)
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Юрлицо не найдено")
+    return schemas.LegalEntityRead.model_validate(row)
+
+
+# ========== Поклажедатели ==========
+
+@router.get("/depositors", response_model=list[schemas.DepositorRead])
+async def list_depositors(session: SessionDep) -> list[schemas.DepositorRead]:
+    service = DepositorService(DepositorRepository(session))
+    rows = await service.list_all()
+    result = []
+    for r in rows:
+        from app.parties.models import LegalEntity
+        le = await session.get(LegalEntity, r.legal_entity_id)
+        result.append(
+            schemas.DepositorRead(
+                id=r.id,
+                legal_entity_id=r.legal_entity_id,
+                code=r.code,
+                legal_entity_name=le.name if le else "",
+            )
+        )
+    return result
+
+
+@router.post("/depositors", response_model=schemas.DepositorRead, status_code=status.HTTP_201_CREATED)
+async def create_depositor(
+    body: schemas.DepositorCreate,
+    session: SessionDep,
+    user_id: UserDep,
+) -> schemas.DepositorRead:
+    service = DepositorService(DepositorRepository(session))
+    try:
+        row = await service.create(body.legal_entity_id, body.code, user_id)
+    except ValueError as e:
+        raise HTTPException(status.HTTP_409_CONFLICT, detail=str(e)) from e
+    return schemas.DepositorRead.model_validate(row)
+
+
+# ========== Клиенты ==========
+
+@router.get("/depositors/{depositor_id}", response_model=schemas.DepositorRead)
+async def get_depositor(depositor_id: int, session: SessionDep) -> schemas.DepositorRead:
+    service = DepositorService(DepositorRepository(session))
+    row = await service.get_by_id(depositor_id)
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Поклажедатель не найден")
+    return schemas.DepositorRead.model_validate(row)
+
+
+@router.patch("/depositors/{depositor_id}", response_model=schemas.DepositorRead)
+async def update_depositor(
+    depositor_id: int,
+    body: schemas.DepositorUpdate,
+    session: SessionDep,
+    user_id: UserDep,
+) -> schemas.DepositorRead:
+    from app.parties.models import Depositor
+    row = await session.get(Depositor, depositor_id)
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Поклажедатель не найден")
+    for field, value in body.model_dump(exclude_unset=True).items():
+        setattr(row, field, value)
+    row.updated_by_id = user_id
+    await session.flush()
+    return schemas.DepositorRead.model_validate(row)
+
+
+@router.delete("/depositors/{depositor_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_depositor(depositor_id: int, session: SessionDep, user_id: UserDep) -> None:
+    from app.parties.models import Depositor
+    row = await session.get(Depositor, depositor_id)
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Поклажедатель не найден")
+    row.soft_delete(user_id)
+    await session.flush()
+
+
+@router.get("/clients", response_model=list[schemas.ClientRead])
+async def list_clients(
+    session: SessionDep,
+    depositor_id: Annotated[int | None, Query(ge=1)] = None,
+) -> list[schemas.ClientRead]:
+    repo = ClientRepository(session)
+    if depositor_id:
+        rows = await repo.list_by_depositor(depositor_id)
+    else:
+        rows = await repo.list_all()
+    return [schemas.ClientRead.model_validate(r) for r in rows]
+
+
+@router.post("/clients", response_model=schemas.ClientRead, status_code=status.HTTP_201_CREATED)
+async def create_client(
+    body: schemas.ClientCreate,
+    session: SessionDep,
+    user_id: UserDep,
+) -> schemas.ClientRead:
+    service = ClientService(ClientRepository(session))
+    try:
+        row = await service.create(user_id, **body.model_dump())
+    except ValueError as e:
+        raise HTTPException(status.HTTP_409_CONFLICT, detail=str(e)) from e
+    return schemas.ClientRead.model_validate(row)
+
+
+# ========== Торговые точки ==========
+
+@router.get("/clients/{client_id}", response_model=schemas.ClientRead)
+async def get_client(client_id: int, session: SessionDep) -> schemas.ClientRead:
+    service = ClientService(ClientRepository(session))
+    row = await service.get_by_id(client_id)
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Клиент не найден")
+    return schemas.ClientRead.model_validate(row)
+
+
+@router.patch("/clients/{client_id}", response_model=schemas.ClientRead)
+async def update_client(
+    client_id: int,
+    body: schemas.ClientUpdate,
+    session: SessionDep,
+    user_id: UserDep,
+) -> schemas.ClientRead:
+    service = ClientService(ClientRepository(session))
+    row = await service.update(client_id, user_id, **body.model_dump(exclude_unset=True))
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Клиент не найден")
+    return schemas.ClientRead.model_validate(row)
+
+
+@router.delete("/clients/{client_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_client(client_id: int, session: SessionDep, user_id: UserDep) -> None:
+    service = ClientService(ClientRepository(session))
+    ok = await service.soft_delete(client_id, user_id)
+    if not ok:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Клиент не найден")
+
+
+@router.get("/trade-points", response_model=list[schemas.TradePointRead])
+async def list_trade_points(session: SessionDep) -> list[schemas.TradePointRead]:
+    from sqlalchemy import select
+    from app.parties.models import TradePoint
+    rows = list(await session.scalars(select(TradePoint).where(TradePoint.is_deleted.is_(False))))
+    return [schemas.TradePointRead.model_validate(r) for r in rows]
+
+
+@router.get("/trade-points/{tp_id}", response_model=schemas.TradePointRead)
+async def get_trade_point(tp_id: int, session: SessionDep) -> schemas.TradePointRead:
+    service = TradePointService(TradePointRepository(session))
+    tp = await service.get_by_id(tp_id)
+    if tp is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Торговая точка не найдена")
+    return schemas.TradePointRead.model_validate(tp)
+
+
+@router.patch("/trade-points/{tp_id}", response_model=schemas.TradePointRead)
+async def update_trade_point(
+    tp_id: int,
+    body: schemas.TradePointUpdate,
+    session: SessionDep,
+    user_id: UserDep,
+) -> schemas.TradePointRead:
+    from app.parties.models import TradePoint
+    tp = await session.get(TradePoint, tp_id)
+    if tp is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Торговая точка не найдена")
+    for field, value in body.model_dump(exclude_unset=True).items():
+        setattr(tp, field, value)
+    tp.updated_by_id = user_id
+    await session.flush()
+    return schemas.TradePointRead.model_validate(tp)
+
+
+@router.delete("/trade-points/{tp_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_trade_point(tp_id: int, session: SessionDep, user_id: UserDep) -> None:
+    from app.parties.models import TradePoint
+    tp = await session.get(TradePoint, tp_id)
+    if tp is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Торговая точка не найдена")
+    tp.soft_delete(user_id)
+    await session.flush()
+
+
+@router.post("/trade-points/resolve", response_model=schemas.TradePointRead)
+async def resolve_trade_point(
+    body: schemas.TradePointCreate,
+    session: SessionDep,
+    user_id: UserDep,
+) -> schemas.TradePointRead:
+    service = TradePointService(TradePointRepository(session))
+    tp, _ = await service.get_or_create(
+        body.client_id, body.address_id, body.name, user_id
+    )
+    return schemas.TradePointRead.model_validate(tp)
+
+
+# ========== Договоры ==========
+
+@router.get("/contracts", response_model=list[schemas.ContractRead])
+async def list_contracts(session: SessionDep) -> list[schemas.ContractRead]:
+    repo = ContractRepository(session)
+    rows = await repo.list_all()
+    return [schemas.ContractRead.model_validate(r) for r in rows]
+
+
+@router.post("/contracts", response_model=schemas.ContractRead, status_code=status.HTTP_201_CREATED)
+async def create_contract(
+    body: schemas.ContractCreate,
+    session: SessionDep,
+    user_id: UserDep,
+) -> schemas.ContractRead:
+    service = ContractService(ContractRepository(session))
+    try:
+        row = await service.create(user_id, **body.model_dump())
+    except ValueError as e:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+    return schemas.ContractRead.model_validate(row)
+
+
+# ========== Тарифы ==========
+
+@router.get("/contracts/{contract_id}", response_model=schemas.ContractRead)
+async def get_contract(contract_id: int, session: SessionDep) -> schemas.ContractRead:
+    service = ContractService(ContractRepository(session))
+    row = await service.get_by_id(contract_id)
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Договор не найден")
+    return schemas.ContractRead.model_validate(row)
+
+
+@router.patch("/contracts/{contract_id}", response_model=schemas.ContractRead)
+async def update_contract(
+    contract_id: int,
+    body: schemas.ContractUpdate,
+    session: SessionDep,
+    user_id: UserDep,
+) -> schemas.ContractRead:
+    service = ContractService(ContractRepository(session))
+    row = await service.update(contract_id, user_id, **body.model_dump(exclude_unset=True))
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Договор не найден")
+    return schemas.ContractRead.model_validate(row)
+
+
+@router.delete("/contracts/{contract_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_contract(contract_id: int, session: SessionDep, user_id: UserDep) -> None:
+    service = ContractService(ContractRepository(session))
+    ok = await service.soft_delete(contract_id, user_id)
+    if not ok:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Договор не найден")
+
+
+@router.get("/tariff-documents", response_model=list[schemas.TariffDocumentRead])
+async def list_tariff_documents(session: SessionDep) -> list[schemas.TariffDocumentRead]:
+    from sqlalchemy import select
+    from app.parties.models import TariffDocument
+    rows = list(await session.scalars(select(TariffDocument).where(TariffDocument.is_deleted.is_(False))))
+    return [schemas.TariffDocumentRead.model_validate(r) for r in rows]
+
+
+@router.get("/tariff-documents/{doc_id}", response_model=schemas.TariffDocumentRead)
+async def get_tariff_document(doc_id: int, session: SessionDep) -> schemas.TariffDocumentRead:
+    service = TariffService(TariffRepository(session))
+    doc = await service.get_document(doc_id)
+    if doc is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Тарифный документ не найден")
+    return schemas.TariffDocumentRead.model_validate(doc)
+
+
+@router.patch("/tariff-documents/{doc_id}", response_model=schemas.TariffDocumentRead)
+async def update_tariff_document(
+    doc_id: int,
+    body: schemas.TariffDocumentUpdate,
+    session: SessionDep,
+    user_id: UserDep,
+) -> schemas.TariffDocumentRead:
+    from app.parties.models import TariffDocument
+    doc = await session.get(TariffDocument, doc_id)
+    if doc is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Тарифный документ не найден")
+    for field, value in body.model_dump(exclude_unset=True).items():
+        setattr(doc, field, value)
+    doc.updated_by_id = user_id
+    await session.flush()
+    return schemas.TariffDocumentRead.model_validate(doc)
+
+
+@router.delete("/tariff-documents/{doc_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_tariff_document(doc_id: int, session: SessionDep, user_id: UserDep) -> None:
+    from app.parties.models import TariffDocument
+    doc = await session.get(TariffDocument, doc_id)
+    if doc is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Тарифный документ не найден")
+    doc.soft_delete(user_id)
+    await session.flush()
+
+
+@router.post("/tariff-documents", response_model=schemas.TariffDocumentRead, status_code=status.HTTP_201_CREATED)
+async def create_tariff_document(
+    body: schemas.TariffDocumentCreate,
+    session: SessionDep,
+    user_id: UserDep,
+) -> schemas.TariffDocumentRead:
+    service = TariffService(TariffRepository(session))
+    try:
+        row = await service.create_document(user_id, **body.model_dump())
+    except ValueError as e:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+    return schemas.TariffDocumentRead.model_validate(row)
+
+
+@router.get("/tariffs", response_model=list[schemas.TariffRead])
+async def list_tariffs(session: SessionDep, document_id: int | None = None) -> list[schemas.TariffRead]:
+    from sqlalchemy import select
+    from app.parties.models import Tariff
+    stmt = select(Tariff).where(Tariff.is_deleted.is_(False))
+    if document_id:
+        stmt = stmt.where(Tariff.document_id == document_id)
+    rows = list(await session.scalars(stmt))
+    return [schemas.TariffRead.model_validate(r) for r in rows]
+
+
+@router.get("/tariffs/{tariff_id}", response_model=schemas.TariffRead)
+async def get_tariff(tariff_id: int, session: SessionDep) -> schemas.TariffRead:
+    from app.parties.models import Tariff
+    tariff = await session.get(Tariff, tariff_id)
+    if tariff is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Тариф не найден")
+    return schemas.TariffRead.model_validate(tariff)
+
+
+@router.patch("/tariffs/{tariff_id}", response_model=schemas.TariffRead)
+async def update_tariff(
+    tariff_id: int,
+    body: schemas.TariffUpdate,
+    session: SessionDep,
+    user_id: UserDep,
+) -> schemas.TariffRead:
+    from app.parties.models import Tariff
+    tariff = await session.get(Tariff, tariff_id)
+    if tariff is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Тариф не найден")
+    for field, value in body.model_dump(exclude_unset=True).items():
+        setattr(tariff, field, value)
+    tariff.updated_by_id = user_id
+    await session.flush()
+    return schemas.TariffRead.model_validate(tariff)
+
+
+@router.delete("/tariffs/{tariff_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_tariff(tariff_id: int, session: SessionDep, user_id: UserDep) -> None:
+    from app.parties.models import Tariff
+    tariff = await session.get(Tariff, tariff_id)
+    if tariff is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Тариф не найден")
+    tariff.soft_delete(user_id)
+    await session.flush()
+
+
+@router.post("/tariffs", response_model=schemas.TariffRead, status_code=status.HTTP_201_CREATED)
+async def create_tariff(
+    body: schemas.TariffCreate,
+    session: SessionDep,
+    user_id: UserDep,
+) -> schemas.TariffRead:
+    service = TariffService(TariffRepository(session))
+    try:
+        row = await service.create_tariff(user_id, **body.model_dump())
+    except ValueError as e:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+    return schemas.TariffRead.model_validate(row)

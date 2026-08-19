@@ -1,0 +1,251 @@
+/* Шапка, меню, основная область, полоска уведомлений */
+
+.app-navbar {
+  background: #1f2d3d;
+  padding: 4px 10px;
+  position: relative;
+  z-index: 100;
+}
+
+.app-navbar__inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.app-menu {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.app-menu--main {
+  flex: 1;
+  min-width: 0;
+}
+
+.app-menu a {
+  color: #fff;
+  text-decoration: none;
+  padding: 3px 8px;
+  border-radius: 4px;
+  display: inline-block;
+  font-size: 13px;
+  line-height: 1.2;
+}
+
+.app-menu a:hover,
+.app-menu a.active {
+  background: #2e4358;
+}
+
+.app-user-menu {
+  position: relative;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.app-user-menu__trigger {
+  list-style: none;
+  cursor: pointer;
+  user-select: none;
+  color: #e2e8f0;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 13px;
+  line-height: 1.2;
+}
+
+.app-user-menu__trigger::-webkit-details-marker {
+  display: none;
+}
+
+.app-user-menu__trigger::after {
+  content: ' ▾';
+  font-size: 10px;
+  opacity: 0.85;
+}
+
+.app-user-menu[open] .app-user-menu__trigger {
+  background: #2e4358;
+  color: #fff;
+}
+
+.app-user-menu__trigger:hover {
+  background: #2e4358;
+  color: #fff;
+}
+
+.app-user-menu__panel {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  min-width: 10rem;
+  padding: 4px;
+  background: #2e4358;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  z-index: 102;
+}
+
+.app-user-menu__logout {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  text-align: left;
+  background: transparent;
+  border: none;
+  color: #fff;
+  cursor: pointer;
+  padding: 4px 10px;
+  border-radius: 4px;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.2;
+}
+
+.app-user-menu__logout:hover {
+  background: #3d566e;
+}
+
+.app-menu details {
+  position: relative;
+}
+
+.app-ref-menu__trigger {
+  color: #fff;
+  cursor: pointer;
+  list-style: none;
+  padding: 6px 10px;
+  border-radius: 4px;
+  font-size: 13px;
+  line-height: 1.2;
+}
+
+.app-ref-menu__trigger::-webkit-details-marker {
+  display: none;
+}
+
+.app-ref-menu__trigger::after {
+  content: ' ▾';
+  font-size: 10px;
+  opacity: 0.85;
+}
+
+.app-ref-menu[open] .app-ref-menu__trigger {
+  background: #2e4358;
+  color: #fff;
+}
+
+.app-ref-menu__trigger:hover {
+  background: #2e4358;
+  color: #fff;
+}
+
+.app-submenu {
+  position: absolute;
+  top: 32px;
+  left: 0;
+  min-width: 180px;
+  background: #2e4358;
+  border-radius: 6px;
+  padding: 6px;
+  list-style: none;
+  margin: 0;
+  z-index: 101;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+}
+
+.app-submenu a {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.app-submenu a:hover {
+  background: #3d566e;
+}
+
+.app-submenu--compact {
+  padding: 4px;
+  min-width: 10rem;
+}
+
+.app-submenu__heading {
+  padding: 6px 10px 2px;
+  margin: 4px 0 0;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #94a3b8;
+  list-style: none;
+  pointer-events: none;
+}
+
+.app-submenu__heading:first-child {
+  margin-top: 0;
+}
+
+.app-main {
+  margin: 8px auto;
+  padding: 0 8px;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: none;
+}
+
+.app-notice-strip {
+  position: fixed;
+  top: 40px;
+  right: 16px;
+  z-index: 50;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  pointer-events: none;
+}
+
+.app-notice-strip__text {
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  line-height: 1.2;
+  white-space: nowrap;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.app-notice-strip__icon {
+  font-size: 12px;
+  opacity: 0.95;
+}
+
+.app-notice-strip__text--idle {
+  display: none;
+}
+
+.app-notice-strip__text--error {
+  color: #b91c1c;
+}
+
+.app-notice-strip__text--success {
+  color: #166534;
+}
+
+.app-notice-strip__text--warning {
+  color: #b45309;
+}
+
+.app-notice-strip__text--info {
+  color: #1d4ed8;
+}

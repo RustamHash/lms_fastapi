@@ -1,0 +1,55 @@
+/* Контекстное меню по строке таблицы */
+
+.row-context-menu__backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 299;
+}
+
+.row-context-menu {
+  position: fixed;
+  z-index: 300;
+  min-width: 14rem;
+  padding: 4px 0;
+  margin: 0;
+  background: #2e4358;
+  border: 1px solid #1f2d3d;
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+.row-context-menu__item {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 6px 12px;
+  border: none;
+  background: transparent;
+  color: #fff;
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.25;
+  text-align: left;
+  cursor: pointer;
+}
+
+.row-context-menu__item:hover {
+  background: #3d566e;
+}
+
+.row-context-menu__item:focus-visible {
+  outline: 2px solid #f0af89;
+  outline-offset: -2px;
+}
+
+.row-context-menu__item:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.row-context-menu__divider {
+  margin: 4px 0;
+  border: 0;
+  border-top: 1px solid rgba(148, 163, 184, 0.6);
+}
