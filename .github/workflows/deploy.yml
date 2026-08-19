@@ -1,0 +1,76 @@
+name: Deploy LMS
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    name: Deploy LMS FastAPI
+    runs-on: self-hosted
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Copy to deployment directory
+        run: |
+          set -e
+          DEPLOY_DIR="/data/projects/lms_fastapi"
+          echo "Создание директории для деплоя..."
+          sudo mkdir -p "$DEPLOY_DIR" || true
+          sudo chown -R "$USER:$USER" "$DEPLOY_DIR" || true
+          echo "Копирование файлов..."
+          rsync -av --delete \
+            --exclude='.git' \
+            --exclude='.github' \
+            --exclude='.venv' \
+            --exclude='.env' \
+            --exclude='__pycache__' \
+            --exclude='*.pyc' \
+            --exclude='node_modules' \
+            --exclude='dist' \
+            "${{ github.workspace }}/" "$DEPLOY_DIR/"
+          echo "Проверка содержимого..."
+          ls -la "$DEPLOY_DIR"
+
+      - name: Install backend deps
+        working-directory: /data/projects/lms_fastapi
+        run: |
+          set -e
+          if [ ! -d .venv ]; then
+            python3 -m venv .venv
+          fi
+          source .venv/bin/activate
+          pip install -U pip wheel
+          pip install -r requirements.txt
+
+      - name: Build frontend
+        working-directory: /data/projects/lms_fastapi/frontend
+        run: |
+          set -e
+          if [ ! -d node_modules ]; then
+            npm install
+          fi
+          npm run build
+
+      - name: Run migrations
+        working-directory: /data/projects/lms_fastapi
+        run: |
+          set -e
+          source .venv/bin/activate
+          alembic upgrade head
+
+      - name: Restart service
+        run: |
+          set -e
+          if [ -f /etc/systemd/system/lms.service ]; then
+            sudo systemctl daemon-reload
+            sudo systemctl restart lms
+            sudo systemctl status lms --no-pager || true
+          else
+            echo "Unit lms.service не найден. Создайте его вручную:"
+            echo "sudo cp deploy/lms.service /etc/systemd/system/"
+            echo "sudo systemctl daemon-reload"
+            echo "sudo systemctl enable --now lms"
+          fi
