@@ -1,0 +1,18 @@
+import { useNavigate } from 'react-router-dom'
+import { useAuth } from '../auth/AuthContext'
+import { EntityListPage } from '../features/entity-list/EntityListPage'
+import { legalEntityConfig } from '../features/legal-entities/config'
+
+export function LegalEntitiesPage() {
+  const navigate = useNavigate()
+  const { user } = useAuth()
+  const canCreate = user?.permissions?.all === true
+  return (
+    <EntityListPage
+      config={legalEntityConfig.list}
+      onBack={() => navigate('/references')}
+      canCreate={canCreate}
+      breadcrumbs={[{ label: 'Справочники', to: '/references' }, { label: 'Юрлица' }]}
+    />
+  )
+}
