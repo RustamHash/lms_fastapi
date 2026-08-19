@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from sqlalchemy import or_, select
+from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.accounts.models import Audit, Role, User, UserSettings, UserTableSettings
@@ -13,10 +14,11 @@ class UserRepository:
         self._s = session
 
     async def get_by_id(self, user_id: int) -> User | None:
-        return await self._s.get(User, user_id)
+        stmt = select(User).where(User.id == user_id).options(selectinload(User.roles))
+        return await self._s.scalar(stmt)
 
     async def get_by_username(self, username: str) -> User | None:
-        stmt = select(User).where(User.username == username)
+        stmt = select(User).where(User.username == username).options(selectinload(User.roles))
         return await self._s.scalar(stmt)
 
     async def create(self, **kwargs) -> User:
