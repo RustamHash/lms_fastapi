@@ -126,6 +126,7 @@ type Props<Row extends { id: number }> = {
   plainCellText: (row: Row, colId: string) => string
   toolbarLeft?: ReactNode
   onRowDoubleClick?: (row: Row) => void
+  onInvertSelection?: () => void
 }
 
 function ListTableShellInner<Row extends { id: number }>({
@@ -175,6 +176,7 @@ function ListTableShellInner<Row extends { id: number }>({
   plainCellText,
   toolbarLeft,
   onRowDoubleClick,
+  onInvertSelection,
 }: Props<Row>) {
   const navigate = useNavigate()
 
@@ -352,6 +354,21 @@ function ListTableShellInner<Row extends { id: number }>({
             <button type="button" className={`tb tb--icon tb--reset${resetMuted ? ' tb--muted' : ''}`} onClick={onResetClick} aria-label="Сбросить фильтры" title="Сбросить фильтры">
               <IconFilterReset />
             </button>
+            {onInvertSelection ? (
+              <button
+                type="button"
+                className={`tb tb--icon${selectionCount === 0 ? ' tb--muted' : ''}`}
+                onClick={onInvertSelection}
+                aria-label="Инвертировать выделение"
+                title="Инвертировать выделение"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width={16} height={16} viewBox="0 0 24 24" fill="none" aria-hidden>
+                  <path d="M8 3L4 7l4 4" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+                  <path d="M4 7h11a5 5 0 0 1 0 10h-1" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+                  <path d="M16 21l4-4-4-4" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </button>
+            ) : null}
           </div>
         </div>
       </div>

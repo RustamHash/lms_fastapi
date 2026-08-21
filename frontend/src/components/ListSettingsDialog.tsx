@@ -245,7 +245,7 @@ export function ListSettingsDialog({
           <button type="button" className="tb tb--reset" onClick={() => void handleReset()} disabled={applying}>
             Восстановить по умолчанию
           </button>
-          <button type="button" className="tb tb--reset" onClick={onClose}>
+          <button type="button" className="tb tb--reset" onClick={onClose} data-close="true">
             Отмена
           </button>
         </div>

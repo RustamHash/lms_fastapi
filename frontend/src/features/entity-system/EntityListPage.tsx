@@ -253,6 +253,9 @@ export function EntityListPage<Row extends { id: number }>({ config, onBack, bre
           })
         }}
         plainCellText={entity.cellText}
+        onInvertSelection={() => {
+          entity.toggleAll(!entity.allSelected)
+        }}
         onRowDoubleClick={(row) => {
           // Ищем колонку с href
           const linkColumn = config.columns.find(col => config.columnOverrides?.[col.id]?.href)

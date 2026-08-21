@@ -64,7 +64,7 @@ export function SavePresetDialog({ currentPrefs, onSave, onClose }: Props) {
               <button type="submit" className="tb tb--create" disabled={saving || !name.trim()}>
                 {saving ? 'Сохранение...' : 'Сохранить'}
               </button>
-              <button type="button" className="tb tb--reset" onClick={onClose}>
+              <button type="button" className="tb tb--reset" onClick={onClose} data-close="true">
                 Отмена
               </button>
             </div>
