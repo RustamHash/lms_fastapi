@@ -2,108 +2,31 @@
    Базовые блоки синхронизируются с app/interface/web/static/css/base.css где применимо. */
 
 @import './styles/variables.css';
-@import './styles/app-layout.css';
-@import './styles/app-cards.css';
-@import './styles/list-pages.css';
-@import './styles/list-table.css';
-@import './styles/context-menu.css';
-@import './styles/dialogs.css';
-@import './styles/forms-wh.css';
-@import './styles/topology-hierarchy.css';
+@import './styles/components/app-layout.css';
+@import './styles/components/app-cards.css';
+@import './styles/components/list-pages.css';
+@import './styles/components/list-table.css';
+@import './styles/components/context-menu.css';
+@import './styles/components/dialogs.css';
+@import './styles/components/forms-wh.css';
+@import './styles/components/topology-hierarchy.css';
 
 /* Подменю заданий */
-.task-tabs {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 16px;
-  flex-wrap: wrap;
-}
-
-.task-tabs__btn {
-  padding: 8px 16px;
-  border: 1px solid #d1d5db;
-  background: #fff;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 14px;
-  color: #374151;
-  transition: all 0.2s;
-}
 
 .task-tabs__btn:hover {
   background: #f3f4f6;
-}
-
-.task-tabs__btn--active {
-  background: #2563eb;
-  color: #fff;
-  border-color: #2563eb;
 }
 
 .task-tabs__btn--active:hover {
   background: #1d4ed8;
 }
 
-.task-filter__dropdown {
-  position: relative;
-  display: inline-block;
-}
-
-.task-filter__trigger {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 16px;
-  border: 1px solid #d1d5db;
-  background: #fff;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 14px;
-  color: #374151;
-  transition: all 0.2s;
-}
-
 .task-filter__trigger:hover {
   background: #f3f4f6;
 }
 
-.task-filter__arrow {
-  font-size: 12px;
-}
-
-.task-filter__menu {
-  position: absolute;
-  top: 100%;
-  left: 0;
-  margin-top: 4px;
-  background: #fff;
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-  z-index: 10;
-  min-width: 160px;
-}
-
-.task-filter__option {
-  display: block;
-  width: 100%;
-  padding: 8px 16px;
-  border: none;
-  background: none;
-  cursor: pointer;
-  font-size: 14px;
-  color: #374151;
-  text-align: left;
-  transition: background 0.2s;
-}
-
 .task-filter__option:hover {
   background: #f3f4f6;
-}
-
-.task-filter__option--active {
-  background: #2563eb;
-  color: #fff;
 }
 
 .task-filter__option--active:hover {
@@ -123,23 +46,6 @@
 
 .task-filter__select:focus {
   border-color: #2563eb;
-}
-
-.tasks-page__header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-.tasks-page__title-wrap {
-  flex: 1;
-  min-width: 200px;
-}
-
-.tasks-page__title {
-  margin: 0;
 }
 
 .task-filter__select:focus {
@@ -174,11 +80,6 @@
   color: #111827;
   margin: 0;
   white-space: nowrap;
-}
-
-.tasks-list {
-  flex: 1;
-  min-width: 0;
 }
 
 .task-filter__select:focus {

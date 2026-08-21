@@ -435,34 +435,6 @@
   flex-wrap: wrap;
 }
 
-.entity-modal-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(15, 23, 42, 0.45);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 20px;
-  z-index: 80;
-}
-
-.entity-modal {
-  width: min(920px, 100%);
-  max-height: calc(100vh - 40px);
-  overflow: auto;
-  background: #fff;
-  border: 1px solid #cbd5e1;
-  border-radius: 10px;
-  box-shadow: 0 14px 40px rgba(2, 6, 23, 0.25);
-  padding: 14px;
-}
-
-.entity-modal__title {
-  margin: 0 0 12px;
-  font-size: 18px;
-  color: #0f172a;
-}
-
 @media (max-width: 900px) {
   .entity-grid {
     grid-template-columns: 1fr;
@@ -509,24 +481,6 @@
 }
 
 /* Массовое создание локаций */
-.loc-bulk__tabs {
-  display: flex;
-  gap: 4px;
-  margin: 0 0 12px;
-  border-bottom: 1px solid #e2e8f0;
-}
-
-.loc-bulk__tab {
-  padding: 8px 12px;
-  border: none;
-  background: transparent;
-  font: inherit;
-  font-size: 13px;
-  cursor: pointer;
-  color: var(--text-secondary);
-  border-bottom: 2px solid transparent;
-  margin-bottom: -1px;
-}
 
 .loc-bulk__tab:hover {
   color: #1e293b;
@@ -536,10 +490,6 @@
   color: var(--color-primary-hover);
   font-weight: 600;
   border-bottom-color: var(--color-primary-hover);
-}
-
-.loc-bulk__field {
-  margin: 0 0 12px;
 }
 
 .loc-bulk__field label {
@@ -566,19 +516,6 @@
   resize: vertical;
 }
 
-.loc-bulk__checkboxes {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px 14px;
-  max-height: 140px;
-  overflow: auto;
-  padding: 8px;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 6px;
-  font-size: 13px;
-}
-
 .loc-bulk__checkboxes label {
   display: inline-flex;
   align-items: center;
@@ -586,16 +523,6 @@
   cursor: pointer;
   font-weight: 400;
   color: #1e293b;
-}
-
-.loc-bulk__summary {
-  font-size: 13px;
-  color: #475569;
-  margin: 8px 0 0;
-}
-
-.loc-bulk__toolbar {
-  margin: 0 0 10px;
 }
 
 .loc-bulk__toolbar .tb {
@@ -623,80 +550,9 @@
 }
 
 /* Поиск адресов с выпадающим списком */
-.address-search {
-  position: relative;
-  width: 100%;
-  max-width: 560px;
-}
-
-.address-search__loading {
-  position: absolute;
-  right: 10px;
-  top: 50%;
-  transform: translateY(-50%);
-  font-size: 12px;
-  color: var(--text-secondary);
-}
-
-.address-search__dropdown {
-  position: absolute;
-  top: calc(100% + 4px);
-  left: 0;
-  right: 0;
-  max-height: 300px;
-  overflow-y: auto;
-  background: #fff;
-  border: 1px solid #cbd5e1;
-  border-radius: 6px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-  z-index: 50;
-}
-
-.address-search__item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  padding: 8px 10px;
-  border: none;
-  background: transparent;
-  cursor: pointer;
-  text-align: left;
-  font-size: 13px;
-  color: #1e293b;
-}
 
 .address-search__item:hover {
   background: #f1f5f9;
-}
-
-.address-search__item-id {
-  flex-shrink: 0;
-  font-weight: 600;
-  color: var(--text-secondary);
-  min-width: 40px;
-}
-
-.address-search__item-text {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.address-search__empty {
-  position: absolute;
-  top: calc(100% + 4px);
-  left: 0;
-  right: 0;
-  padding: 8px 10px;
-  background: #fff;
-  border: 1px solid #cbd5e1;
-  border-radius: 6px;
-  font-size: 13px;
-  color: var(--text-secondary);
-  z-index: 50;
 }
 
 /* Справочники */
@@ -778,7 +634,6 @@
   text-decoration: underline;
 }
 
-
 .breadcrumbs {
   display: flex;
   align-items: center;
@@ -811,7 +666,6 @@
   color: var(--text-muted);
 }
 
-
 /* Заголовок и тулбар на одной строке */
 .list-page-shell .list-page-header {
   margin-bottom: 0;
@@ -825,7 +679,6 @@
 .list-page-shell .list-page-toolbar-row .list-toolbar {
   margin-left: auto;
 }
-
 
 .detail-header {
   display: flex;

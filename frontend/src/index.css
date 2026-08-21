@@ -1,5 +1,5 @@
 @import './styles/variables.css';
-@import './styles/login.css';
+@import './styles/pages/login.css';
 
 body {
   margin: 0;

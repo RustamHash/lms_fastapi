@@ -226,33 +226,8 @@
 }
 
 /* Результат импорта */
-.import-result {
-  margin-top: 12px;
-  padding: 12px;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 6px;
-}
-
-.import-result__details {
-  max-height: 300px;
-  overflow-y: auto;
-  font-size: 12px;
-  white-space: pre-wrap;
-  word-break: break-all;
-}
 
 /* Результат импорта */
-.import-result__list {
-  margin: 0;
-}
-
-.import-result__row {
-  display: flex;
-  gap: 8px;
-  padding: 4px 0;
-  font-size: 13px;
-}
 
 .import-result__row dt {
   font-weight: 600;
@@ -262,22 +237,6 @@
 
 .import-result__row dd {
   margin: 0;
-}
-
-.import-result__success {
-  color: #166534;
-  font-weight: 600;
-}
-
-.import-result__error {
-  color: #b91c1c;
-  font-weight: 600;
-}
-
-.import-result__errors {
-  margin: 0;
-  padding-left: 16px;
-  color: #b91c1c;
 }
 
 /* Прогресс импорта */

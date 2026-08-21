@@ -1,0 +1,168 @@
+/* Страница «Ячейки (иерархия)»: шапка страницы отдельно, ниже общий блок «данные» (дерево | таблица) */
+
+/* display: flex + column задаёт .list-page-shell; зазор между шапкой и блоком данных */
+
+/* Только «← Топология» и заголовок — не на одном уровне с деревом */
+
+.topology-hierarchy__header .topology-back-bar {
+  margin-bottom: 6px;
+}
+
+.topology-hierarchy__header .page-title {
+  margin: 0;
+}
+
+/* Общий контейнер: слева дерево, справа таблица — одна «полка» под шапкой */
+
+.topology-hierarchy__root-reset:hover {
+  background: #dbeafe;
+}
+
+.topology-hierarchy__tree ul {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0 14px;
+}
+
+.topology-hierarchy__tree > ul {
+  padding-left: 0;
+}
+
+.topology-hierarchy__toggle:hover {
+  background: #e2e8f0;
+  color: #1e293b;
+}
+
+.topology-hierarchy__toggle:disabled {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.topology-hierarchy__label:hover {
+  background: #e2e8f0;
+}
+
+.topology-hierarchy__label.is-selected {
+  background: #cbd5e1;
+  font-weight: 600;
+}
+
+/* Кнопка «← Топология» над списками */
+.topology-back-bar {
+  margin: 0 0 12px;
+}
+
+.topology-back-bar__link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #1d4ed8;
+  text-decoration: none;
+  padding: 4px 0;
+}
+
+.topology-back-bar__link:hover {
+  text-decoration: underline;
+}
+
+/* Хаб «Топология» */
+
+.topology-hub__header .page-title {
+  margin: 0 0 8px;
+}
+
+.topology-hub__card:hover {
+  border-color: #cbd5e1;
+  background: #fff;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
+}
+
+.topology-hub__card:hover 
+
+/* Мастер топологии */
+
+.topology-wizard__progress-item.is-past {
+  color: #64748b;
+}
+
+.topology-wizard__progress-item.is-active {
+  color: #1d4ed8;
+}
+
+.topology-wizard__progress-item.is-active 
+
+.topology-wizard__progress-item.is-past 
+
+.topology-wizard__type-card:hover {
+  border-color: #3b82f6;
+  box-shadow: 0 1px 8px rgba(37, 99, 235, 0.12);
+}
+
+.topology-wizard__summary-list li {
+  margin: 4px 0;
+}
+
+.topology-master__roadmap li {
+  margin: 6px 0;
+}
+
+/* Мастер сетки стеллаж × позиция × ярус */
+
+.topology-rack-grid__ranges .loc-bulk__field input {
+  max-width: 100%;
+}
+
+.topology-rack-grid__summary p {
+  margin: 4px 0;
+}
+
+.topology-rack-grid__toggle.is-active {
+  border-color: #2563eb;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.topology-rack-grid__table th,
+.topology-rack-grid__table td {
+  padding: 6px 8px;
+  text-align: left;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.topology-rack-grid__table th {
+  position: sticky;
+  top: 0;
+  background: #f8fafc;
+  font-weight: 700;
+  color: #475569;
+  z-index: 1;
+}
+
+.topology-rack-grid__table tbody tr:hover {
+  background: #f8fafc;
+}
+
+.topology-rack-grid__tree ul {
+  list-style: none;
+  margin: 4px 0 0 12px;
+  padding: 0;
+}
+
+.topology-rack-grid__tree ul li {
+  margin: 3px 0;
+  font-size: 13px;
+  color: #334155;
+}
+
+.topology-rack-grid__errors ul {
+  margin: 6px 0 0;
+  padding-left: 1.2rem;
+}
+
+/* Совместимость со старыми классами ссылок в иерархии */
+
+.topology-hub__link:hover {
+  text-decoration: underline;
+}
