@@ -10,14 +10,16 @@ import {
 } from 'react'
 import {
   LIST_COL_WIDTH_DEFAULT,
-  LIST_COL_WIDTH_MAX,
-  LIST_COL_WIDTH_MIN,
   clampListColumnWidthPx,
 } from '../features/lists/columnWidthConstants'
 import { arrayMove } from '../lib/arrayMove'
 import { excludeColumnHasActiveEntries } from '../features/lists/listExcludeFilters'
 import { computeAutoFitColumnWidthPx } from '../lib/measureColumnTextWidth'
-import { ListFilterCell } from './ListFilterCell'
+import { TableToolbar } from './table/TableToolbar'
+import { TableHeader } from './table/TableHeader'
+import { TableFilterRow } from './table/TableFilterRow'
+import { TableBody } from './table/TableBody'
+import { TableFooter } from './table/TableFooter'
 
 const COL_DND_MIME = 'application/x-sslog-col-index'
 
@@ -27,61 +29,7 @@ const MSG_EXPORT_NONE_SELECTED = 'Ничего не выбрано. Отметь
 const MSG_VIEW_UNAVAILABLE_DEFAULT = 'Подождите, загружаются настройки колонок.'
 const MSG_RESET_NO_FILTERS = 'Нет активных фильтров'
 
-function IconRefresh() {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" width={16} height={16} viewBox="0 0 24 24" fill="none" aria-hidden>
-      <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M3 3v5h5" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M21 21v-5h-5" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  )
-}
-
-function IconPlus() {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" width={16} height={16} viewBox="0 0 24 24" fill="none" aria-hidden>
-      <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth={2} strokeLinecap="round" />
-    </svg>
-  )
-}
-
-function IconTableDown() {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" width={16} height={16} viewBox="0 0 24 24" fill="none" aria-hidden>
-      <path d="M4 5h16v14H4V5zm0 5h16M9 5v14" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M12 15v3m0 0l2.5-2.5M12 18l-2.5-2.5" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  )
-}
-
-function IconColumns() {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" width={16} height={16} viewBox="0 0 24 24" fill="none" aria-hidden>
-      <path d="M4 4h5v16H4V4zm11 0h5v7h-5V4zm0 9h5v7h-5v-7z" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  )
-}
-
-function IconImport() {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" width={16} height={16} viewBox="0 0 24 24" fill="none" aria-hidden>
-      <path d="M12 3v12m0 0l-4-4m4 4l4-4" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  )
-}
-
-function IconFilterReset() {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" width={16} height={16} viewBox="0 0 24 24" fill="none" aria-hidden>
-      <path d="M4 7h16M6 7l2 12h8l2-12M9 7V4h6v3" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M10 11l4 4m0-4l-4 4" stroke="currentColor" strokeWidth={2} strokeLinecap="round" />
-    </svg>
-  )
-}
-
-type ColumnFilterDef =
+export type ColumnFilterDef =
   | { kind: 'text' }
   | { kind: 'datetime' }
   | { kind: 'select'; options: { value: string; label: string }[] }
@@ -202,8 +150,11 @@ function ListTableShellInner<Row extends { id: number }>({
 
   useEffect(() => {
     if (!viewDialogOpen) {
-      setDragOverIndex(null)
-      setDraggingIndex(null)
+      const timer = setTimeout(() => {
+        setDragOverIndex(null)
+        setDraggingIndex(null)
+      }, 0)
+      return () => clearTimeout(timer)
     }
   }, [viewDialogOpen])
 
@@ -211,10 +162,7 @@ function ListTableShellInner<Row extends { id: number }>({
   const viewNoneVisible = viewDialogOpen && viewDraftOrder.length > 0 && viewDraftOrder.every((id) => isViewDraftHidden(id))
 
   const createReady = canCreate && Boolean(createHref)
-  const createMuted = !createReady
-
   const exportReady = selectionCount > 0
-  const exportMuted = !exportReady
 
   const viewMuted = !canOpenView
 
@@ -267,11 +215,6 @@ function ListTableShellInner<Row extends { id: number }>({
     }
   }
 
-  function colWidthPx(cid: string): number {
-    if (dragColPreview?.colId === cid) return dragColPreview.widthPx
-    return columnWidthsPx[cid] ?? LIST_COL_WIDTH_DEFAULT
-  }
-
   function onColResizePointerDown(cid: string, e: ReactPointerEvent<HTMLSpanElement>) {
     if (e.button !== 0) return
     e.preventDefault()
@@ -281,7 +224,6 @@ function ListTableShellInner<Row extends { id: number }>({
     const startX = e.clientX
     colDragRef.current = { colId: cid, startX, startW, lastW: startW }
     
-    // Захватываем указатель
     const grip = e.currentTarget
     grip.setPointerCapture(e.pointerId)
     setDragColPreview({ colId: cid, widthPx: startW })
@@ -329,67 +271,27 @@ function ListTableShellInner<Row extends { id: number }>({
     const texts = rows.map((r) => plainCellText(r, cid))
     const w = computeAutoFitColumnWidthPx(label, texts)
     
-    console.log('Автоширина для', cid, ':', w, 'px')
-    
     void onCommitColumnWidth(cid, w)
   }
 
   return (
     <>
-      <div className="list-page-toolbar-row">
-        {toolbarLeft ? <div className="list-toolbar-left">{toolbarLeft}</div> : <div className="list-toolbar-left" />}
-        <div className="list-toolbar">
-          <div className="list-toolbar__left" />
-          <div className="list-toolbar__right">
-            <button
-              type="button"
-              className={`tb tb--icon tb--refresh${refreshing ? ' tb--loading' : ''}`}
-              onClick={onRefreshClick}
-              aria-label="Обновить данные"
-              title="Обновить данные"
-              disabled={refreshing}
-            >
-              {refreshing ? (
-                <span className="tb__spinner" aria-hidden />
-              ) : (
-                <IconRefresh />
-              )}
-            </button>
-            <button type="button" className={`tb tb--icon tb--create${createMuted ? ' tb--muted' : ''}`} onClick={onCreateClick} aria-label="Создать" title="Создать">
-              <IconPlus />
-            </button>
-            {onImport ? (
-              <button type="button" className="tb tb--icon tb--import" onClick={onImport} aria-label="Импорт" title="Импорт">
-                <IconImport />
-              </button>
-            ) : null}
-            <button type="button" className={`tb tb--icon tb--excel${exportMuted ? ' tb--muted' : ''}`} onClick={onExportClick} aria-label="Экспорт CSV" title="Экспорт CSV (выделите строки)">
-              <IconTableDown />
-            </button>
-            <button type="button" className={`tb tb--icon tb--view${viewMuted ? ' tb--muted' : ''}`} onClick={onViewClick} aria-label="Вид таблицы" title="Колонки таблицы">
-              <IconColumns />
-            </button>
-            <button type="button" className={`tb tb--icon tb--reset${resetMuted ? ' tb--muted' : ''}`} onClick={onResetClick} aria-label="Сбросить фильтры" title="Сбросить фильтры">
-              <IconFilterReset />
-            </button>
-            {onInvertSelection ? (
-              <button
-                type="button"
-                className={`tb tb--icon${selectionCount === 0 ? ' tb--muted' : ''}`}
-                onClick={onInvertSelection}
-                aria-label="Инвертировать выделение"
-                title="Инвертировать выделение"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" width={16} height={16} viewBox="0 0 24 24" fill="none" aria-hidden>
-                  <path d="M8 3L4 7l4 4" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-                  <path d="M4 7h11a5 5 0 0 1 0 10h-1" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-                  <path d="M16 21l4-4-4-4" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              </button>
-            ) : null}
-          </div>
-        </div>
-      </div>
+      <TableToolbar
+        onRefresh={onRefreshClick}
+        onCreate={onCreateClick}
+        onImport={onImport}
+        onExport={onExportClick}
+        onOpenView={onViewClick}
+        onResetFilters={onResetClick}
+        canCreate={createReady}
+        canExport={exportReady}
+        canOpenView={!viewMuted}
+        canResetFilters={!resetMuted}
+        refreshing={refreshing}
+        toolbarLeft={toolbarLeft}
+        onInvertSelection={onInvertSelection}
+        selectionCount={selectionCount}
+      />
 
       <div className="list-table-area">
         <div className="list-table-top-row">
@@ -410,98 +312,45 @@ function ListTableShellInner<Row extends { id: number }>({
 
         <div className="table-wrap">
           <table className="list-table list-table--col-size">
-            <colgroup>
-              <col className="list-table__col-cb" />
-              {visibleColumnIds.map((cid) => (
-                <col key={cid} style={{ width: `${colWidthPx(cid)}px` }} />
-              ))}
-            </colgroup>
-            <thead>
-              <tr className="list-table__head-row">
-                <th className="list-table__cb">
-                  <input type="checkbox" checked={allSelected} onChange={(e) => onToggleAll(e.target.checked)} aria-label="Выбрать все на странице" />
-                </th>
-                {visibleColumnIds.map((cid) => {
-                  const label = columnLabel(cid)
-                  const active = sortCol === cid
-                  const ariaSort = active ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'
-                  return (
-                    <th key={cid} aria-sort={ariaSort} className="list-table__th-col">
-                      <button type="button" className="list-table__sort-btn" onClick={() => onSortHeaderClick(cid)} title={active ? (sortDir === 'asc' ? 'По убыванию' : 'По возрастанию') : 'Сортировать'}>
-                        <span className="list-table__sort-label">{label}</span>
-                        {active ? <span className="list-table__sort-arrow" aria-hidden>{sortDir === 'asc' ? ' ▲' : ' ▼'}</span> : null}
-                      </button>
-                      <span 
-                        className="list-table__col-resize" 
-                        role="separator" 
-                        aria-orientation="vertical" 
-                        aria-label={`Ширина колонки «${label}». Перетащите или двойной клик — по содержимому.`} 
-                        title="Тянуть — ширина · двойной клик — по данным" 
-                        onPointerDown={(e) => onColResizePointerDown(cid, e)} 
-                        onDoubleClick={(e) => onColResizeDoubleClick(cid, e)}
-                      />
-                    </th>
-                  )
-                })}
-              </tr>
-              <tr className="list-filter-row">
-                <th />
-                {visibleColumnIds.map((cid) => {
-                  const def = columnFilters[cid]
-                  const exList = excludeFilters[cid] ?? []
-                  const highlightExclude = excludeColumnHasActiveEntries(exList, def)
-                  return (
-                    <th key={`f-${cid}`}>
-                      <ListFilterCell kind={def.kind === 'select' ? 'select' : def.kind === 'datetime' ? 'datetime' : 'text'} value={filters[cid] ?? ''} onChange={(next) => onFilterChange(cid, next)} options={def.kind === 'select' ? def.options : undefined} aria-label={`Фильтр: ${columnLabel(cid)}`} highlightActive={highlightExclude} />
-                    </th>
-                  )
-                })}
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr>
-                  <td className="list-table__empty" colSpan={visibleColumnIds.length + 1}>Загрузка…</td>
-                </tr>
-              ) : totalRowsCount === 0 ? (
-                <tr>
-                  <td className="list-table__empty" colSpan={visibleColumnIds.length + 1} role="status">Нет записей</td>
-                </tr>
-              ) : rows.length === 0 ? (
-                <tr>
-                  <td className="list-table__empty" colSpan={visibleColumnIds.length + 1} role="status">Нет данных по текущим фильтрам. Измените условия в строке фильтров или сбросьте их кнопкой на панели над таблицей.</td>
-                </tr>
-              ) : (
-                rows.map((row) => (
-                  <tr key={row.id}>
-                    <td className="list-table__cb">
-                      <input type="checkbox" checked={isSelected(row.id)} onChange={(e) => onToggleRow(row.id, e.target.checked)} aria-label={`Выбрать строку ${row.id}`} />
-                    </td>
-                    {visibleColumnIds.map((cid) => (
-                      <td
-                        key={cid}
-                        onContextMenu={(e) => onCellContextMenu(e, row, cid)}
-                        onDoubleClick={(e) => {
-                          e.preventDefault()
-                          onRowDoubleClick?.(row)
-                        }}
-                      >
-                        {renderCell(row, cid)}
-                      </td>
-                    ))}
-                  </tr>
-                ))
-              )}
-            </tbody>
+            <TableHeader
+              visibleColumnIds={visibleColumnIds}
+              columnLabel={columnLabel}
+              sortCol={sortCol}
+              sortDir={sortDir}
+              onSortHeaderClick={onSortHeaderClick}
+              columnWidthsPx={columnWidthsPx}
+              onColResizePointerDown={onColResizePointerDown}
+              onColResizeDoubleClick={onColResizeDoubleClick}
+              dragColPreview={dragColPreview}
+              colDragRef={colDragRef}
+            />
+            <TableFilterRow
+              visibleColumnIds={visibleColumnIds}
+              columnFilters={columnFilters}
+              filters={filters}
+              excludeFilters={excludeFilters}
+              onFilterChange={onFilterChange}
+              columnLabel={columnLabel}
+              excludeColumnHasActiveEntries={excludeColumnHasActiveEntries}
+            />
+            <TableBody
+              rows={rows}
+              visibleColumnIds={visibleColumnIds}
+              loading={loading}
+              totalRowsCount={totalRowsCount}
+              allSelected={allSelected}
+              onToggleAll={onToggleAll}
+              isSelected={isSelected}
+              onToggleRow={onToggleRow}
+              onCellContextMenu={onCellContextMenu}
+              renderCell={renderCell}
+              onRowDoubleClick={onRowDoubleClick}
+            />
           </table>
         </div>
       </div>
 
-      <div className="list-table-footer" aria-live="polite">
-        <span className="list-table-count">
-          Показано {rows.length} из {totalRowsCount}
-        </span>
-      </div>
+      <TableFooter rowsLength={rows.length} totalRowsCount={totalRowsCount} />
 
       {viewDialogOpen ? (
         <div className="dialog-backdrop dialog-backdrop--cols" role="presentation">
@@ -528,7 +377,7 @@ function ListTableShellInner<Row extends { id: number }>({
                       {columnLabel(id)}
                     </label>
                     <span className="dialog-cols__width" title="Ширина в пикселях; пусто — как по умолчанию">
-                      <input type="number" className="dialog-cols__width-input" min={LIST_COL_WIDTH_MIN} max={LIST_COL_WIDTH_MAX} step={1} placeholder="авто" value={viewDraftColumnWidth(id)} onChange={(ev) => onViewDraftColumnWidthChange(id, ev.target.value)} aria-label={`Ширина колонки «${columnLabel(id)}», пиксели; пусто — по умолчанию`} />
+                      <input type="number" className="dialog-cols__width-input" min={4} max={480} step={1} placeholder="авто" value={viewDraftColumnWidth(id)} onChange={(ev) => onViewDraftColumnWidthChange(id, ev.target.value)} aria-label={`Ширина колонки «${columnLabel(id)}», пиксели; пусто — по умолчанию`} />
                     </span>
                   </li>
                 ))}
@@ -544,6 +393,5 @@ function ListTableShellInner<Row extends { id: number }>({
     </>
   )
 }
-
 
 export const ListTableShell = memo(ListTableShellInner) as typeof ListTableShellInner

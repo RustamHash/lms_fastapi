@@ -9,9 +9,56 @@ from app.api.v1.documents import schemas
 from app.core.exceptions import BadRequestError, NotFoundError
 from app.documents.models import Document
 from app.documents.services import DocumentService
+from app.core.statuses import DocumentStatus
+from app.documents.document_types import DocumentType
 from app.documents.repository import DocumentLineRepository, DocumentRepository
 
 router = APIRouter(prefix="/documents", tags=["documents"])
+
+
+@router.get("/list", response_model=list[schemas.DocumentList], dependencies=[Depends(require_permission("view", "documents"))])
+async def list_documents_for_table(session: SessionDep,
+) -> list[schemas.DocumentList]:
+    """Плоский список для таблицы."""
+    from sqlalchemy.orm import selectinload
+    from app.warehouse.models import Warehouse
+    
+    # Загружаем документы с warehouse за один запрос
+    stmt = select(Document).options(selectinload(Document.warehouse))
+    rows = list(await session.scalars(stmt))
+
+    result = []
+    for r in rows:
+        result.append(schemas.DocumentList(
+            id=r.id,
+            is_active=r.is_active,
+            is_deleted=r.is_deleted,
+            created_at=r.created_at,
+            updated_at=r.updated_at,
+            created_by_id=r.created_by_id,
+            updated_by_id=r.updated_by_id,
+            deleted_at=r.deleted_at,
+            deleted_by_id=r.deleted_by_id,
+            document_number=r.document_number,
+            document_type=r.document_type,
+            document_type_label=DocumentType(r.document_type).label if r.document_type in DocumentType._value2member_map_ else r.document_type,
+            document_date=r.document_date,
+            delivery_date=r.delivery_date,
+            status=r.status,
+            status_label=DocumentStatus(r.status).label if r.status in DocumentStatus._value2member_map_ else r.status,
+            warehouse_name=r.warehouse.name if r.warehouse else None,
+        ))
+    return result
+
+
+@router.get("/{document_id}/detail", response_model=schemas.DocumentDetail, dependencies=[Depends(require_permission("view", "documents"))])
+async def get_document_detail(document_id: int, session: SessionDep) -> schemas.DocumentDetail:
+    """Вложенная схема для детальной страницы."""
+    doc_service = DocumentService(DocumentRepository(session), DocumentLineRepository(session))
+    doc = await doc_service.get_by_id(document_id)
+    if doc is None:
+        raise NotFoundError("Документ не найден")
+    return schemas.DocumentDetail.model_validate(doc)
 
 
 @router.get("", response_model=list[schemas.DocumentRead], dependencies=[Depends(require_permission("view", "documents"))])

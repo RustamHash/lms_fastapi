@@ -126,9 +126,31 @@ export function TabsProvider({ children }: { children: ReactNode }) {
     '/integrations',
   ]
 
+  // Проверяем, является ли путь детальной страницей (содержит ID в конце)
+  function isDetailPath(path: string): boolean {
+    // Исключаем hub-страницы
+    if (EXCLUDED_PATHS.includes(path)) return true
+    
+    // Проверяем, заканчивается ли на число (ID)
+    const parts = path.split('/').filter(Boolean)
+    if (parts.length === 0) return true
+    
+    const lastPart = parts[parts.length - 1]
+    // Если последняя часть — число, это детальная страница
+    if (/^\d+$/.test(lastPart)) return true
+    
+    // Если путь содержит /new или /edit — это форма
+    if (lastPart === 'new' || lastPart === 'edit') return true
+    
+    return false
+  }
+
   // Добавляем текущую страницу в табы
   useEffect(() => {
     if (activePath === '/login') return
+    
+    // Не добавляем детальные страницы
+    if (isDetailPath(activePath)) return
     
     // Проверяем, не является ли путь исключённым
     if (EXCLUDED_PATHS.includes(activePath)) return
@@ -138,7 +160,8 @@ export function TabsProvider({ children }: { children: ReactNode }) {
       if (activePath === excluded) return
     }
 
-    setTabs((prev) => {
+    const rafId = requestAnimationFrame(() => {
+      setTabs((prev) => {
       // Если таб уже есть — обновляем label
       const existing = prev.find((t) => t.path === activePath)
       if (existing) {
@@ -152,9 +175,12 @@ export function TabsProvider({ children }: { children: ReactNode }) {
         path: activePath,
         label: getLabelFromPath(activePath),
       }
-      const next = [...prev, newTab]
-      return next.slice(-MAX_TABS)
+        const next = [...prev, newTab]
+        return next.slice(-MAX_TABS)
+      })
     })
+    return () => cancelAnimationFrame(rafId)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activePath])
 
   // Сохраняем в sessionStorage

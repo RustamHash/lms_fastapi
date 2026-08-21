@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { DetailPageShell } from '../components/DetailPageShell'
-import { apiFetch } from '../lib/http'
+import { apiClient } from '../lib/apiClient'
 import { formatDt } from '../lib/formatDt'
 
 type AddressDetail = {
@@ -18,6 +18,8 @@ type AddressDetail = {
   short_address: string
   full_address_with_postal_code: string
   delivery_zone_id: number | null
+  delivery_zone: { id: number; name: string } | null
+  zone_name: string | null
   fias_id: string | null
   latitude: number | null
   longitude: number | null
@@ -37,8 +39,10 @@ export function AddressDetailPage() {
   
   useEffect(() => {
     if (!validId) {
-      setLoading(false)
-      setError('Некорректный идентификатор')
+      Promise.resolve().then(() => {
+        setLoading(false)
+        setError('Некорректный идентификатор')
+      })
       return
     }
     
@@ -48,13 +52,7 @@ export function AddressDetailPage() {
       setLoading(true)
       setError(null)
       try {
-        const res = await apiFetch(`/api/v1/parties/addresses/${idNum}`)
-        if (res.status === 404) {
-          if (!cancelled) setError('Адрес не найден')
-          return
-        }
-        if (!res.ok) throw new Error(`HTTP ${res.status}`)
-        const data = await res.json() as AddressDetail
+        const data = await apiClient.get<AddressDetail>(`/api/v1/parties/addresses/${idNum}/detail`)
         if (!cancelled) setAddress(data)
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : 'Ошибка загрузки')
@@ -153,7 +151,17 @@ export function AddressDetailPage() {
               <dd className="entity-dl__dd">{address.longitude}</dd>
             </div>
           ) : null}
-          {address.delivery_zone_id != null ? (
+          {address.delivery_zone?.name ? (
+            <div className="entity-dl__row">
+              <dt className="entity-dl__dt">Зона доставки</dt>
+              <dd className="entity-dl__dd">{address.delivery_zone.name}</dd>
+            </div>
+          ) : address.zone_name ? (
+            <div className="entity-dl__row">
+              <dt className="entity-dl__dt">Зона доставки</dt>
+              <dd className="entity-dl__dd">{address.zone_name}</dd>
+            </div>
+          ) : address.delivery_zone_id != null ? (
             <div className="entity-dl__row">
               <dt className="entity-dl__dt">Зона доставки (ID)</dt>
               <dd className="entity-dl__dd">{address.delivery_zone_id}</dd>

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { DetailPageShell } from '../components/DetailPageShell'
-import { apiFetch } from '../lib/http'
+import { apiClient } from '../lib/apiClient'
 import { formatDt } from '../lib/formatDt'
 
 type NotificationRule = {
@@ -27,9 +27,8 @@ export function NotificationRuleDetailPage() {
     ;(async () => {
       setLoading(true)
       try {
-        const res = await apiFetch(`/api/v1/notification-rules/${ruleId}`)
-        if (!res.ok) throw new Error(`HTTP ${res.status}`)
-        setRule(await res.json())
+        const data = await apiClient.get<NotificationRule>(`/api/v1/notification-rules/${ruleId}`)
+        setRule(data)
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Ошибка')
       } finally {

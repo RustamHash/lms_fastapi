@@ -263,3 +263,39 @@ class RawAddressRead(BaseRead):
     normalized_address_id: int
     source: str = ""
     full_address: str | None = None
+
+
+# ========== ENRICHED ==========
+
+class AddressList(BaseRead):
+    """Плоская схема для таблицы адресов."""
+    full_address: str
+    region: str = ""
+    city: str = ""
+    street: str = ""
+    house: str = ""
+    postal_code: str = ""
+    fias_id: str = ""
+
+    # Плоские связи
+    zone_name: str | None = None
+
+
+class AddressDetail(BaseRead):
+    """Вложенная схема для детальной страницы адреса."""
+    full_address: str
+    region: str = ""
+    city: str = ""
+    street: str = ""
+    house: str = ""
+    building: str = ""
+    structure: str = ""
+    flat: str = ""
+    fias_id: str = ""
+    latitude: float | None = None
+    longitude: float | None = None
+    postal_code: str = ""
+    delivery_zone_id: int | None = None
+
+    # Вложенные
+    delivery_zone: DeliveryZoneRead | None = None

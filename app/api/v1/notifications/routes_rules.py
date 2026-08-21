@@ -12,6 +12,7 @@ from app.api.v1.notifications.schemas_rules import (
     NotificationRuleUpdate,
 )
 from app.core.exceptions import NotFoundError
+from app.notifications.repository import NotificationRuleRepository
 from app.notifications.models import NotificationRule
 
 router = APIRouter(prefix="/notification-rules", tags=["notification-rules"])

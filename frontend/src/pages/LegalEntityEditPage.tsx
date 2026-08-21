@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { apiFetch } from '../lib/http'
+import { apiClient } from '../lib/apiClient'
 
 export function LegalEntityEditPage() {
   const { entityId } = useParams<{ entityId: string }>()
@@ -23,9 +23,15 @@ export function LegalEntityEditPage() {
     ;(async () => {
       setLoading(true)
       try {
-        const res = await apiFetch(`/api/v1/parties/legal-entities/${entityId}`)
-        if (!res.ok) throw new Error(`HTTP ${res.status}`)
-        const data = await res.json()
+        const data = await apiClient.get<{
+        name: string
+        legal_name: string
+        inn: string
+        kpp: string
+        ogrn: string
+        phone: string
+        email: string
+      }>(`/api/v1/parties/legal-entities/${entityId}`)
         setForm({
           name: data.name,
           legal_name: data.legal_name,
@@ -48,11 +54,7 @@ export function LegalEntityEditPage() {
     setSaving(true)
     setError(null)
     try {
-      const res = await apiFetch(`/api/v1/parties/legal-entities/${entityId}`, {
-        method: 'PATCH',
-        body: JSON.stringify(form),
-      })
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      await apiClient.patch(`/api/v1/parties/legal-entities/${entityId}`, form)
       navigate(`/reference/legal-entities/${entityId}`)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Ошибка')

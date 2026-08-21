@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { apiFetch } from '../lib/http'
+import { apiClient } from '../lib/apiClient'
 
 export function DepositorCreatePage() {
   const navigate = useNavigate()
@@ -11,8 +11,8 @@ export function DepositorCreatePage() {
 
   useEffect(() => {
     ;(async () => {
-      const res = await apiFetch('/api/v1/parties/legal-entities')
-      if (res.ok) setLegalEntities(await res.json())
+      const entitiesData = await apiClient.get<{id: number, name: string}[]>('/api/v1/parties/legal-entities')
+      setLegalEntities(entitiesData)
     })()
   }, [])
 
@@ -21,15 +21,10 @@ export function DepositorCreatePage() {
     setSaving(true)
     setError(null)
     try {
-      const res = await apiFetch('/api/v1/parties/depositors', {
-        method: 'POST',
-        body: JSON.stringify({
-          code: form.code,
-          legal_entity_id: Number(form.legal_entity_id),
-        }),
+      const created = await apiClient.post<{id: number}>('/api/v1/parties/depositors', {
+        code: form.code,
+        legal_entity_id: Number(form.legal_entity_id),
       })
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      const created = await res.json()
       navigate(`/reference/depositors/${created.id}`)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Ошибка')

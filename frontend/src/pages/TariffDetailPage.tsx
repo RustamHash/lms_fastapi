@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { DetailPageShell } from '../components/DetailPageShell'
-import { apiFetch } from '../lib/http'
+import { apiClient } from '../lib/apiClient'
 
 type Tariff = {
   id: number
@@ -30,9 +30,8 @@ export function TariffDetailPage() {
     ;(async () => {
       setLoading(true)
       try {
-        const res = await apiFetch(`/api/v1/parties/tariffs/${tariffId}`)
-        if (!res.ok) throw new Error(`HTTP ${res.status}`)
-        setTariff(await res.json())
+        const data = await apiClient.get<Tariff>(`/api/v1/parties/tariffs/${tariffId}`)
+        setTariff(data)
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Ошибка')
       } finally {

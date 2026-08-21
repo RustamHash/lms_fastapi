@@ -72,6 +72,7 @@ const BatchDetailPage = lazy(() => import('./pages/BatchDetailPage').then(m => (
 const CarrierDetailPage = lazy(() => import('./pages/CarrierDetailPage').then(m => ({ default: m.CarrierDetailPage })))
 const DeliveryOrderDetailPage = lazy(() => import('./pages/DeliveryOrderDetailPage').then(m => ({ default: m.DeliveryOrderDetailPage })))
 const DeliveryZoneDetailPage = lazy(() => import('./pages/DeliveryZoneDetailPage').then(m => ({ default: m.DeliveryZoneDetailPage })))
+const DeliveryZoneCreatePage = lazy(() => import('./pages/DeliveryZoneCreatePage').then(m => ({ default: m.DeliveryZoneCreatePage })))
 const DeviationDetailPage = lazy(() => import('./pages/DeviationDetailPage').then(m => ({ default: m.DeviationDetailPage })))
 const DocumentDetailPage = lazy(() => import('./pages/DocumentDetailPage').then(m => ({ default: m.DocumentDetailPage })))
 const DriverDetailPage = lazy(() => import('./pages/DriverDetailPage').then(m => ({ default: m.DriverDetailPage })))
@@ -200,6 +201,7 @@ function App() {
                                     <Route path="/reference/batches/:id" element={<BatchDetailPage />} />
                   <Route path="/carriers/:id" element={<CarrierDetailPage />} />
                   <Route path="/delivery/orders/:id" element={<DeliveryOrderDetailPage />} />
+                  <Route path="/reference/delivery-zones/new" element={<DeliveryZoneCreatePage />} />
                   <Route path="/reference/delivery-zones/:id" element={<DeliveryZoneDetailPage />} />
                   <Route path="/deviations/:id" element={<DeviationDetailPage />} />
                   <Route path="/documents/:id" element={<DocumentDetailPage />} />

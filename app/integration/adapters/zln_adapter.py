@@ -176,6 +176,8 @@ class ZLNAdapter(BaseAdapter):
 
         # Адрес доставки
         delivery_address = self._get_text(root, "DELIV_ADDR") or self._get_text(root, "CONSIG_ADDR")
+        address_comment = self._get_text(root, "ADDR_COM")
+        shipping_contact = self._get_text(root, "SHIPP_CONT")
 
         if not doc_no:
             errors.append("Номер документа не указан")
@@ -206,6 +208,8 @@ class ZLNAdapter(BaseAdapter):
             "use_edo": use_edo == "1",
             "is_delivery": self._get_text(root, "DELIV") == "1",
             "delivery_address": delivery_address,
+            "address_comment": address_comment,
+            "shipping_contact": shipping_contact,
             "items": items,
             "lines": lines,
         }, []

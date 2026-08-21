@@ -13,6 +13,7 @@ from app.delivery.repository import DeliveryOrderRepository
 from app.delivery.services import DeliveryOrderService
 from app.documents.services.document_service import DocumentService
 from app.documents.repository import DocumentLineRepository, DocumentRepository
+from decimal import Decimal
 from app.integration.adapters import ZLNAdapter
 from app.parties.models import Client
 from app.warehouse.models import VirtualWarehouse
@@ -43,8 +44,12 @@ class IntegrationService:
         doc_number = universal_doc.get("document_number", "")
 
         try:
-            # Начало транзакции (savepoint)
-            savepoint = await self._s.begin_nested()
+            # Начало транзакции (savepoint) с обработкой ошибок
+            try:
+                savepoint = await self._s.begin_nested()
+            except Exception as e:
+                logger.error("Не удалось начать транзакцию: %s", e)
+                return None, [f"Ошибка транзакции: {e}"]
 
             # 0. Проверка дубликата
             if doc_type == "porder":
@@ -106,8 +111,11 @@ class IntegrationService:
             return order, []
 
         except Exception as e:
-            await savepoint.rollback()
-            logger.error("Ошибка импорта: %s", e)
+            try:
+                await savepoint.rollback()
+            except Exception as rollback_error:
+                logger.error("Ошибка отката транзакции: %s", rollback_error)
+            logger.error("Ошибка импорта: %s", e, exc_info=True)
             return None, [f"Ошибка: {e}"]
 
     async def _get_or_create_warehouse(
@@ -299,6 +307,16 @@ class IntegrationService:
         )
 
         # 5. Создать заказ
+        # Рассчитать вес и количество
+        total_weight = Decimal("0")
+        total_qty = 0
+        for line in doc.get("lines", []):
+            total_qty += line["quantity"]
+            for item in doc.get("items", []):
+                if item["external_id"] == line["external_id"]:
+                    total_weight += item["net_mass"] * line["quantity"]
+                    break
+
         order = OutboundOrder(
             depositor_id=depositor_id,
             warehouse_id=warehouse_id,
@@ -310,6 +328,10 @@ class IntegrationService:
             order_date=doc.get("document_date") or doc.get("delivery_date"),
             shipping_date=doc.get("delivery_date"),
             needs_delivery=doc.get("is_delivery", False),
+            declared_weight=total_weight,
+            address_comment=doc.get("address_comment", ""),
+            shipping_contact=doc.get("shipping_contact", ""),
+            total_quantity=total_qty,
         )
         self._s.add(order)
         await self._s.flush()

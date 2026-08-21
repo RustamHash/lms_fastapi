@@ -24,6 +24,10 @@ export const deliveryZoneConfig = {
       { id: 'name', type: 'text', label: 'Название' },
     ],
     
+    toolbar: {
+      createHref: '/reference/delivery-zones/new',
+    },
+    
     columnOverrides: {
       name: {
         href: (row) => `/reference/delivery-zones/${row.id}`,

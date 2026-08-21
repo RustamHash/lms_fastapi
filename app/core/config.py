@@ -29,11 +29,15 @@ class Settings(BaseSettings):
         description="Разрешенные origins для CORS",
     )
 
+    environment: str = Field(default="development", description="Окружение: development, production")
     log_level: str = Field(default="INFO")
     debug_sql: bool = Field(default=False)
     app_log_file_path: str = Field(default="logs/app.log")
     error_log_file_path: str = Field(default="logs/error.log")
     sql_log_file_path: str = Field(default="logs/sql.log")
+    log_to_console: bool = Field(default=True, description="Логировать в консоль")
+    log_to_file: bool = Field(default=True, description="Логировать в файл")
+    log_json_format: bool = Field(default=False, description="Использовать JSON-формат для логов")
 
 
 @lru_cache

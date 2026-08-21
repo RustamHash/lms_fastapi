@@ -9,6 +9,8 @@ from sqlalchemy import select
 
 from app.api.deps import SessionDep, UserDep, require_permission
 from app.api.v1.parties import schemas
+from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import selectinload
 from app.core.exceptions import BadRequestError, ConflictError, NotFoundError
 from app.parties.models import (
     Address,
@@ -40,57 +42,69 @@ router = APIRouter(prefix="/parties", tags=["parties"])
 
 # ========== Адреса ==========
 
-@router.get("/addresses", response_model=list[schemas.AddressRead], dependencies=[Depends(require_permission("view", "addresses"))])
-async def list_addresses(session: SessionDep) -> list[schemas.AddressRead]:
-    service = AddressService(AddressRepository(session))
-    rows = await service.list_all()
-    return [schemas.AddressRead.model_validate(r) for r in rows]
+@router.get("/addresses/list", response_model=list[schemas.AddressList], dependencies=[Depends(require_permission("view", "addresses"))])
+async def list_addresses_for_table(session: SessionDep,
+) -> list[schemas.AddressList]:
+    """Плоский список адресов для таблицы."""
+    stmt = select(Address).options(selectinload(Address.delivery_zone))
+    rows = list(await session.scalars(stmt))
+
+    result = []
+    for r in rows:
+        result.append(schemas.AddressList(
+            id=r.id,
+            is_active=r.is_active,
+            is_deleted=r.is_deleted,
+            created_at=r.created_at,
+            updated_at=r.updated_at,
+            created_by_id=r.created_by_id,
+            updated_by_id=r.updated_by_id,
+            deleted_at=r.deleted_at,
+            deleted_by_id=r.deleted_by_id,
+            full_address=r.full_address,
+            region=r.region,
+            city=r.city,
+            street=r.street,
+            house=r.house,
+            postal_code=r.postal_code,
+            fias_id=r.fias_id,
+            zone_name=r.delivery_zone.name if r.delivery_zone else None,
+        ))
+    return result
 
 
-@router.post("/addresses/resolve", response_model=schemas.AddressRead, dependencies=[Depends(require_permission("create", "addresses"))])
-async def resolve_address(
-    body: schemas.AddressResolve,
-    session: SessionDep,
-    user_id: UserDep,
-) -> schemas.AddressRead:
-    service = AddressService(AddressRepository(session))
-    address = await service.get_or_create(body.raw_text, body.source, user_id)
-    return schemas.AddressRead.model_validate(address)
-
-
-@router.get("/addresses/{address_id}", response_model=schemas.AddressRead, dependencies=[Depends(require_permission("view", "addresses"))])
-async def get_address(address_id: int, session: SessionDep) -> schemas.AddressRead:
-    service = AddressService(AddressRepository(session))
-    row = await service.get_by_id(address_id)
-    if row is None:
-        raise NotFoundError("Адрес не найден")
-    return schemas.AddressRead.model_validate(row)
-
-
-@router.patch("/addresses/{address_id}", response_model=schemas.AddressRead, dependencies=[Depends(require_permission("update", "addresses"))])
-async def update_address(
-    address_id: int,
-    body: schemas.AddressUpdate,
-    session: SessionDep,
-    user_id: UserDep,
-) -> schemas.AddressRead:
-    service = AddressService(AddressRepository(session))
-    address = await service.update(address_id, user_id, body.model_dump(exclude_unset=True))
+@router.get("/addresses/{address_id}/detail", response_model=schemas.AddressDetail, dependencies=[Depends(require_permission("view", "addresses"))])
+async def get_address_detail(address_id: int, session: SessionDep) -> schemas.AddressDetail:
+    """Вложенная схема для детальной страницы адреса."""
+    stmt = select(Address).where(Address.id == address_id).options(selectinload(Address.delivery_zone))
+    address = await session.scalar(stmt)
     if address is None:
         raise NotFoundError("Адрес не найден")
-    return schemas.AddressRead.model_validate(address)
-
-
-@router.delete("/addresses/{address_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_permission("delete", "addresses"))])
-async def delete_address(
-    address_id: int,
-    session: SessionDep,
-    user_id: UserDep,
-) -> None:
-    service = AddressService(AddressRepository(session))
-    ok = await service.soft_delete(address_id, user_id)
-    if not ok:
-        raise NotFoundError("Адрес не найден")
+    return schemas.AddressDetail(
+        id=address.id,
+        is_active=address.is_active,
+        is_deleted=address.is_deleted,
+        created_at=address.created_at,
+        updated_at=address.updated_at,
+        created_by_id=address.created_by_id,
+        updated_by_id=address.updated_by_id,
+        deleted_at=address.deleted_at,
+        deleted_by_id=address.deleted_by_id,
+        full_address=address.full_address,
+        region=address.region,
+        city=address.city,
+        street=address.street,
+        house=address.house,
+        building=address.building,
+        structure=address.structure,
+        flat=address.flat,
+        fias_id=address.fias_id,
+        latitude=float(address.latitude) if address.latitude else None,
+        longitude=float(address.longitude) if address.longitude else None,
+        postal_code=address.postal_code,
+        delivery_zone_id=address.delivery_zone_id,
+        delivery_zone=schemas.DeliveryZoneRead.model_validate(address.delivery_zone) if address.delivery_zone else None,
+    )
 
 
 # ========== Алиасы (сырые адреса) ==========
@@ -227,7 +241,8 @@ async def delete_alias(alias_id: int, session: SessionDep, user_id: UserDep) -> 
 # ========== Юрлица ==========
 
 @router.get("/legal-entities", response_model=list[schemas.LegalEntityRead], dependencies=[Depends(require_permission("view", "legal_entities"))])
-async def list_legal_entities(session: SessionDep) -> list[schemas.LegalEntityRead]:
+async def list_legal_entities(session: SessionDep,
+) -> list[schemas.LegalEntityRead]:
     service = LegalEntityService(LegalEntityRepository(session))
     rows = await service.list_all()
     return [schemas.LegalEntityRead.model_validate(r) for r in rows]
@@ -281,18 +296,21 @@ async def get_legal_entity(entity_id: int, session: SessionDep) -> schemas.Legal
 # ========== Поклажедатели ==========
 
 @router.get("/depositors", response_model=list[schemas.DepositorRead], dependencies=[Depends(require_permission("view", "depositors"))])
-async def list_depositors(session: SessionDep) -> list[schemas.DepositorRead]:
-    service = DepositorService(DepositorRepository(session))
-    rows = await service.list_all()
+async def list_depositors(session: SessionDep,
+) -> list[schemas.DepositorRead]:
+    # Используем selectinload для загрузки legal_entity за один запрос
+    from sqlalchemy.orm import selectinload
+    stmt = select(Depositor).options(selectinload(Depositor.legal_entity))
+    rows = list(await session.scalars(stmt))
+    
     result = []
     for r in rows:
-        le = await LegalEntityRepository(session).get_by_id(r.legal_entity_id)
         result.append(
             schemas.DepositorRead(
                 id=r.id,
                 legal_entity_id=r.legal_entity_id,
                 code=r.code,
-                legal_entity_name=le.name if le else "",
+                legal_entity_name=r.legal_entity.name if r.legal_entity else "",
             )
         )
     return result
@@ -410,7 +428,8 @@ async def delete_client(client_id: int, session: SessionDep, user_id: UserDep) -
 # ========== Договоры ==========
 
 @router.get("/contracts", response_model=list[schemas.ContractRead], dependencies=[Depends(require_permission("view", "contracts"))])
-async def list_contracts(session: SessionDep) -> list[schemas.ContractRead]:
+async def list_contracts(session: SessionDep,
+) -> list[schemas.ContractRead]:
     repo = ContractRepository(session)
     rows = await repo.list_all()
     return [schemas.ContractRead.model_validate(r) for r in rows]
@@ -464,7 +483,8 @@ async def delete_contract(contract_id: int, session: SessionDep, user_id: UserDe
 # ========== Тарифы ==========
 
 @router.get("/tariff-documents", response_model=list[schemas.TariffDocumentRead], dependencies=[Depends(require_permission("view", "tariffs"))])
-async def list_tariff_documents(session: SessionDep) -> list[schemas.TariffDocumentRead]:
+async def list_tariff_documents(session: SessionDep,
+) -> list[schemas.TariffDocumentRead]:
     rows = await TariffRepository(session).list_documents()
     return [schemas.TariffDocumentRead.model_validate(r) for r in rows]
 

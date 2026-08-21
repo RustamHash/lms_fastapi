@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { DetailPageShell } from '../components/DetailPageShell'
-import { apiFetch } from '../lib/http'
+import { apiClient } from '../lib/apiClient'
 
 type Client = {
   id: number
@@ -31,9 +31,8 @@ export function ClientDetailPage() {
     ;(async () => {
       setLoading(true)
       try {
-        const res = await apiFetch(`/api/v1/parties/clients/${clientId}`)
-        if (!res.ok) throw new Error(`HTTP ${res.status}`)
-        setClient(await res.json())
+        const data = await apiClient.get<Client>(`/api/v1/parties/clients/${clientId}`)
+        setClient(data)
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Ошибка')
       } finally {

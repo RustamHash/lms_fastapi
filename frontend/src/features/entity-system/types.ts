@@ -50,7 +50,7 @@ export type GroupAction<Row> = {
   executionMode?: 'sequential' | 'parallel'
   dialogComponent?: ComponentType<{
     rows: Row[]
-    onComplete: (result: any) => void
+    onComplete: (result: unknown) => void
     onCancel: () => void
   }>
   action: (rows: Row[], context: GroupActionContext<Row>) => Promise<void> | void
@@ -113,7 +113,7 @@ export type EntitySection<T> = {
     type?: 'text' | 'number' | 'date' | 'boolean' | 'link' | 'code'
     editable?: boolean
     required?: boolean
-    format?: (value: any) => string
+    format?: (value: unknown) => string
     href?: (row: T) => string
   }[]
 }

@@ -4,6 +4,8 @@ from fastapi import APIRouter
 
 from app.api.v1.accounts.routes import router as accounts_router
 from app.api.v1.accounts.routes_list import router as list_settings_router
+from app.api.v1.accounts.routes_permissions import router as permissions_router
+from app.api.v1.accounts.routes_user_settings import router as user_settings_router
 from app.api.v1.delivery.routes import router as delivery_router
 from app.api.v1.delivery.routes_deviations_lines import router as deviations_lines_router
 from app.api.v1.documents.routes import router as documents_router
@@ -26,6 +28,8 @@ api_router = APIRouter(prefix="/api/v1")
 
 api_router.include_router(accounts_router)
 api_router.include_router(list_settings_router)
+api_router.include_router(permissions_router)
+api_router.include_router(user_settings_router)
 api_router.include_router(parties_router)
 api_router.include_router(delivery_zones_router)
 api_router.include_router(carriers_keepers_router)

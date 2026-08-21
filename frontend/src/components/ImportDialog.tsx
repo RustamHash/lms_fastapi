@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { apiFetch } from '../lib/http'
+import { apiClient } from '../lib/apiClient'
 
 type Props = {
   documentType: 'porder' | 'order' | 'all'
@@ -21,6 +21,12 @@ type ImportStatus = {
 }
 
 export function ImportDialog({ documentType, title, onClose }: Props) {
+  const documentTypeRef = useRef(documentType)
+  
+  useEffect(() => {
+    documentTypeRef.current = documentType
+  }, [documentType])
+  
   const [status, setStatus] = useState<ImportStatus | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [allMessages, setAllMessages] = useState<string[]>([])
@@ -39,16 +45,6 @@ export function ImportDialog({ documentType, title, onClose }: Props) {
   useEffect(() => {
     return () => stopPolling()
   }, [stopPolling])
-
-  // Автозапуск импорта при открытии окна (защита от двойного запуска)
-  const startedRef = useRef(false)
-  
-  useEffect(() => {
-    if (startedRef.current) return
-    startedRef.current = true
-    void handleImport()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
 
   // Автопрокрутка лога вниз
   useEffect(() => {
@@ -84,24 +80,16 @@ export function ImportDialog({ documentType, title, onClose }: Props) {
     }
   }
 
-  async function handleImport() {
+  const handleImport = useCallback(async () => {
     setError(null)
     setStatus(null)
 
     try {
       // 1. Запускаем импорт
-      const startRes = await apiFetch('/api/v1/integrations/import', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(documentType === 'all' ? {} : { document_type: documentType }),
-      })
-
-      if (!startRes.ok) {
-        const data = await startRes.json().catch(() => null)
-        throw new Error(data?.detail ?? `HTTP ${startRes.status}`)
-      }
-
-      const startData = await startRes.json() as { task_id: string; log_id: number; status: string }
+      const startData = await apiClient.post<{ task_id: string; log_id: number; status: string }>(
+        '/api/v1/integrations/import',
+        documentTypeRef.current === 'all' ? {} : { document_type: documentTypeRef.current }
+      )
       
       if (!startData.task_id) {
         throw new Error('Не получен task_id от сервера')
@@ -114,10 +102,7 @@ export function ImportDialog({ documentType, title, onClose }: Props) {
         if (!startData.task_id) return
         
         try {
-          const statusRes = await apiFetch(`/api/v1/integrations/import/${startData.task_id}/status/long`)
-          if (!statusRes.ok) throw new Error(`HTTP ${statusRes.status}`)
-
-          const statusData = await statusRes.json() as ImportStatus
+          const statusData = await apiClient.get<ImportStatus>(`/api/v1/integrations/import/${startData.task_id}/status/long`)
           setStatus(statusData)
 
           // Добавляем только новые сообщения
@@ -155,7 +140,16 @@ export function ImportDialog({ documentType, title, onClose }: Props) {
       setError(e instanceof Error ? e.message : 'Ошибка импорта')
       stopPolling()
     }
-  }
+  }, [stopPolling])
+
+  // Автозапуск импорта при открытии окна (защита от двойного запуска)
+  const startedRef = useRef(false)
+  
+  useEffect(() => {
+    if (startedRef.current) return
+    startedRef.current = true
+    void handleImport()
+  }, [handleImport])
 
   const isRunning = status?.status === 'starting' || status?.status === 'processing'
   const isDone = status?.status === 'completed'

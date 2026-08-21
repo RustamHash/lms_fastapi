@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { apiFetch } from '../../../lib/http'
+import { apiClient } from '../../../lib/apiClient'
 import { useColumnPrefs } from '../../../hooks/useColumnPrefs'
 import { useTableSettings, type TablePrefs } from '../../../hooks/useTableSettings'
 import { useListPresets } from '../../../hooks/useListPresets'
@@ -18,9 +18,7 @@ export function useEntityList<Row extends { id: number }>(config: ListPageConfig
   const { data: rows = [], isLoading, error } = useQuery({
     queryKey: ['entity-system', config.entityKey],
     queryFn: async () => {
-      const res = await apiFetch(config.apiUrl)
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      return res.json() as Promise<Row[]>
+      return apiClient.get<Row[]>(config.apiUrl)
     },
     staleTime: config.staleTime ?? 5 * 60 * 1000,
     refetchOnWindowFocus: false,
@@ -60,7 +58,7 @@ export function useEntityList<Row extends { id: number }>(config: ListPageConfig
   const [selected, setSelected] = useState<Set<number>>(() => new Set())
   
   // Автосохранение настроек при изменении
-  const currentPrefs: TablePrefs = {
+  const currentPrefs: TablePrefs = useMemo(() => ({
     order: prefs.order,
     hidden: prefs.hidden,
     widths: prefs.widths,
@@ -68,7 +66,7 @@ export function useEntityList<Row extends { id: number }>(config: ListPageConfig
     exclude_filters: excludeFilters,
     sort: sort.col ? { column: sort.col, direction: sort.dir } : null,
     quick_filters: quickFilters,
-  }
+  }), [prefs.order, prefs.hidden, prefs.widths, filters, excludeFilters, sort, quickFilters])
 
   const saveCurrentPrefs = useCallback(() => {
     void tableSettings.save(currentPrefs)
@@ -78,7 +76,7 @@ export function useEntityList<Row extends { id: number }>(config: ListPageConfig
   useEffect(() => {
     if (!tableSettings.prefs) return
     void saveCurrentPrefs()
-  }, [filters, excludeFilters, sort, quickFilters, prefs.order, prefs.hidden, prefs.widths])
+  }, [filters, excludeFilters, sort, quickFilters, prefs.order, prefs.hidden, prefs.widths, saveCurrentPrefs, tableSettings.prefs])
 
   const resetToDefaults = useCallback(async () => {
     const defaults = await tableSettings.resetToDefaults()

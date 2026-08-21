@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { DetailPageShell } from '../components/DetailPageShell'
-import { apiFetch } from '../lib/http'
+import { apiClient } from '../lib/apiClient'
 
 type Depositor = {
   id: number
@@ -26,9 +26,8 @@ export function DepositorDetailPage() {
     ;(async () => {
       setLoading(true)
       try {
-        const res = await apiFetch(`/api/v1/parties/depositors/${depositorId}`)
-        if (!res.ok) throw new Error(`HTTP ${res.status}`)
-        setDepositor(await res.json())
+        const data = await apiClient.get<Depositor>(`/api/v1/parties/depositors/${depositorId}`)
+        setDepositor(data)
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Ошибка')
       } finally {

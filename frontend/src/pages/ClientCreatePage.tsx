@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { apiFetch } from '../lib/http'
+import { apiClient } from '../lib/apiClient'
 
 export function ClientCreatePage() {
   const navigate = useNavigate()
@@ -19,8 +19,8 @@ export function ClientCreatePage() {
 
   useEffect(() => {
     ;(async () => {
-      const res = await apiFetch('/api/v1/parties/depositors')
-      if (res.ok) setDepositors(await res.json())
+      const depositorsData = await apiClient.get<{id: number, code: string}[]>('/api/v1/parties/depositors')
+      setDepositors(depositorsData)
     })()
   }, [])
 
@@ -29,15 +29,10 @@ export function ClientCreatePage() {
     setSaving(true)
     setError(null)
     try {
-      const res = await apiFetch('/api/v1/parties/clients', {
-        method: 'POST',
-        body: JSON.stringify({
-          ...form,
-          depositor_id: Number(form.depositor_id),
-        }),
+      const created = await apiClient.post<{id: number}>('/api/v1/parties/clients', {
+        ...form,
+        depositor_id: Number(form.depositor_id),
       })
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      const created = await res.json()
       navigate(`/reference/clients/${created.id}`)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Ошибка')

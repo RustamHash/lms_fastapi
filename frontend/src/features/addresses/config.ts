@@ -11,7 +11,7 @@ type AddressRow = {
   flat: string
   postal_code: string
   full_address: string
-  delivery_zone_id: number | null
+  zone_name: string | null
   fias_id: string
   latitude: string | null
   longitude: string | null
@@ -23,7 +23,7 @@ export const addressConfig = {
   list: {
     entityKey: 'addresses',
     title: 'Адреса',
-    apiUrl: '/api/v1/parties/addresses',
+    apiUrl: '/api/v1/parties/addresses/list',
     
     columns: [
       { id: 'id', label: 'ID', type: 'number' },
@@ -33,7 +33,7 @@ export const addressConfig = {
       { id: 'street', label: 'Улица', type: 'text' },
       { id: 'house', label: 'Дом', type: 'text' },
       { id: 'postal_code', label: 'Индекс', type: 'text' },
-      { id: 'delivery_zone_id', label: 'Зона доставки', type: 'number' },
+      { id: 'zone_name', label: 'Зона доставки', type: 'text' },
       { id: 'latitude', label: 'Широта', type: 'number' },
       { id: 'longitude', label: 'Долгота', type: 'number' },
       { id: 'is_active', label: 'Активен', type: 'bool' },

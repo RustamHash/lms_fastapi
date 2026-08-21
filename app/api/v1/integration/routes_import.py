@@ -148,27 +148,30 @@ async def _run_import_background(
 
     from app.core.database import async_session_factory
 
-    async with async_session_factory() as session:
-        try:
-            # 1. Поиск активных профилей
-            profiles = list(
-                await session.scalars(
-                    select(IntegrationProfile).where(
-                        IntegrationProfile.is_active.is_(True),
-                    )
+    # Используем отдельную сессию с правильной обработкой транзакций
+    session = async_session_factory()
+    
+    try:
+        # 1. Поиск активных профилей
+        profiles = list(
+            await session.scalars(
+                select(IntegrationProfile).where(
+                    IntegrationProfile.is_active.is_(True),
                 )
             )
+        )
 
-            if not profiles:
-                log = IntegrationLog(
-                    task_id=task_id,
-                    status="failed",
-                    document_type=document_type,
-                    errors=["Нет активных профилей интеграции"],
-                )
-                session.add(log)
-                await session.commit()
-                return
+        if not profiles:
+            log = IntegrationLog(
+                task_id=task_id,
+                status="failed",
+                document_type=document_type,
+                errors=["Нет активных профилей интеграции"],
+            )
+            session.add(log)
+            await session.commit()
+            await session.close()
+            return
 
             # 2. Обработка каждого профиля отдельно
             adapter = ZLNAdapter()
@@ -182,7 +185,6 @@ async def _run_import_background(
                     document_type=document_type,
                 )
                 session.add(log)
-                await session.flush()
                 await session.commit()
 
                 ftp_config = profile.config.get("ftp", {})
@@ -392,7 +394,9 @@ async def _run_import_background(
                 finally:
                     ftp.disconnect()
 
-        except Exception as e:
+    except Exception as e:
+        logger.error("Критическая ошибка импорта: %s", e, exc_info=True)
+        try:
             log = IntegrationLog(
                 task_id=task_id,
                 status="failed",
@@ -401,6 +405,12 @@ async def _run_import_background(
             )
             session.add(log)
             await session.commit()
+        except Exception as log_error:
+            logger.error("Не удалось записать лог ошибки: %s", log_error)
+        finally:
+            await session.close()
+    else:
+        await session.close()
 
 
 @router.get(

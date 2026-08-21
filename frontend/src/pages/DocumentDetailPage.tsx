@@ -10,8 +10,8 @@ export function DocumentDetailPage() {
       fields={[
         { key: 'id', label: 'ID', type: 'number' as const },
         { key: 'document_number', label: 'Номер', type: 'text' as const },
-        { key: 'document_type', label: 'Тип', type: 'text' as const },
-        { key: 'status', label: 'Статус', type: 'text' as const },
+        { key: 'document_type', label: 'Тип', type: 'document_type' as const },
+        { key: 'status', label: 'Статус', type: 'document_status' as const },
         { key: 'document_date', label: 'Дата документа', type: 'date' as const },
         { key: 'warehouse_id', label: 'Склад ID', type: 'number' as const },
         { key: 'is_delivery', label: 'Доставка', type: 'bool' as const },

@@ -1,7 +1,6 @@
 /* Глобальные стили приложения: порядок @import совпадает с бывшим монолитом (каскад).
    Базовые блоки синхронизируются с app/interface/web/static/css/base.css где применимо. */
 
-@import './styles/variables.css';
 @import './styles/components/app-layout.css';
 @import './styles/components/app-cards.css';
 @import './styles/components/list-pages.css';
@@ -42,14 +41,6 @@
   background: #fff;
   cursor: pointer;
   outline: none;
-}
-
-.task-filter__select:focus {
-  border-color: #2563eb;
-}
-
-.task-filter__select:focus {
-  border-color: #2563eb;
 }
 
 .task-filter__select:focus {

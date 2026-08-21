@@ -89,7 +89,8 @@ async def me(
     response_model=list[schemas.UserRead],
     dependencies=[Depends(require_permission("view", "users"))],
 )
-async def list_users(session: SessionDep) -> list[schemas.UserRead]:
+async def list_users(session: SessionDep,
+) -> list[schemas.UserRead]:
     service = UserService(UserRepository(session))
     users = await service.list_all()
     return [schemas.UserRead.model_validate(u) for u in users]
@@ -133,7 +134,8 @@ async def update_user(
     response_model=list[schemas.RoleRead],
     dependencies=[Depends(require_permission("view", "roles"))],
 )
-async def list_roles(session: SessionDep) -> list[schemas.RoleRead]:
+async def list_roles(session: SessionDep,
+) -> list[schemas.RoleRead]:
     service = RoleService(RoleRepository(session))
     roles = await service.list_all()
     return [schemas.RoleRead.model_validate(r) for r in roles]

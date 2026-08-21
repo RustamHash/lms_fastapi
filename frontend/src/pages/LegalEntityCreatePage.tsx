@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { apiFetch } from '../lib/http'
+import { apiClient } from '../lib/apiClient'
 
 export function LegalEntityCreatePage() {
   const navigate = useNavigate()
@@ -21,12 +21,7 @@ export function LegalEntityCreatePage() {
     setSaving(true)
     setError(null)
     try {
-      const res = await apiFetch('/api/v1/parties/legal-entities', {
-        method: 'POST',
-        body: JSON.stringify(form),
-      })
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      const created = await res.json()
+      const created = await apiClient.post<{id: number}>('/api/v1/parties/legal-entities', form)
       navigate(`/reference/legal-entities/${created.id}`)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Ошибка')

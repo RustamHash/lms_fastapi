@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { DetailPageShell } from '../components/DetailPageShell'
-import { apiFetch } from '../lib/http'
+import { apiClient } from '../lib/apiClient'
 
 type TradePoint = {
   id: number
@@ -27,9 +27,8 @@ export function TradePointDetailPage() {
     ;(async () => {
       setLoading(true)
       try {
-        const res = await apiFetch(`/api/v1/parties/trade-points/${tpId}`)
-        if (!res.ok) throw new Error(`HTTP ${res.status}`)
-        setTp(await res.json())
+        const data = await apiClient.get<TradePoint>(`/api/v1/parties/trade-points/${tpId}`)
+        setTp(data)
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Ошибка')
       } finally {

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { apiFetch } from '../lib/http'
+import { apiClient } from '../lib/apiClient'
 
 export function ContractCreatePage() {
   const navigate = useNavigate()
@@ -18,8 +18,8 @@ export function ContractCreatePage() {
 
   useEffect(() => {
     ;(async () => {
-      const res = await apiFetch('/api/v1/parties/legal-entities')
-      if (res.ok) setLegalEntities(await res.json())
+      const entitiesData = await apiClient.get<{id: number, name: string}[]>('/api/v1/parties/legal-entities')
+      setLegalEntities(entitiesData)
     })()
   }, [])
 
@@ -28,19 +28,14 @@ export function ContractCreatePage() {
     setSaving(true)
     setError(null)
     try {
-      const res = await apiFetch('/api/v1/parties/contracts', {
-        method: 'POST',
-        body: JSON.stringify({
-          number: form.number,
-          customer_id: Number(form.customer_id),
-          executor_id: Number(form.executor_id),
-          contract_type: form.contract_type,
-          start_date: form.start_date,
-          end_date: form.end_date || null,
-        }),
+      const created = await apiClient.post<{id: number}>('/api/v1/parties/contracts', {
+        number: form.number,
+        customer_id: Number(form.customer_id),
+        executor_id: Number(form.executor_id),
+        contract_type: form.contract_type,
+        start_date: form.start_date,
+        end_date: form.end_date || null,
       })
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      const created = await res.json()
       navigate(`/reference/contracts/${created.id}`)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Ошибка')

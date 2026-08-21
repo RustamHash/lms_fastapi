@@ -9,6 +9,31 @@ from pathlib import Path
 from app.core.config import Settings
 
 
+
+
+class JsonFormatter(logging.Formatter):
+    """JSON-форматтер для продакшена."""
+
+    def format(self, record: logging.LogRecord) -> str:
+        import json
+        from datetime import datetime, timezone
+
+        log_entry = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "level": record.levelname,
+            "logger": record.name,
+            "message": record.getMessage(),
+            "module": record.module,
+            "function": record.funcName,
+            "line": record.lineno,
+        }
+
+        if record.exc_info:
+            log_entry["exception"] = self.formatException(record.exc_info)
+
+        return json.dumps(log_entry, ensure_ascii=False)
+
+
 class MaxLevelFilter(logging.Filter):
     """Фильтр — пропускает только записи до max_level включительно."""
 

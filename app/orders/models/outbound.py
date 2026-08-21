@@ -6,7 +6,7 @@ from datetime import date
 from decimal import Decimal
 from uuid import uuid4
 
-from sqlalchemy import Boolean, Date, ForeignKey, Numeric, String, Text
+from sqlalchemy import Boolean, Date, ForeignKey, Integer, Numeric, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy import UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -44,7 +44,9 @@ class OutboundOrder(Base):
     delivery_address_name: Mapped[str] = mapped_column(
         String(255), default="", comment="Адрес доставки"
     )
-    order_date: Mapped[date] = mapped_column(Date, nullable=False, comment="Дата заявки")
+    order_date: Mapped[date] = mapped_column(
+        Date, nullable=False, comment="Дата заявки"
+    )
     shipping_date: Mapped[date | None] = mapped_column(
         Date, nullable=True, comment="Планируемая дата отгрузки"
     )
@@ -87,6 +89,18 @@ class OutboundOrder(Base):
     )
     delivery_status: Mapped[str | None] = mapped_column(
         String(20), nullable=True, comment="Статус доставки"
+    )
+    is_edo: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="false", default=False, comment="Признак ЭДО"
+    )
+    address_comment: Mapped[str] = mapped_column(
+        String(255), nullable=False, server_default="", default="", comment="Комментарий к адресу"
+    )
+    shipping_contact: Mapped[str] = mapped_column(
+        String(255), nullable=False, server_default="", default="", comment="Контакт для доставки"
+    )
+    total_quantity: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="0", default=0, comment="Общее количество штук"
     )
 
     lines: Mapped[list["OutboundOrderLine"]] = relationship(back_populates="order")

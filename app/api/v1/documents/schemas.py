@@ -4,12 +4,16 @@ from __future__ import annotations
 
 from datetime import date
 from decimal import Decimal
+from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel
 
 from app.api.v1.base_schemas import BaseRead
 from app.documents.document_types import DocumentType
 from app.core.statuses import DocumentStatus
+
+if TYPE_CHECKING:
+    from app.api.v1.warehouse.schemas import WarehouseRead
 
 
 class DocumentRead(BaseRead):
@@ -54,3 +58,34 @@ class DocumentLineCreate(BaseModel):
 
 class DocumentStatusUpdate(BaseModel):
     status: str
+
+
+# ========== ENRICHED ==========
+
+class DocumentList(BaseRead):
+    """Плоская схема для таблицы документов."""
+    document_number: str
+    document_type: str
+    document_type_label: str = ""
+    document_date: date | None = None
+    delivery_date: date | None = None
+    status: str = "draft"
+    status_label: str = ""
+
+    # Плоские связи
+    warehouse_name: str | None = None
+
+
+class DocumentDetail(BaseRead):
+    """Вложенная схема для детальной страницы документа."""
+    document_number: str
+    document_type: str
+    document_date: date | None = None
+    delivery_date: date | None = None
+    status: str = "draft"
+    is_delivery: bool = False
+    is_edo: bool = False
+
+    # Вложенные
+    warehouse: Any | None = None
+    lines: list = []

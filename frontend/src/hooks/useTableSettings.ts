@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { apiFetch } from '../lib/http'
+import { apiClient } from '../lib/apiClient'
 
 export type TablePrefs = {
   order: string[]
@@ -25,9 +25,7 @@ export function useTableSettings(entityKey: string) {
     setLoading(true)
     setError(null)
     try {
-      const res = await apiFetch(`/api/v1/table-settings/${entityKey}`)
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      const data = await res.json() as TableSettingsResponse
+      const data = await apiClient.get<TableSettingsResponse>(`/api/v1/table-settings/${entityKey}`)
       setPrefs(data.prefs)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Ошибка загрузки настроек')
@@ -43,10 +41,7 @@ export function useTableSettings(entityKey: string) {
     
     debounceTimerRef.current = setTimeout(async () => {
       try {
-        const res = await apiFetch(`/api/v1/table-settings/${entityKey}`, {
-          method: 'PUT',
-          body: JSON.stringify({ prefs: nextPrefs }),
-        })
+        const res = await apiClient.put(`/api/v1/table-settings/${entityKey}`, { prefs: nextPrefs })
         if (!res.ok) throw new Error(`HTTP ${res.status}`)
         const data = await res.json() as TableSettingsResponse
         setPrefs(data.prefs)
@@ -57,7 +52,7 @@ export function useTableSettings(entityKey: string) {
   }, [entityKey])
 
   const resetToDefaults = useCallback(async (): Promise<TablePrefs> => {
-    const res = await apiFetch(`/api/v1/table-settings/${entityKey}/defaults`)
+    const res = await apiClient.get(`/api/v1/table-settings/${entityKey}/defaults`)
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
     const data = await res.json() as TableSettingsResponse
     setPrefs(data.prefs)
@@ -65,16 +60,15 @@ export function useTableSettings(entityKey: string) {
   }, [entityKey])
 
   const clear = useCallback(async () => {
-    const res = await apiFetch(`/api/v1/table-settings/${entityKey}`, {
-      method: 'DELETE',
-    })
+    const res = await apiClient.delete(`/api/v1/table-settings/${entityKey}`)
     if (!res.ok && res.status !== 204) throw new Error(`HTTP ${res.status}`)
     setPrefs(null)
   }, [entityKey])
 
   useEffect(() => {
-    void load()
+    const timer = setTimeout(() => void load(), 0)
     return () => {
+      clearTimeout(timer)
       if (debounceTimerRef.current) {
         clearTimeout(debounceTimerRef.current)
       }

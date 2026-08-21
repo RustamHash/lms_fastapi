@@ -5,10 +5,13 @@ from __future__ import annotations
 from datetime import date
 from decimal import Decimal
 
+from typing import Any
 from pydantic import BaseModel, Field
 
 from app.api.v1.base_schemas import BaseRead
 from app.core.statuses import TaskStatus
+
+
 
 
 class WarehouseRead(BaseRead):
@@ -203,3 +206,34 @@ class TaskLineComplete(BaseModel):
     location_id: int | None = None
     to_location_id: int | None = None
     batch_id: int | None = None
+
+
+# ========== ENRICHED ==========
+
+
+class TaskList(BaseRead):
+    """Плоская схема для таблицы заданий."""
+
+    task_type: str
+    status: str = "new"
+    status_label: str = ""
+    assignee_id: int | None = None
+
+    # Плоские связи
+    document_number: str | None = None
+    assignee_name: str | None = None
+    warehouse_name: str | None = None
+
+
+class TaskDetail(BaseRead):
+    """Вложенная схема для детальной страницы задания."""
+
+    task_type: str
+    status: str = "new"
+    assignee_id: int | None = None
+    warehouse_id: int | None = None
+
+    # Вложенные
+    document_number: str | None = None
+    assignee_name: str | None = None
+    warehouse_name: str | None = None

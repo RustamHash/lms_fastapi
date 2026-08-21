@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { apiFetch } from '../lib/http'
+import { apiClient } from '../lib/apiClient'
 
 export function TradePointCreatePage() {
   const navigate = useNavigate()
@@ -12,12 +12,12 @@ export function TradePointCreatePage() {
 
   useEffect(() => {
     ;(async () => {
-      const [cRes, aRes] = await Promise.all([
-        apiFetch('/api/v1/parties/clients'),
-        apiFetch('/api/v1/parties/addresses'),
+      const [clientsData, addressesData] = await Promise.all([
+        apiClient.get<{id: number, name: string}[]>('/api/v1/parties/clients'),
+        apiClient.get<{id: number, full_address: string}[]>('/api/v1/parties/addresses/list'),
       ])
-      if (cRes.ok) setClients(await cRes.json())
-      if (aRes.ok) setAddresses(await aRes.json())
+      setClients(clientsData)
+      setAddresses(addressesData)
     })()
   }, [])
 
@@ -26,16 +26,11 @@ export function TradePointCreatePage() {
     setSaving(true)
     setError(null)
     try {
-      const res = await apiFetch('/api/v1/parties/trade-points/resolve', {
-        method: 'POST',
-        body: JSON.stringify({
-          client_id: Number(form.client_id),
-          address_id: Number(form.address_id),
-          name: form.name,
-        }),
+      const created = await apiClient.post<{id: number}>('/api/v1/parties/trade-points/resolve', {
+        client_id: Number(form.client_id),
+        address_id: Number(form.address_id),
+        name: form.name,
       })
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      const created = await res.json()
       navigate(`/reference/trade-points/${created.id}`)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Ошибка')

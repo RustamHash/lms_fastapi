@@ -19,7 +19,8 @@ router = APIRouter(prefix="/return-orders", tags=["return-orders"])
 
 
 @router.get("", response_model=list[ReturnOrderRead], dependencies=[Depends(require_permission("view", "orders"))])
-async def list_return_orders(session: SessionDep) -> list[ReturnOrderRead]:
+async def list_return_orders(session: SessionDep,
+) -> list[ReturnOrderRead]:
     repo = ReturnOrderRepository(session)
     rows = await repo.list_all()
     return [ReturnOrderRead.model_validate(r) for r in rows]

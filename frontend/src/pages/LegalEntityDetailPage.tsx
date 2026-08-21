@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { DetailPageShell } from '../components/DetailPageShell'
-import { apiFetch } from '../lib/http'
+import { apiClient } from '../lib/apiClient'
 
 type LegalEntity = {
   id: number
@@ -31,9 +31,8 @@ export function LegalEntityDetailPage() {
     ;(async () => {
       setLoading(true)
       try {
-        const res = await apiFetch(`/api/v1/parties/legal-entities/${entityId}`)
-        if (!res.ok) throw new Error(`HTTP ${res.status}`)
-        setEntity(await res.json())
+        const data = await apiClient.get<LegalEntity>(`/api/v1/parties/legal-entities/${entityId}`)
+        setEntity(data)
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Ошибка')
       } finally {

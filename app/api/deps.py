@@ -4,22 +4,72 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import Depends, Query
+from fastapi import Depends, HTTPException, Query, status
+from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.accounts.models import User
-from app.core.dependencies import get_current_user, get_current_user_id, get_session
+from app.accounts.repository import UserRepository
+from app.core.database import async_session_factory
 from app.core.exceptions import ForbiddenError
+from app.core.security import decode_token_sub_user_id
+from app.infrastructure.uow import UnitOfWork
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/token", auto_error=False)
+
 
 # ========== Базовые зависимости ==========
 
-# Сессия БД с автоматическим commit/rollback
+async def get_session():
+    """Сессия с автоматическим commit/rollback."""
+    async with UnitOfWork(async_session_factory) as session:
+        yield session
+
+
+async def get_current_user_id(
+    token: str | None = Depends(oauth2_scheme),
+) -> int | None:
+    """ID текущего пользователя (None, если не авторизован)."""
+    if not token:
+        return None
+    try:
+        return decode_token_sub_user_id(token)
+    except ValueError:
+        return None
+
+
+async def get_current_user(
+    session: AsyncSession = Depends(get_session),
+    token: str | None = Depends(oauth2_scheme),
+) -> User:
+    """Текущий пользователь (объект User, требует авторизации)."""
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Не авторизован",
+        )
+    try:
+        user_id = decode_token_sub_user_id(token)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Недействительный токен",
+        ) from None
+
+    repo = UserRepository(session)
+    user = await repo.get_by_id(user_id)
+    if user is None or not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Пользователь не найден или деактивирован",
+        )
+    return user
+
+
+# ========== Аннотированные зависимости ==========
+
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
-
-# ID текущего пользователя (None, если не авторизован)
 UserDep = Annotated[int | None, Depends(get_current_user_id)]
-
-# Текущий пользователь (объект User, требует авторизации)
 CurrentUser = Annotated[User, Depends(get_current_user)]
 
 
@@ -30,7 +80,7 @@ class PaginationParams:
 
     def __init__(
         self,
-        limit: int = Query(50, ge=1, le=500, description="Количество записей"),
+        limit: int = Query(1000, ge=1, le=5000, description="Количество записей"),
         offset: int = Query(0, ge=0, description="Смещение"),
     ) -> None:
         self.limit = limit

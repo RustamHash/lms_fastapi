@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { apiFetch } from '../../../lib/http'
+import { apiClient } from '../../../lib/apiClient'
 
 type UseEntityDetailParams = {
   entityKey: string
@@ -22,12 +22,7 @@ export function useEntityDetail<T extends { id: number }>({
     setLoading(true)
     setError(null)
     try {
-      const res = await apiFetch(`${apiUrl}/${id}`)
-      if (res.status === 404) {
-        setError('Не найдено')
-        return
-      }
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        const data = await apiClient.get<T>(`${apiUrl}/${id}`)
       const data = await res.json() as T
       setData(data)
     } catch (e) {
@@ -40,22 +35,7 @@ export function useEntityDetail<T extends { id: number }>({
   const save = useCallback(async (patch: Partial<T>): Promise<T> => {
     setSaving(true)
     try {
-      const res = await apiFetch(`${apiUrl}/${id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(patch),
-      })
-      if (!res.ok) {
-        let detail = `HTTP ${res.status}`
-        try {
-          const body = await res.json() as { detail?: string }
-          if (body?.detail) detail = body.detail
-        } catch {
-          // ignore
-        }
-        throw new Error(detail)
-      }
-      const updated = await res.json() as T
+      const updated = await apiClient.patch<T>(`${apiUrl}/${id}`, patch)
       setData(updated)
       setEditing(false)
       return updated
@@ -67,17 +47,7 @@ export function useEntityDetail<T extends { id: number }>({
   const remove = useCallback(async () => {
     setDeleting(true)
     try {
-      const res = await apiFetch(`${apiUrl}/${id}`, { method: 'DELETE' })
-      if (!res.ok) {
-        let detail = `HTTP ${res.status}`
-        try {
-          const body = await res.json() as { detail?: string }
-          if (body?.detail) detail = body.detail
-        } catch {
-          // ignore
-        }
-        throw new Error(detail)
-      }
+      await apiClient.delete(`${apiUrl}/${id}`)
     } finally {
       setDeleting(false)
     }
@@ -85,7 +55,8 @@ export function useEntityDetail<T extends { id: number }>({
   
   useEffect(() => {
     if (id > 0) {
-      void load()
+      const timer = setTimeout(() => void load(), 0)
+      return () => clearTimeout(timer)
     }
   }, [load, id])
   

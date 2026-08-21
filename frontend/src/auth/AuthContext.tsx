@@ -7,7 +7,7 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import { apiFetch } from '../lib/http'
+import { apiClient } from '../lib/apiClient'
 import { getAccessToken, setAccessToken } from '../lib/token'
 
 export type AuthUser = { id: number; username: string; permissions?: Record<string, string[] | boolean> }
@@ -29,15 +29,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const t = getAccessToken()
     if (!t) {
-      setLoading(false)
+      // Отложить setState через microtask
+      Promise.resolve().then(() => setLoading(false))
       return
     }
     let cancelled = false
-    apiFetch('/api/v1/auth/me')
-      .then((r) => {
-        if (!r.ok) throw new Error('me')
-        return r.json() as Promise<AuthUser>
-      })
+    apiClient.get<AuthUser>('/api/v1/auth/me')
       .then((u) => {
         if (!cancelled) setUser(u)
       })
@@ -65,10 +62,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!res.ok) throw new Error('Неверные учётные данные')
     const data = (await res.json()) as { access_token: string }
     setAccessToken(data.access_token)
-    const me = await apiFetch('/api/v1/auth/me').then((r) => {
-      if (!r.ok) throw new Error('me')
-      return r.json() as Promise<AuthUser>
-    })
+    const me = await apiClient.get<AuthUser>('/api/v1/auth/me')
     setUser(me)
   }, [])
 

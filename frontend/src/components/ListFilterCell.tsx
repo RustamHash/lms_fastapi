@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import {
   decodeDateTimeFilter,
   encodeDateTimeFilter,
@@ -51,15 +51,13 @@ export function ListFilterCell({
 }: Props) {
   const [dt, setDt] = useState<DateTimeFilterPayloadV1>(() => payloadFromValue(value))
 
-  useEffect(() => {
-    if (kind === 'datetime') {
-      setDt(payloadFromValue(value))
-    }
-  }, [kind, value])
+  // Синхронизация через derived state при изменении value
+  const currentDt = kind === 'datetime' ? payloadFromValue(value) : dt
 
   if (kind === 'datetime') {
+    const activeDt = currentDt
     const dirty =
-      dt.m === 'ct'
+      activeDt.m === 'ct'
         ? (dt.t ?? '').trim() !== ''
         : dt.m === 'aft' || dt.m === 'bef'
           ? (dt.a ?? '').trim() !== ''
@@ -102,10 +100,10 @@ export function ListFilterCell({
         <div className="list-filter-cell__row">
           <select
             className="list-filter-cell__field list-filter-cell__field--select list-filter-cell__dt-op"
-            value={dt.m}
+            value={activeDt.m}
             onChange={(e) => {
               const m = e.target.value as DateTimeFilterPayloadV1['m']
-              commit({ v: 1, m, t: dt.t, a: dt.a, b: dt.b })
+              commit({ v: 1, m, t: activeDt.t, a: activeDt.a, b: activeDt.b })
             }}
             aria-label={`${ariaLabel}: режим`}
           >
@@ -134,7 +132,7 @@ export function ListFilterCell({
           <input
             type="text"
             className="list-filter-cell__field list-filter-cell__dt-input"
-            value={dt.t ?? ''}
+            value={activeDt.t ?? ''}
             onChange={(e) => commit({ v: 1, m: 'ct', t: e.target.value })}
             placeholder={placeholder}
             aria-label={ariaLabel}
@@ -144,10 +142,10 @@ export function ListFilterCell({
           <input
             type="date"
             className="list-filter-cell__field list-filter-cell__dt-input"
-            value={filterValueToDateInput(dt.a)}
+            value={filterValueToDateInput(activeDt.a)}
             onChange={(e) => {
               const v = e.target.value
-              commit({ v: 1, m: dt.m, a: v ? normalizeFilterDateTimeLocal(v) : '' })
+              commit({ v: 1, m: activeDt.m, a: v ? normalizeFilterDateTimeLocal(v) : '' })
             }}
             aria-label={ariaLabel}
           />
@@ -157,10 +155,10 @@ export function ListFilterCell({
             <input
               type="date"
               className="list-filter-cell__field list-filter-cell__dt-input"
-              value={filterValueToDateInput(dt.a)}
+              value={filterValueToDateInput(activeDt.a)}
               onChange={(e) => {
                 const v = e.target.value
-                commit({ v: 1, m: 'btw', a: v ? normalizeFilterDateTimeLocal(v) : '', b: dt.b })
+                commit({ v: 1, m: 'btw', a: v ? normalizeFilterDateTimeLocal(v) : '', b: activeDt.b })
               }}
               aria-label={`${ariaLabel}: с`}
             />
@@ -170,7 +168,7 @@ export function ListFilterCell({
               value={filterValueToDateInput(dt.b)}
               onChange={(e) => {
                 const v = e.target.value
-                commit({ v: 1, m: 'btw', a: dt.a, b: v ? normalizeFilterDateTimeLocal(v) : '' })
+                commit({ v: 1, m: 'btw', a: activeDt.a, b: v ? normalizeFilterDateTimeLocal(v) : '' })
               }}
               aria-label={`${ariaLabel}: по`}
             />

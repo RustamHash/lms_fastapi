@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { DetailPageShell } from '../components/DetailPageShell'
-import { apiFetch } from '../lib/http'
+import { apiClient } from '../lib/apiClient'
 import { formatDt } from '../lib/formatDt'
 
 type AddressInputAliasDetail = {
@@ -26,8 +26,10 @@ export function AddressInputAliasDetailPage() {
   
   useEffect(() => {
     if (!validId) {
-      setLoading(false)
-      setError('Некорректный идентификатор')
+      Promise.resolve().then(() => {
+        setLoading(false)
+        setError('Некорректный идентификатор')
+      })
       return
     }
     
@@ -37,12 +39,7 @@ export function AddressInputAliasDetailPage() {
       setLoading(true)
       setError(null)
       try {
-        const res = await apiFetch(`/api/v1/parties/aliases/${idNum}`)
-        if (res.status === 404) {
-          if (!cancelled) setError('Вариант ввода не найден')
-          return
-        }
-        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        const data = await apiClient.get<AddressInputAliasDetail>(`/api/v1/parties/aliases/${idNum}`)
         const data = await res.json() as AddressInputAliasDetail
         if (!cancelled) setAlias(data)
       } catch (e) {

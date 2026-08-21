@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { apiFetch } from '../lib/http'
+import { apiClient } from '../lib/apiClient'
 import { clampListColumnWidthPx } from '../features/lists/columnWidthConstants'
 
 export type ColumnDef = { id: string; label: string }
@@ -31,6 +31,7 @@ function mergePrefs(
   for (const c of defaults) {
     if (!order.includes(c.id)) order.push(c.id)
   }
+  // Убедиться, что все defaults присутствуют (даже если prevOrder устарел)
 
   let hidden: string[]
   if (saved == null) {
@@ -87,12 +88,12 @@ export function useColumnPrefs(
     defaultHiddenRef.current = defaultHiddenColumnIds
   }, [defaultsSig, defaultHiddenSig, defaults, defaultHiddenColumnIds])
 
-  const [order, setOrder] = useState<string[]>(
-    () => emptyPrefs(defaultsRef.current, defaultHiddenRef.current).order,
+  const initialPrefs = useMemo(
+    () => emptyPrefs(defaults, defaultHiddenColumnIds),
+    [defaults, defaultHiddenColumnIds],
   )
-  const [hidden, setHidden] = useState<string[]>(
-    () => emptyPrefs(defaultsRef.current, defaultHiddenRef.current).hidden,
-  )
+  const [order, setOrder] = useState<string[]>(initialPrefs.order)
+  const [hidden, setHidden] = useState<string[]>(initialPrefs.hidden)
   const [widths, setWidths] = useState<Record<string, number>>({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -103,9 +104,7 @@ export function useColumnPrefs(
     setError(null)
     try {
       const url = `/api/v1/table-settings/${encodeURIComponent(entityKey)}`
-      const res = await apiFetch(url)
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      const data = (await res.json()) as ApiGetResponse
+      const data = await apiClient.get<ApiGetResponse>(url)
       const m = mergePrefs(defaultsRef.current, data.prefs, defaultHiddenRef.current)
       setOrder(m.order)
       setHidden(m.hidden)
@@ -119,7 +118,7 @@ export function useColumnPrefs(
     } finally {
       setLoading(false)
     }
-  }, [entityKey, defaultsSig, defaultHiddenSig])
+  }, [entityKey])
 
   const autoLoadKey = `${entityKey}::${defaultsSig}::${defaultHiddenSig}`
   useEffect(() => {
@@ -143,12 +142,7 @@ export function useColumnPrefs(
         quick_filters: next.quick_filters ?? [],
       }
       
-      const res = await apiFetch(url, {
-        method: 'PUT',
-        body: JSON.stringify({ prefs: fullPrefs }),
-      })
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      const data = (await res.json()) as { prefs: PrefsPayload }
+      const data = await apiClient.put<{ prefs: PrefsPayload }>(url, { prefs: fullPrefs })
       if (data.prefs) {
         const m = mergePrefs(defaultsRef.current, data.prefs, defaultHiddenRef.current)
         setOrder(m.order)
@@ -156,7 +150,7 @@ export function useColumnPrefs(
         setWidths(m.widths)
       }
     },
-    [entityKey, defaultsSig, defaultHiddenSig],
+    [entityKey],
   )
 
   const hiddenSet = new Set(hidden)

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { apiFetch } from '../lib/http'
+import { apiClient } from '../lib/apiClient'
 import type { TablePrefs } from './useTableSettings'
 
 export type ListPreset = {
@@ -20,9 +20,7 @@ export function useListPresets(entityKey: string) {
     setLoading(true)
     setError(null)
     try {
-      const res = await apiFetch(`/api/v1/list-presets/${entityKey}`)
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      const data = await res.json() as ListPreset[]
+      const data = await apiClient.get<ListPreset[]>(`/api/v1/list-presets/${entityKey}`)
       setPresets(data)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Ошибка загрузки пресетов')
@@ -32,10 +30,7 @@ export function useListPresets(entityKey: string) {
   }, [entityKey])
 
   const createPreset = useCallback(async (name: string, config: TablePrefs, isDefault = false): Promise<ListPreset> => {
-    const res = await apiFetch(`/api/v1/list-presets/${entityKey}`, {
-      method: 'POST',
-      body: JSON.stringify({ name, config, is_default: isDefault }),
-    })
+    const res = await apiClient.post(`/api/v1/list-presets/${entityKey}`, { name, config, is_default: isDefault })
     if (!res.ok) {
       const data = await res.json().catch(() => null)
       throw new Error(data?.detail ?? `HTTP ${res.status}`)
@@ -46,10 +41,7 @@ export function useListPresets(entityKey: string) {
   }, [entityKey])
 
   const updatePreset = useCallback(async (presetId: number, name: string, config: TablePrefs): Promise<ListPreset> => {
-    const res = await apiFetch(`/api/v1/list-presets/${entityKey}/${presetId}`, {
-      method: 'PUT',
-      body: JSON.stringify({ name, config }),
-    })
+    const res = await apiClient.put(`/api/v1/list-presets/${entityKey}/${presetId}`, { name, config })
     if (!res.ok) {
       const data = await res.json().catch(() => null)
       throw new Error(data?.detail ?? `HTTP ${res.status}`)
@@ -60,17 +52,13 @@ export function useListPresets(entityKey: string) {
   }, [entityKey])
 
   const deletePreset = useCallback(async (presetId: number): Promise<void> => {
-    const res = await apiFetch(`/api/v1/list-presets/${entityKey}/${presetId}`, {
-      method: 'DELETE',
-    })
+    const res = await apiClient.delete(`/api/v1/list-presets/${entityKey}/${presetId}`)
     if (!res.ok && res.status !== 204) throw new Error(`HTTP ${res.status}`)
     setPresets(prev => prev.filter(p => p.id !== presetId))
   }, [entityKey])
 
   const applyPreset = useCallback(async (presetId: number): Promise<TablePrefs> => {
-    const res = await apiFetch(`/api/v1/list-presets/${entityKey}/${presetId}/apply`, {
-      method: 'POST',
-    })
+    const res = await apiClient.post(`/api/v1/list-presets/${entityKey}/${presetId}/apply`)
     if (!res.ok) {
       const data = await res.json().catch(() => null)
       throw new Error(data?.detail ?? `HTTP ${res.status}`)
@@ -80,9 +68,7 @@ export function useListPresets(entityKey: string) {
   }, [entityKey])
 
   const setDefaultPreset = useCallback(async (presetId: number): Promise<ListPreset> => {
-    const res = await apiFetch(`/api/v1/list-presets/${entityKey}/${presetId}/set-default`, {
-      method: 'POST',
-    })
+    const res = await apiClient.post(`/api/v1/list-presets/${entityKey}/${presetId}/set-default`)
     if (!res.ok) {
       const data = await res.json().catch(() => null)
       throw new Error(data?.detail ?? `HTTP ${res.status}`)
@@ -93,7 +79,8 @@ export function useListPresets(entityKey: string) {
   }, [entityKey])
 
   useEffect(() => {
-    void load()
+    const timer = setTimeout(() => void load(), 0)
+    return () => clearTimeout(timer)
   }, [load])
 
   return useMemo(() => ({

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { DetailPageShell } from './DetailPageShell'
-import { apiFetch } from '../lib/http'
+import { apiClient } from '../lib/apiClient'
 import { formatDt } from '../lib/formatDt'
 
 type Props = {
@@ -12,7 +12,7 @@ type Props = {
   fields: {
     key: string
     label: string
-    type?: 'text' | 'number' | 'bool' | 'date' | 'datetime'
+    type?: 'text' | 'number' | 'bool' | 'date' | 'datetime' | 'document_type' | 'document_status'
   }[]
 }
 
@@ -28,13 +28,7 @@ export function GenericDetailPage({ title, apiUrl, backHref, backLabel, fields }
       setLoading(true)
       setError(null)
       try {
-        const res = await apiFetch(`${apiUrl}/${id}`)
-        if (res.status === 404) {
-          setError('Не найдено')
-          return
-        }
-        if (!res.ok) throw new Error(`HTTP ${res.status}`)
-        const data = await res.json()
+        const data = await apiClient.get<Record<string, unknown>>(`${apiUrl}/${id}`)
         setData(data)
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Ошибка загрузки')
@@ -43,6 +37,26 @@ export function GenericDetailPage({ title, apiUrl, backHref, backLabel, fields }
       }
     })()
   }, [apiUrl, id])
+
+  const DOCUMENT_TYPES: Record<string, string> = {
+    'receiving': 'Приход',
+    'shipping': 'Расход',
+    'shipment': 'Отгрузка',
+    'movement': 'Перемещение',
+    'inventory': 'Инвентаризация',
+    'write_off': 'Списание',
+    'return': 'Возврат',
+  }
+
+  const DOCUMENT_STATUSES: Record<string, string> = {
+    'draft': 'Черновик',
+    'created': 'Создан',
+    'in_progress': 'В работе',
+    'completed': 'Завершён',
+    'processed': 'Обработан',
+    'cancelled': 'Отменён',
+    'pending': 'Ожидает',
+  }
 
   function formatValue(field: Props['fields'][number], value: unknown): string {
     if (value == null) return '—'
@@ -56,6 +70,10 @@ export function GenericDetailPage({ title, apiUrl, backHref, backLabel, fields }
         return formatDt(String(value))
       case 'number':
         return String(value)
+      case 'document_type':
+        return DOCUMENT_TYPES[String(value)] ?? String(value)
+      case 'document_status':
+        return DOCUMENT_STATUSES[String(value)] ?? String(value)
       default:
         return String(value)
     }

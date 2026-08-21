@@ -7,6 +7,7 @@ from sqlalchemy import select
 
 from app.api.deps import SessionDep, UserDep, require_permission
 from app.api.v1.delivery import schemas
+from app.core.statuses import DeliveryStatus
 from app.core.exceptions import NotFoundError
 from app.delivery.models import DeliveryOrder, Driver, Route, Vehicle
 from app.infrastructure.events import event_bus
@@ -18,6 +19,51 @@ router = APIRouter(prefix="/delivery", tags=["delivery"])
 
 
 # ========== Заказы на доставку ==========
+
+
+@router.get("/orders/list", response_model=list[schemas.DeliveryOrderList], dependencies=[Depends(require_permission("view", "delivery"))])
+async def list_delivery_orders_for_table(session: SessionDep,
+) -> list[schemas.DeliveryOrderList]:
+    """Плоский список для таблицы."""
+    rows = await DeliveryOrderRepository(session).list_all()
+
+    result = []
+    for r in rows:
+        result.append(schemas.DeliveryOrderList(
+            id=r.id,
+            is_active=r.is_active,
+            is_deleted=r.is_deleted,
+            created_at=r.created_at,
+            updated_at=r.updated_at,
+            created_by_id=r.created_by_id,
+            updated_by_id=r.updated_by_id,
+            deleted_at=r.deleted_at,
+            deleted_by_id=r.deleted_by_id,
+            number=r.number,
+            delivery_date=r.delivery_date,
+            status=r.status,
+            status_label=DeliveryStatus(r.status).label if r.status in DeliveryStatus._value2member_map_ else r.status,
+            contact_person=r.contact_person,
+            phone=r.phone,
+            is_edo=r.is_edo,
+            outbound_order_number=r.outbound_order.number if r.outbound_order else None,
+            customer_name=r.outbound_order.customer_name if r.outbound_order else None,
+            delivery_address=r.outbound_order.delivery_address_name if r.outbound_order else None,
+            route_number=None,
+            driver_name=None,
+            driver_phone=None,
+            vehicle_number=None,
+        ))
+    return result
+
+
+@router.get("/orders/{order_id}/detail", response_model=schemas.DeliveryOrderDetail, dependencies=[Depends(require_permission("view", "delivery"))])
+async def get_delivery_order_detail(order_id: int, session: SessionDep) -> schemas.DeliveryOrderDetail:
+    """Вложенная схема для детальной страницы."""
+    order = await DeliveryOrderRepository(session).get_by_id(order_id)
+    if order is None:
+        raise NotFoundError("Заказ не найден")
+    return schemas.DeliveryOrderDetail.model_validate(order)
 
 
 @router.get("/orders", response_model=list[schemas.DeliveryOrderRead], dependencies=[Depends(require_permission("view", "delivery"))])
@@ -88,7 +134,8 @@ async def update_order_status(
 
 
 @router.get("/drivers", response_model=list[schemas.DriverRead], dependencies=[Depends(require_permission("view", "drivers"))])
-async def list_drivers(session: SessionDep) -> list[schemas.DriverRead]:
+async def list_drivers(session: SessionDep,
+) -> list[schemas.DriverRead]:
     repo = DriverRepository(session)
     rows = await repo.list_all()
     return [schemas.DriverRead.model_validate(r) for r in rows]
@@ -148,7 +195,8 @@ async def delete_driver(driver_id: int, session: SessionDep, user_id: UserDep) -
 
 
 @router.get("/vehicles", response_model=list[schemas.VehicleRead], dependencies=[Depends(require_permission("view", "vehicles"))])
-async def list_vehicles(session: SessionDep) -> list[schemas.VehicleRead]:
+async def list_vehicles(session: SessionDep,
+) -> list[schemas.VehicleRead]:
     repo = VehicleRepository(session)
     rows = await repo.list_all()
     return [schemas.VehicleRead.model_validate(r) for r in rows]
@@ -210,7 +258,8 @@ async def delete_vehicle(
 
 
 @router.get("/routes", response_model=list[schemas.RouteRead], dependencies=[Depends(require_permission("view", "routes"))])
-async def list_routes(session: SessionDep) -> list[schemas.RouteRead]:
+async def list_routes(session: SessionDep,
+) -> list[schemas.RouteRead]:
     repo = RouteRepository(session)
     rows = await repo.list_all()
     return [schemas.RouteRead.model_validate(r) for r in rows]
