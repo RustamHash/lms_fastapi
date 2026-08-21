@@ -11,6 +11,7 @@ type TabsContextValue = {
   activePath: string
   closeTab: (path: string) => void
   closeAllTabs: () => void
+  moveTab: (fromIndex: number, toIndex: number) => void
 }
 
 const TabsContext = createContext<TabsContextValue | null>(null)
@@ -183,9 +184,18 @@ export function TabsProvider({ children }: { children: ReactNode }) {
     navigate('/')
   }, [navigate])
 
+  const moveTab = useCallback((fromIndex: number, toIndex: number) => {
+    setTabs((prev) => {
+      const next = [...prev]
+      const [moved] = next.splice(fromIndex, 1)
+      next.splice(toIndex, 0, moved)
+      return next
+    })
+  }, [])
+
   const value = useMemo(
-    () => ({ tabs, activePath, closeTab, closeAllTabs }),
-    [tabs, activePath, closeTab, closeAllTabs],
+    () => ({ tabs, activePath, closeTab, closeAllTabs, moveTab }),
+    [tabs, activePath, closeTab, closeAllTabs, moveTab],
   )
 
   return <TabsContext.Provider value={value}>{children}</TabsContext.Provider>

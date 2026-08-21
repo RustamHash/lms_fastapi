@@ -12,6 +12,7 @@ from sqlalchemy import UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.infrastructure.orm_base import Base
+from app.core.statuses import OrderStatus, DeliveryStatus
 
 
 class OutboundOrder(Base):
@@ -64,7 +65,7 @@ class OutboundOrder(Base):
     )
     notes: Mapped[str] = mapped_column(Text, default="", comment="Примечания")
     status: Mapped[str] = mapped_column(
-        String(50), default="new", comment="Статус заявки"
+        String(50), default=OrderStatus.NEW.value, comment="Статус заявки"
     )
     ordrsp_exported: Mapped[bool] = mapped_column(
         Boolean, default=False, comment="Отклик ordrsp выгружен"

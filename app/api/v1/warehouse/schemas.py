@@ -8,6 +8,7 @@ from decimal import Decimal
 from pydantic import BaseModel, Field
 
 from app.api.v1.base_schemas import BaseRead
+from app.core.statuses import TaskStatus
 
 
 class WarehouseRead(BaseRead):
@@ -174,7 +175,7 @@ class TaskRead(BaseRead):
     task_type: str
     document_id: int | None = None
     assignee_id: int | None = None
-    status: str
+    status: str = TaskStatus.NEW.value
 
 
 class TaskCreate(BaseModel):

@@ -5,6 +5,7 @@ from __future__ import annotations
 from app.delivery.repository import DeliveryOrderRepository
 from app.infrastructure.events import event_bus
 from app.infrastructure.events.event_types import EventTypes
+from app.core.statuses import DeliveryStatus
 
 
 class DeliveryOrderService:

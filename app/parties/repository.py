@@ -133,6 +133,20 @@ class ClientRepository:
         )
         return await self.session.scalar(stmt)
 
+    async def get_by_code_and_address(
+        self, depositor_id: int, code: str, delivery_address_id: int | None
+    ) -> Client | None:
+        """Найти клиента по коду и адресу доставки."""
+        if not code:
+            return None
+        stmt = select(Client).where(
+            Client.depositor_id == depositor_id,
+            Client.code == code,
+        )
+        if delivery_address_id is not None:
+            stmt = stmt.where(Client.delivery_address_id == delivery_address_id)
+        return await self.session.scalar(stmt)
+
     async def list_by_depositor(self, depositor_id: int) -> list[Client]:
         stmt = select(Client).where(
             Client.depositor_id == depositor_id,

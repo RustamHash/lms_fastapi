@@ -9,6 +9,7 @@ from sqlalchemy import Boolean, Date, ForeignKey, Numeric, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.infrastructure.orm_base import Base
+from app.core.statuses import DocumentStatus
 
 
 class Document(Base):
@@ -29,7 +30,7 @@ class Document(Base):
     virtual_warehouse_id: Mapped[int | None] = mapped_column(
         ForeignKey("warehouse_virtual_warehouse.id"), nullable=True, comment="Виртуальный склад"
     )
-    status: Mapped[str] = mapped_column(String(20), default="draft", comment="Статус")
+    status: Mapped[str] = mapped_column(String(20), default=DocumentStatus.DRAFT.value, comment="Статус")
     is_delivery: Mapped[bool] = mapped_column(Boolean, default=False, comment="Признак доставки")
     is_edo: Mapped[bool] = mapped_column(Boolean, default=False, comment="Признак ЭДО")
 

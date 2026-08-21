@@ -6,6 +6,7 @@ from sqlalchemy import ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.infrastructure.orm_base import Base
+from app.core.statuses import TaskStatus
 
 
 class Task(Base):
@@ -20,7 +21,7 @@ class Task(Base):
     assignee_id: Mapped[int | None] = mapped_column(
         ForeignKey("accounts_user.id"), nullable=True, comment="Исполнитель"
     )
-    status: Mapped[str] = mapped_column(String(30), default="new", comment="Статус")
+    status: Mapped[str] = mapped_column(String(30), default=TaskStatus.NEW.value, comment="Статус")
 
     lines: Mapped[list["TaskLine"]] = relationship(back_populates="task")
 

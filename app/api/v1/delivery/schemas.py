@@ -7,26 +7,29 @@ from datetime import date, time
 from pydantic import BaseModel
 
 from app.api.v1.base_schemas import BaseRead
+from app.core.statuses import DeliveryStatus
 
 
 class DeliveryOrderRead(BaseRead):
     number: str
-    contract_id: int
+    contract_id: int | None = None
     document_id: int | None = None
+    outbound_order_id: int | None = None
     contact_person: str = ""
     phone: str = ""
     delivery_date: date | None = None
     time_from: time | None = None
     time_to: time | None = None
-    status: str = "created"
+    status: str = DeliveryStatus.CREATED.value
     is_edo: bool = False
     comment: str = ""
 
 
 class DeliveryOrderCreate(BaseModel):
     number: str
-    contract_id: int
+    contract_id: int | None = None
     document_id: int | None = None
+    outbound_order_id: int | None = None
     contact_person: str = ""
     phone: str = ""
     delivery_date: date | None = None

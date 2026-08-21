@@ -25,12 +25,13 @@ export function ImportDialog({ documentType, title, onClose }: Props) {
   const [error, setError] = useState<string | null>(null)
   const [allMessages, setAllMessages] = useState<string[]>([])
   const [allErrors, setAllErrors] = useState<string[]>([])
+  const [taskId, setTaskId] = useState<string | null>(null)
   const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const logRef = useRef<HTMLDivElement>(null)
 
   const stopPolling = useCallback(() => {
     if (pollRef.current) {
-      clearInterval(pollRef.current)
+      clearTimeout(pollRef.current)
       pollRef.current = null
     }
   }, [])
@@ -39,8 +40,12 @@ export function ImportDialog({ documentType, title, onClose }: Props) {
     return () => stopPolling()
   }, [stopPolling])
 
-  // Автозапуск импорта при открытии окна
+  // Автозапуск импорта при открытии окна (защита от двойного запуска)
+  const startedRef = useRef(false)
+  
   useEffect(() => {
+    if (startedRef.current) return
+    startedRef.current = true
     void handleImport()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -53,11 +58,12 @@ export function ImportDialog({ documentType, title, onClose }: Props) {
   }, [allMessages, allErrors])
 
   async function downloadErrorsExcel() {
-    if (!status?.task_id) return
+    const currentTaskId = status?.task_id ?? taskId
+    if (!currentTaskId) return
     
     try {
       const token = sessionStorage.getItem('sslogistics_access_token')
-      const res = await fetch(`/api/v1/integrations/import/${status.task_id}/errors/excel`, {
+      const res = await fetch(`/api/v1/integrations/import/${currentTaskId}/errors/excel`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Accept': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -70,7 +76,7 @@ export function ImportDialog({ documentType, title, onClose }: Props) {
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `import_errors_${status.task_id}.xlsx`
+      a.download = `import_errors_${currentTaskId}.xlsx`
       a.click()
       URL.revokeObjectURL(url)
     } catch (e) {
@@ -96,9 +102,17 @@ export function ImportDialog({ documentType, title, onClose }: Props) {
       }
 
       const startData = await startRes.json() as { task_id: string; log_id: number; status: string }
+      
+      if (!startData.task_id) {
+        throw new Error('Не получен task_id от сервера')
+      }
+      
+      setTaskId(startData.task_id)
 
       // 2. Long Polling — рекурсивный запрос
       const longPoll = async () => {
+        if (!startData.task_id) return
+        
         try {
           const statusRes = await apiFetch(`/api/v1/integrations/import/${startData.task_id}/status/long`)
           if (!statusRes.ok) throw new Error(`HTTP ${statusRes.status}`)

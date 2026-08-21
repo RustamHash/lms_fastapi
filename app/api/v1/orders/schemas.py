@@ -8,6 +8,7 @@ from decimal import Decimal
 from pydantic import BaseModel, Field
 
 from app.api.v1.base_schemas import BaseRead
+from app.core.statuses import OrderStatus, DeliveryStatus
 
 
 class InboundOrderRead(BaseRead):
@@ -18,7 +19,7 @@ class InboundOrderRead(BaseRead):
     order_date: date
     planned_date: date | None = None
     notes: str = ""
-    status: str = "new"
+    status: str = OrderStatus.NEW.value
     pordrsp_exported: bool = False
     recadv_exported: bool = False
     has_shortage: bool = False
@@ -75,7 +76,7 @@ class OutboundOrderRead(BaseRead):
     declared_weight: Decimal | None = None
     delivery_contact: str = ""
     notes: str = ""
-    status: str = "new"
+    status: str = OrderStatus.NEW.value
     ordrsp_exported: bool = False
     desadv_exported: bool = False
     zone_id: int | None = None

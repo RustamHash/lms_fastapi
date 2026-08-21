@@ -13,6 +13,7 @@ from app.parties.models import Client
 from app.warehouse.models import Warehouse
 
 from app.infrastructure.orm_base import Base
+from app.core.statuses import OrderStatus
 
 
 class InboundOrder(Base):
@@ -44,7 +45,7 @@ class InboundOrder(Base):
     )
     notes: Mapped[str] = mapped_column(Text, default="", comment="Примечания")
     status: Mapped[str] = mapped_column(
-        String(50), default="new", comment="Статус заявки"
+        String(50), default=OrderStatus.NEW.value, comment="Статус заявки"
     )
     pordrsp_exported: Mapped[bool] = mapped_column(
         Boolean, default=False, comment="Отклик pordrsp выгружен"

@@ -218,6 +218,39 @@ class IntegrationService:
             self._s.add(order_line)
 
         await self._s.flush()
+
+        # 7. Создать складской документ (receipt)
+        doc_service = DocumentService(DocumentRepository(self._s), DocumentLineRepository(self._s))
+        document = await doc_service.create(
+            user_id=user_id,
+            document_type="receipt",
+            warehouse_id=warehouse_id,
+            document_number=doc["document_number"],
+            document_date=doc.get("document_date"),
+            delivery_date=doc.get("delivery_date"),
+            status="draft",
+        )
+
+        # Строки документа
+        for line in doc.get("lines", []):
+            from app.warehouse.models import Product
+            stmt = select(Product).where(
+                Product.depositor_id == depositor_id,
+                Product.external_id == line["external_id"],
+            )
+            product = await self._s.scalar(stmt)
+            if product:
+                await doc_service.add_line(
+                    user_id=user_id,
+                    document_id=document.id,
+                    product_id=product.id,
+                    quantity=line["quantity"],
+                )
+
+        # Обновить статус заказа
+        order.status = "document_created"
+        await self._s.flush()
+
         return order
 
     async def _create_outbound_order(
@@ -303,12 +336,42 @@ class IntegrationService:
 
         await self._s.flush()
 
-        # Если нужна доставка — создать заявку на доставку
+        # 7. Создать складской документ (shipment)
+        doc_service = DocumentService(DocumentRepository(self._s), DocumentLineRepository(self._s))
+        document = await doc_service.create(
+            user_id=user_id,
+            document_type="shipment",
+            warehouse_id=warehouse_id,
+            document_number=doc["document_number"],
+            document_date=doc.get("document_date"),
+            delivery_date=doc.get("delivery_date"),
+            status="draft",
+        )
+
+        # Строки документа
+        for line in doc.get("lines", []):
+            from app.warehouse.models import Product
+            stmt = select(Product).where(
+                Product.depositor_id == depositor_id,
+                Product.external_id == line["external_id"],
+            )
+            product = await self._s.scalar(stmt)
+            if product:
+                await doc_service.add_line(
+                    user_id=user_id,
+                    document_id=document.id,
+                    product_id=product.id,
+                    quantity=line["quantity"],
+                )
+
+        # 8. Если нужна доставка — создать заявку через сервис
         if order.needs_delivery:
-            delivery_order = DeliveryOrder(
+            delivery_service = DeliveryOrderService(DeliveryOrderRepository(self._s))
+            await delivery_service.create(
+                user_id=user_id,
                 number=order.number,
                 contract_id=None,
-                document_id=None,
+                document_id=document.id,
                 outbound_order_id=order.id,
                 contact_person=order.delivery_contact or "",
                 phone="",
@@ -316,11 +379,11 @@ class IntegrationService:
                 status="created",
                 is_edo=False,
                 comment="",
-                created_by_id=user_id,
-                updated_by_id=user_id,
             )
-            self._s.add(delivery_order)
-            await self._s.flush()
+
+        # Обновить статус заказа
+        order.status = "document_created"
+        await self._s.flush()
 
         return order
 

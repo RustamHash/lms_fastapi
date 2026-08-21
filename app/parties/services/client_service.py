@@ -18,19 +18,23 @@ class ClientService:
         if not kwargs.get("name"):
             raise ValueError("Наименование обязательно")
 
-        existing = await self._repo.get_by_code(
-            kwargs["depositor_id"], kwargs["code"]
+        existing = await self._repo.get_by_code_and_address(
+            kwargs["depositor_id"],
+            kwargs["code"],
+            kwargs.get("delivery_address_id"),
         )
         if existing:
-            raise ValueError(f"Клиент с кодом {kwargs['code']} уже существует")
+            raise ValueError(f"Клиент с кодом {kwargs['code']} и адресом уже существует")
 
         return await self._repo.insert(
             **kwargs,
         )
 
     async def get_or_create(self, user_id: int | None, **kwargs) -> tuple[Client, bool]:
-        client = await self._repo.get_by_code(
-            kwargs.get("depositor_id"), kwargs.get("code")
+        client = await self._repo.get_by_code_and_address(
+            kwargs.get("depositor_id"),
+            kwargs.get("code"),
+            kwargs.get("delivery_address_id"),
         )
         if client:
             return client, False

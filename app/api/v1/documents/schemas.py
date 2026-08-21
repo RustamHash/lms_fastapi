@@ -9,6 +9,7 @@ from pydantic import BaseModel
 
 from app.api.v1.base_schemas import BaseRead
 from app.documents.document_types import DocumentType
+from app.core.statuses import DocumentStatus
 
 
 class DocumentRead(BaseRead):
@@ -19,7 +20,7 @@ class DocumentRead(BaseRead):
     contract_id: int | None = None
     warehouse_id: int
     virtual_warehouse_id: int | None = None
-    status: str
+    status: str = DocumentStatus.DRAFT.value
     is_delivery: bool = False
     is_edo: bool = False
 

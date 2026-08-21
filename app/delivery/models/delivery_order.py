@@ -8,6 +8,7 @@ from sqlalchemy import Date, ForeignKey, String, Text, Time
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.infrastructure.orm_base import Base
+from app.core.statuses import DeliveryStatus
 
 
 class DeliveryOrder(Base):
@@ -31,7 +32,7 @@ class DeliveryOrder(Base):
     delivery_date: Mapped[date | None] = mapped_column(Date, nullable=True, comment="Дата доставки")
     time_from: Mapped[time | None] = mapped_column(Time, nullable=True, comment="Время с")
     time_to: Mapped[time | None] = mapped_column(Time, nullable=True, comment="Время до")
-    status: Mapped[str] = mapped_column(String(30), default="created", comment="Статус")
+    status: Mapped[str] = mapped_column(String(30), default=DeliveryStatus.CREATED.value, comment="Статус")
     is_edo: Mapped[bool] = mapped_column(default=False, comment="Признак ЭДО")
     comment: Mapped[str] = mapped_column(Text, default="", comment="Комментарий")
 

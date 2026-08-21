@@ -7,6 +7,7 @@ from decimal import Decimal
 import logging
 
 from app.documents.repository import DocumentLineRepository, DocumentRepository
+from app.core.statuses import DocumentStatus
 
 logger = logging.getLogger(__name__)
 
