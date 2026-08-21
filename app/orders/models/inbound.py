@@ -9,6 +9,8 @@ from sqlalchemy import Boolean, Date, ForeignKey, Numeric, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy import UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+from app.parties.models import Client
+from app.warehouse.models import Warehouse
 
 from app.infrastructure.orm_base import Base
 
@@ -33,6 +35,9 @@ class InboundOrder(Base):
     supplier_code: Mapped[str] = mapped_column(
         String(100), default="", comment="Код поставщика"
     )
+    supplier_id: Mapped[int | None] = mapped_column(
+        ForeignKey("parties_client.id"), nullable=True, comment="Поставщик"
+    )
     order_date: Mapped[date] = mapped_column(Date, nullable=False, comment="Дата заявки")
     planned_date: Mapped[date | None] = mapped_column(
         Date, nullable=True, comment="Планируемая дата приёмки"
@@ -52,6 +57,9 @@ class InboundOrder(Base):
     )
 
     lines: Mapped[list["InboundOrderLine"]] = relationship(back_populates="order")
+    depositor: Mapped["Depositor"] = relationship()
+    warehouse: Mapped["Warehouse | None"] = relationship()
+    supplier: Mapped["Client | None"] = relationship(foreign_keys=[supplier_id])
 
 
 class InboundOrderLine(Base):

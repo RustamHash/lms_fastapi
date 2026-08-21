@@ -4,8 +4,10 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, status
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 
 from app.api.deps import SessionDep, UserDep, require_permission
+from app.api.v1.orders.schemas_detailed import OutboundOrderDetailed
 from app.api.v1.orders.schemas import (
     OutboundOrderCreate,
     OutboundOrderLineCreate,
@@ -17,6 +19,18 @@ from app.core.exceptions import NotFoundError
 from app.orders.models import OutboundOrder, OutboundOrderLine
 
 router = APIRouter(prefix="/outbound-orders", tags=["outbound-orders"])
+
+
+@router.get("/detailed", response_model=list[OutboundOrderDetailed], dependencies=[Depends(require_permission("view", "orders"))])
+async def list_outbound_orders_detailed(session: SessionDep) -> list[OutboundOrderDetailed]:
+    stmt = (
+        select(OutboundOrder)
+        .options(selectinload(OutboundOrder.depositor))
+        .options(selectinload(OutboundOrder.client))
+        .options(selectinload(OutboundOrder.warehouse))
+    )
+    rows = list(await session.scalars(stmt))
+    return [OutboundOrderDetailed.model_validate(r) for r in rows]
 
 
 @router.get("", response_model=list[OutboundOrderRead], dependencies=[Depends(require_permission("view", "orders"))])

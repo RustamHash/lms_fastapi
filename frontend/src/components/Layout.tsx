@@ -2,6 +2,8 @@ import { useEffect } from 'react'
 import { Outlet } from 'react-router-dom'
 import { useAppNotice } from '../notifications/AppNoticeContext'
 import { Navbar } from './Navbar'
+import { TabsProvider } from './TabsContext'
+import { TabsBar } from './TabsBar'
 
 export function Layout() {
   const { notice } = useAppNotice()
@@ -38,8 +40,9 @@ export function Layout() {
   }, [])
 
   return (
-    <>
+    <TabsProvider>
       <Navbar />
+      <TabsBar />
       <div className="app-notice-strip" role="status" aria-live="polite">
         {notice ? (
           <p className={`app-notice-strip__text app-notice-strip__text--${notice.kind}`}>
@@ -60,6 +63,6 @@ export function Layout() {
       <main id="main-content" className="app-main">
         <Outlet />
       </main>
-    </>
+    </TabsProvider>
   )
 }

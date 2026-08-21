@@ -13,6 +13,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 
 from app.api.deps import SessionDep, UserDep, require_permission
+from app.core.context import set_current_user_id
 from app.core.exceptions import NotFoundError
 from app.integration.adapters import ZLNAdapter
 from app.integration.models import IntegrationLog, IntegrationProfile
@@ -64,6 +65,9 @@ async def _log_error(session, log: IntegrationLog, error: str) -> None:
 
 
 async def _run_import_background(task_id: str, user_id: int, document_type: str | None) -> None:
+    """Фоновый импорт: одна запись лога на каждый профиль."""
+    # Установить системного пользователя для аудита
+    set_current_user_id(user_id)
     """Фоновый импорт: одна запись лога на каждый профиль."""
     from app.core.database import async_session_factory
     from uuid import uuid4

@@ -79,7 +79,7 @@ const MENU_GROUPS: MenuGroup[] = [
   },
   {
     label: 'Файлы',
-    to: '/files',
+    to: '/files-hub',
   },
 ]
 

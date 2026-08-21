@@ -6,6 +6,7 @@ from app.api.v1.router import api_router
 from app.core.config import get_settings
 from app.core.middleware import setup_middleware
 from app.infrastructure.logging import setup_logging
+from app.core.init_db import init_db
 from app.notifications.services.dispatcher import setup_notification_dispatcher
 
 settings = get_settings()
@@ -14,6 +15,15 @@ setup_logging(settings)
 setup_notification_dispatcher(None)
 
 app = FastAPI(title="LMS FastAPI")
+
+
+@app.on_event("startup")
+async def startup_event():
+    """Инициализация при старте."""
+    from app.core.database import async_session_factory
+
+    async with async_session_factory() as session:
+        await init_db(session)
 setup_middleware(app, settings)
 app.include_router(api_router)
 

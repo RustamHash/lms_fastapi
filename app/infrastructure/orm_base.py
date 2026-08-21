@@ -5,6 +5,8 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, func
+
+from app.core.context import get_current_user_id_context
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -26,10 +28,17 @@ class Base(DeclarativeBase):
         comment="Обновлена",
     )
     created_by_id: Mapped[int | None] = mapped_column(
-        ForeignKey("accounts_user.id"), nullable=True, comment="Создал (user ID)"
+        ForeignKey("accounts_user.id"),
+        nullable=True,
+        default=lambda: get_current_user_id_context(),
+        comment="Создал (user ID)",
     )
     updated_by_id: Mapped[int | None] = mapped_column(
-        ForeignKey("accounts_user.id"), nullable=True, comment="Изменил (user ID)"
+        ForeignKey("accounts_user.id"),
+        nullable=True,
+        default=lambda: get_current_user_id_context(),
+        onupdate=lambda: get_current_user_id_context(),
+        comment="Изменил (user ID)",
     )
     is_deleted: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default="false", comment="Удалена (soft)"

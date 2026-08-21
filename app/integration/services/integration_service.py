@@ -164,6 +164,7 @@ class IntegrationService:
             warehouse_id=warehouse_id,
             number=doc["document_number"],
             supplier_code=vendor_code,
+            supplier_id=supplier.id if supplier else None,
             order_date=doc.get("document_date") or doc.get("delivery_date"),
             planned_date=doc.get("delivery_date"),
             created_by_id=user_id,

@@ -50,6 +50,8 @@ const RolesPage = lazy(() => import('./pages/RolesPage').then(m => ({ default: m
 const IntegrationProfilesPage = lazy(() => import('./pages/IntegrationProfilesPage').then(m => ({ default: m.IntegrationProfilesPage })))
 const IntegrationLogsPage = lazy(() => import('./pages/IntegrationLogsPage').then(m => ({ default: m.IntegrationLogsPage })))
 const FilesPage = lazy(() => import('./pages/FilesPage').then(m => ({ default: m.FilesPage })))
+const DocumentsHubPage = lazy(() => import('./pages/DocumentsHubPage').then(m => ({ default: m.DocumentsHubPage })))
+const FilesHubPage = lazy(() => import('./pages/FilesHubPage').then(m => ({ default: m.FilesHubPage })))
 const AuditPage = lazy(() => import('./pages/AuditPage').then(m => ({ default: m.AuditPage })))
 const NotificationRulesPage = lazy(() => import('./pages/NotificationRulesPage').then(m => ({ default: m.NotificationRulesPage })))
 const TariffDocumentsPage = lazy(() => import('./pages/TariffDocumentsPage').then(m => ({ default: m.TariffDocumentsPage })))
@@ -191,6 +193,8 @@ function App() {
                   <Route path="/topology/locations" element={<TopologyLocationsPage />} />
                   
                   {/* Файлы */}
+                  <Route path="/documents-hub" element={<DocumentsHubPage />} />
+                  <Route path="/files-hub" element={<FilesHubPage />} />
                   <Route path="/files" element={<FilesPage />} />
                   
                                     <Route path="/reference/batches/:id" element={<BatchDetailPage />} />
@@ -222,34 +226,6 @@ function App() {
                   <Route path="/users/:id" element={<UserDetailPage />} />
                   <Route path="/reference/vehicles/:id" element={<VehicleDetailPage />} />
                   
-                                    <Route path="/reference/batches/:id" element={<BatchDetailPage />} />
-                  <Route path="/carriers/:id" element={<CarrierDetailPage />} />
-                  <Route path="/delivery/orders/:id" element={<DeliveryOrderDetailPage />} />
-                  <Route path="/reference/delivery-zones/:id" element={<DeliveryZoneDetailPage />} />
-                  <Route path="/deviations/:id" element={<DeviationDetailPage />} />
-                  <Route path="/documents/:id" element={<DocumentDetailPage />} />
-                  <Route path="/reference/drivers/:id" element={<DriverDetailPage />} />
-                  <Route path="/files/:id" element={<FileDetailPage />} />
-                  <Route path="/orders/inbound/:id" element={<InboundOrderDetailPage />} />
-                  <Route path="/integrations/logs/:id" element={<IntegrationLogDetailPage />} />
-                  <Route path="/integrations/profiles/:id" element={<IntegrationProfileDetailPage />} />
-                  <Route path="/keepers/:id" element={<KeeperDetailPage />} />
-                  <Route path="/reference/lpns/:id" element={<LpnDetailPage />} />
-                  <Route path="/orders/outbound/:id" element={<OutboundOrderDetailPage />} />
-                  <Route path="/reference/products/:id" element={<ProductDetailPage />} />
-                  <Route path="/orders/return/:id" element={<ReturnOrderDetailPage />} />
-                  <Route path="/roles/:id" element={<RoleDetailPage />} />
-                  <Route path="/route-lines/:id" element={<RouteLineDetailPage />} />
-                  <Route path="/reference/routes/:id" element={<RouteDetailPage />} />
-                  <Route path="/stock/:id" element={<StockDetailPage />} />
-                  <Route path="/tasks/:id" element={<TaskDetailPage />} />
-                  <Route path="/topology/locations/:id" element={<TopologyLocationDetailPage />} />
-                  <Route path="/topology/rows/:id" element={<TopologyRowDetailPage />} />
-                  <Route path="/topology/virtual-warehouses/:id" element={<TopologyVirtualWarehouseDetailPage />} />
-                  <Route path="/topology/warehouses/:id" element={<TopologyWarehouseDetailPage />} />
-                  <Route path="/topology/zones/:id" element={<TopologyZoneDetailPage />} />
-                  <Route path="/users/:id" element={<UserDetailPage />} />
-                  <Route path="/reference/vehicles/:id" element={<VehicleDetailPage />} />
                   
                   <Route path="*" element={<Navigate to="/" replace />} />
                 </Route>

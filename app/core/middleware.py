@@ -11,6 +11,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
 
 from app.core.config import Settings
+from app.core.context import set_current_user_id
 from app.core.security import decode_token_sub_user_id
 
 logger = logging.getLogger(__name__)
@@ -36,6 +37,9 @@ class AuditMiddleware(BaseHTTPMiddleware):
                 user_id = decode_token_sub_user_id(token)
             except Exception:
                 user_id = None
+
+        # Устанавливаем текущего пользователя в контекст
+        set_current_user_id(user_id)
 
         # Копируем тело запроса (чтобы не потерять)
         body = None
