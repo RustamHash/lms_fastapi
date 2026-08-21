@@ -4,13 +4,12 @@ from __future__ import annotations
 
 from datetime import date, time
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel
+
+from app.api.v1.base_schemas import BaseRead
 
 
-class DeliveryOrderRead(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: int
+class DeliveryOrderRead(BaseRead):
     number: str
     contract_id: int
     document_id: int | None = None
@@ -43,10 +42,7 @@ class DeliveryOrderStatusUpdate(BaseModel):
     status: str
 
 
-class DriverRead(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: int
+class DriverRead(BaseRead):
     name: str
     phone: str = ""
     carrier_id: int | None = None
@@ -58,10 +54,7 @@ class DriverCreate(BaseModel):
     carrier_id: int | None = None
 
 
-class VehicleRead(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: int
+class VehicleRead(BaseRead):
     number: str
     brand: str = ""
     model: str = ""
@@ -79,10 +72,7 @@ class VehicleCreate(BaseModel):
     carrier_id: int | None = None
 
 
-class RouteRead(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: int
+class RouteRead(BaseRead):
     number: str
     driver_id: int
     vehicle_id: int

@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom'
-import { EntityListPage } from '../features/entity-list/EntityListPage'
+import { EntityListPage } from '../features/entity-system/EntityListPage'
 import { batchesConfig } from '../features/batches/config'
 
 export function BatchesPage() {
@@ -9,7 +9,7 @@ export function BatchesPage() {
       config={batchesConfig}
       onBack={() => navigate(-1)}
       breadcrumbs={[
-        { label: 'Склад', to: '/' },
+        { label: 'Справочники', to: '/references' },
         { label: 'Партии' },
       ]}
     />

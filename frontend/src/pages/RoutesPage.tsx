@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom'
-import { EntityListPage } from '../features/entity-list/EntityListPage'
+import { EntityListPage } from '../features/entity-system/EntityListPage'
 import { routesConfig } from '../features/routes/config'
 
 export function RoutesPage() {
@@ -9,7 +9,7 @@ export function RoutesPage() {
       config={routesConfig}
       onBack={() => navigate(-1)}
       breadcrumbs={[
-        { label: 'Доставка', to: '/' },
+        { label: 'Справочники', to: '/references' },
         { label: 'Маршруты' },
       ]}
     />

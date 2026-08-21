@@ -2,22 +2,18 @@
 
 from __future__ import annotations
 
-from typing import Annotated
+from fastapi import APIRouter, Depends, status
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.ext.asyncio import AsyncSession
-
+from app.api.deps import SessionDep, UserDep, require_permission
 from app.api.v1.documents import schemas
-from app.core.dependencies import get_current_user_id, get_session
+from app.core.exceptions import BadRequestError, NotFoundError
+from app.documents.models import Document
 from app.documents.services import DocumentService
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
-SessionDep = Annotated[AsyncSession, Depends(get_session)]
-UserDep = Annotated[int | None, Depends(get_current_user_id)]
 
-
-@router.get("", response_model=list[schemas.DocumentRead])
+@router.get("", response_model=list[schemas.DocumentRead], dependencies=[Depends(require_permission("view", "documents"))])
 async def list_documents(
     session: SessionDep,
     document_type: str | None = None,
@@ -30,7 +26,7 @@ async def list_documents(
     return [schemas.DocumentRead.model_validate(r) for r in rows]
 
 
-@router.post("", response_model=schemas.DocumentRead, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=schemas.DocumentRead, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_permission("create", "documents"))])
 async def create_document(
     body: schemas.DocumentCreate,
     session: SessionDep,
@@ -41,16 +37,16 @@ async def create_document(
     return schemas.DocumentRead.model_validate(doc)
 
 
-@router.get("/{document_id}", response_model=schemas.DocumentRead)
+@router.get("/{document_id}", response_model=schemas.DocumentRead, dependencies=[Depends(require_permission("view", "documents"))])
 async def get_document(document_id: int, session: SessionDep) -> schemas.DocumentRead:
     service = DocumentService(session)
     doc = await service.get_by_id(document_id)
     if doc is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Документ не найден")
+        raise NotFoundError("Документ не найден")
     return schemas.DocumentRead.model_validate(doc)
 
 
-@router.post("/{document_id}/lines", response_model=schemas.DocumentLineRead, status_code=status.HTTP_201_CREATED)
+@router.post("/{document_id}/lines", response_model=schemas.DocumentLineRead, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_permission("update", "documents"))])
 async def add_line(
     document_id: int,
     body: schemas.DocumentLineCreate,
@@ -67,21 +63,94 @@ async def add_line(
             batch_id=body.batch_id,
         )
     except ValueError as e:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+        raise BadRequestError(str(e)) from e
     return schemas.DocumentLineRead.model_validate(line)
 
 
-@router.delete("/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.get(
+    "/{document_id}/lines",
+    response_model=list[schemas.DocumentLineRead],
+    dependencies=[Depends(require_permission("view", "documents"))],
+)
+async def list_document_lines(
+    document_id: int,
+    session: SessionDep,
+) -> list[schemas.DocumentLineRead]:
+    from sqlalchemy import select as sa_select
+    from app.documents.models import DocumentLine
+
+    rows = list(await session.scalars(
+        sa_select(DocumentLine).where(DocumentLine.document_id == document_id)
+    ))
+    return [schemas.DocumentLineRead.model_validate(r) for r in rows]
+
+
+@router.delete("/{document_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_permission("delete", "documents"))])
 async def delete_document(document_id: int, session: SessionDep, user_id: UserDep) -> None:
-    from app.documents.models import Document
     doc = await session.get(Document, document_id)
     if doc is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Документ не найден")
+        raise NotFoundError("Документ не найден")
     doc.soft_delete(user_id)
     await session.flush()
 
 
-@router.patch("/{document_id}/status", response_model=schemas.DocumentRead)
+@router.get(
+    "/lines/{line_id}",
+    response_model=schemas.DocumentLineRead,
+    dependencies=[Depends(require_permission("view", "documents"))],
+)
+async def get_document_line(
+    line_id: int,
+    session: SessionDep,
+) -> schemas.DocumentLineRead:
+    from app.documents.models import DocumentLine
+    line = await session.get(DocumentLine, line_id)
+    if line is None:
+        raise NotFoundError("Строка документа не найдена")
+    return schemas.DocumentLineRead.model_validate(line)
+
+
+@router.patch(
+    "/lines/{line_id}",
+    response_model=schemas.DocumentLineRead,
+    dependencies=[Depends(require_permission("update", "documents"))],
+)
+async def update_document_line(
+    line_id: int,
+    body: schemas.DocumentLineCreate,
+    session: SessionDep,
+    user_id: UserDep,
+) -> schemas.DocumentLineRead:
+    from app.documents.models import DocumentLine
+    line = await session.get(DocumentLine, line_id)
+    if line is None:
+        raise NotFoundError("Строка документа не найдена")
+    for field, value in body.model_dump(exclude_unset=True).items():
+        setattr(line, field, value)
+    line.updated_by_id = user_id
+    await session.flush()
+    return schemas.DocumentLineRead.model_validate(line)
+
+
+@router.delete(
+    "/lines/{line_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_permission("delete", "documents"))],
+)
+async def delete_document_line(
+    line_id: int,
+    session: SessionDep,
+    user_id: UserDep,
+) -> None:
+    from app.documents.models import DocumentLine
+    line = await session.get(DocumentLine, line_id)
+    if line is None:
+        raise NotFoundError("Строка документа не найдена")
+    line.soft_delete(user_id)
+    await session.flush()
+
+
+@router.patch("/{document_id}/status", response_model=schemas.DocumentRead, dependencies=[Depends(require_permission("update", "documents"))])
 async def update_status(
     document_id: int,
     body: schemas.DocumentStatusUpdate,
@@ -95,5 +164,5 @@ async def update_status(
         status=body.status,
     )
     if doc is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Документ не найден")
+        raise NotFoundError("Документ не найден")
     return schemas.DocumentRead.model_validate(doc)

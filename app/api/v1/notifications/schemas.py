@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, Field
+
+from app.api.v1.base_schemas import BaseRead
 
 
-class NotificationRead(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: int
+class NotificationRead(BaseRead):
     user_id: int
     title: str
     text: str

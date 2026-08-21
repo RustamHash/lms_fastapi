@@ -1,4 +1,4 @@
-import type { ListPageConfig } from '../entity-list/types'
+import type { ListPageConfig } from '../entity-system/types'
 
 type UserRow = {
   id: number
@@ -7,6 +7,10 @@ type UserRow = {
   email: string
   is_superuser: boolean
   is_active: boolean
+  is_deleted: boolean
+  created_at: string
+  updated_at: string
+  extra_permissions: Record<string, unknown>
 }
 
 export const usersConfig: ListPageConfig<UserRow> = {

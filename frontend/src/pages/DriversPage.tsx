@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom'
-import { EntityListPage } from '../features/entity-list/EntityListPage'
+import { EntityListPage } from '../features/entity-system/EntityListPage'
 import { driversConfig } from '../features/drivers/config'
 
 export function DriversPage() {
@@ -9,7 +9,7 @@ export function DriversPage() {
       config={driversConfig}
       onBack={() => navigate(-1)}
       breadcrumbs={[
-        { label: 'Доставка', to: '/' },
+        { label: 'Справочники', to: '/references' },
         { label: 'Водители' },
       ]}
     />

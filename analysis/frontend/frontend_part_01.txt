@@ -1,0 +1,3500 @@
+  
+  const toggleAll = useCallback((checked: boolean) => {
+    if (checked) {
+      setSelected(new Set(filtered.map((row) => row.id)))
+    } else {
+      setSelected(new Set())
+    }
+  }, [filtered])
+  
+  const toggleRow = useCallback((id: number, checked: boolean) => {
+    setSelected((prev) => {
+      const next = new Set(prev)
+      if (checked) next.add(id)
+      else next.delete(id)
+      return next
+    })
+  }, [])
+  
+  const clearSelection = useCallback(() => {
+    setSelected(new Set())
+  }, [])
+  
+  const reload = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ['entity-list', config.entityKey] })
+    clearSelection()
+  }, [queryClient, config.entityKey, clearSelection])
+  
+  const onSortHeaderClick = useCallback((colId: string) => {
+    setSort((prev) => {
+      if (prev.col !== colId) return { col: colId, dir: 'asc' }
+      return { col: colId, dir: prev.dir === 'asc' ? 'desc' : 'asc' }
+    })
+  }, [])
+  
+  const resetFilters = useCallback(() => {
+    setFilters({})
+    setExcludeFilters({})
+  }, [])
+  
+  const cellText = useCallback(
+    (row: Row, colId: string): string => {
+      const column = config.columns.find((c) => c.id === colId)
+      if (!column) return ''
+      return formatCellValue(row as unknown as Record<string, unknown>, column)
+    },
+    [config.columns],
+  )
+  
+  const renderCell = useCallback(
+    (row: Row, colId: string): React.ReactNode => {
+      const override = config.columnOverrides?.[colId]
+      if (override?.render) {
+        return override.render(row)
+      }
+      if (override?.href) {
+        return <a href={override.href(row)}>{cellText(row, colId)}</a>
+      }
+      return cellText(row, colId)
+    },
+    [config.columnOverrides, cellText],
+  )
+  
+  const hasActiveFilters = useMemo(() => {
+    const f = Object.values(filters).some((v) => v !== '')
+    const x = Object.values(excludeFilters).some((arr) => arr.some((v) => v !== ''))
+    return f || x
+  }, [filters, excludeFilters])
+  
+  return {
+    rows: filtered,
+    totalRowsCount: rows.length,
+    loading: isLoading,
+    error: error ? String(error) : null,
+    sortCol: sort.col,
+    sortDir: sort.dir,
+    onSortHeaderClick,
+    filters,
+    setFilters,
+    excludeFilters,
+    setExcludeFilters,
+    resetFilters,
+    hasActiveFilters,
+    selected,
+    selectedCount,
+    allSelected,
+    toggleAll,
+    toggleRow,
+    clearSelection,
+    prefs,
+    cellText,
+    renderCell,
+    reload,
+  }
+}
+
+function formatCellValue(row: Record<string, unknown>, column: ColumnConfig): string {
+  const value = row[column.id]
+  if (value == null) return '—'
+  
+  switch (column.type) {
+    case 'date':
+    case 'datetime':
+      return formatDt(String(value))
+    case 'bool':
+      return value ? 'Да' : 'Нет'
+    case 'select': {
+      const opt = column.options?.find((o) => o.value === String(value))
+      return opt?.label ?? String(value)
+    }
+    default:
+      return String(value)
+  }
+}
+
+function compareValues(a: unknown, b: unknown, type: string): number {
+  if (a == null && b == null) return 0
+  if (a == null) return 1
+  if (b == null) return -1
+  
+  switch (type) {
+    case 'number':
+      return Number(a) - Number(b)
+    case 'date':
+    case 'datetime':
+      return new Date(String(a)).getTime() - new Date(String(b)).getTime()
+    case 'bool':
+      return Number(a) - Number(b)
+    default:
+      return String(a).localeCompare(String(b), 'ru', { sensitivity: 'base' })
+  }
+}
+
+function filterValue(row: Record<string, unknown>, column: ColumnConfig, raw: string): boolean {
+  const value = formatCellValue(row, column)
+  
+  if (raw === '') return true
+  if (column.type === 'bool' || column.type === 'select') {
+    const actual = column.type === 'bool' ? String(Boolean(row[column.id])) : String(row[column.id] ?? '')
+    return actual === raw
+  }
+  
+  return value.toLowerCase().includes(raw.toLowerCase())
+}
+
+function formatDt(iso: string): string {
+  if (!iso) return '—'
+  try {
+    const d = new Date(iso)
+    if (Number.isNaN(d.getTime())) return iso
+    const p = (n: number) => String(n).padStart(2, '0')
+    return `${p(d.getDate())}.${p(d.getMonth() + 1)}.${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
+  } catch {
+    return iso
+  }
+}
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/frontend/src/features/entity-system/hooks/useEntityPrefs.ts
+========================================
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/frontend/src/features/entity-system/RowContextMenu.tsx
+========================================
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/frontend/src/features/entity-system/types.ts
+========================================
+import type { ReactNode, ComponentType } from 'react'
+
+export type ColumnType = 'text' | 'number' | 'date' | 'bool' | 'select' | 'datetime'
+
+export type ColumnConfig = {
+  id: string
+  label: string
+  type: ColumnType
+  sortable?: boolean
+  filterable?: boolean
+  options?: { value: string; label: string }[]
+  width?: number
+  hideByDefault?: boolean
+}
+
+export type FilterType = 'text' | 'date' | 'datetime' | 'select'
+
+export type FilterConfig = {
+  id: string
+  type: FilterType
+  label?: string
+  options?: { value: string; label: string }[]
+}
+
+export type ToolbarConfig = {
+  createHref?: string
+  canCreate?: boolean
+  showExport?: boolean
+  showRefresh?: boolean
+  showColumnSettings?: boolean
+  showResetFilters?: boolean
+}
+
+export type GroupActionContext<Row> = {
+  selectedRows: Row[]
+  selectedIds: number[]
+  reload: () => void
+  clearSelection: () => void
+  notify: (message: string, kind: 'success' | 'error' | 'info' | 'warning') => void
+}
+
+export type GroupAction<Row> = {
+  id: string
+  label: string
+  icon?: ReactNode
+  confirmMessage?: string | ((rows: Row[]) => string)
+  condition?: (rows: Row[]) => boolean
+  disabled?: (rows: Row[]) => boolean
+  maxSelection?: number
+  executionMode?: 'sequential' | 'parallel'
+  dialogComponent?: ComponentType<{
+    rows: Row[]
+    onComplete: (result: any) => void
+    onCancel: () => void
+  }>
+  action: (rows: Row[], context: GroupActionContext<Row>) => Promise<void> | void
+}
+
+export type RowAction<Row> = {
+  id: string
+  label: string
+  icon?: ReactNode
+  href?: (row: Row) => string
+  confirmMessage?: string | ((row: Row) => string)
+  condition?: (row: Row) => boolean
+  action?: (row: Row, context: GroupActionContext<Row>) => Promise<void> | void
+}
+
+export type ColumnOverride<Row> = {
+  href?: (row: Row) => string
+  render?: (row: Row) => ReactNode
+  label?: string
+  width?: number
+}
+
+export type EntityTab<T> = {
+  id: string
+  label: string
+  icon?: ReactNode
+  component: ComponentType<{
+    entity: T
+    onUpdate: (patch: Partial<T>) => Promise<void>
+    reload: () => void
+    notify: (message: string, kind: 'success' | 'error' | 'info' | 'warning') => void
+  }>
+  condition?: (entity: T) => boolean
+}
+
+export type ListPageConfig<Row extends { id: number }> = {
+  entityKey: string
+  title: string
+  subtitle?: string
+  apiUrl: string
+  
+  columns: ColumnConfig[]
+  filters?: FilterConfig[]
+  toolbar?: ToolbarConfig
+  groupActions?: GroupAction<Row>[]
+  rowActions?: RowAction<Row>[]
+  columnOverrides?: Record<string, ColumnOverride<Row>>
+  defaultSort?: { column: string; direction: 'asc' | 'desc' }
+  toolbarComponents?: ReactNode[]
+}
+
+export type EntitySection<T> = {
+  id: string
+  title: string
+  icon?: ReactNode
+  fields: {
+    key: keyof T
+    label: string
+    type?: 'text' | 'number' | 'date' | 'boolean' | 'link' | 'code'
+    editable?: boolean
+    required?: boolean
+    format?: (value: any) => string
+    href?: (row: T) => string
+  }[]
+}
+
+export type EntityDetailConfig<T extends { id: number }> = {
+  entityKey: string
+  title: string
+  apiUrl: string
+  backUrl: string
+  backLabel?: string
+  
+  sections?: EntitySection<T>[]
+  tabs?: EntityTab<T>[]
+  
+  actions?: {
+    edit?: boolean
+    delete?: boolean
+    custom?: {
+      id: string
+      label: string
+      action: (entity: T, context: { reload: () => void; notify: (message: string, kind: 'success' | 'warning' | 'error' | 'info') => void }) => void
+      condition?: (entity: T) => boolean
+      confirmMessage?: string
+    }[]
+  }
+  
+  editForm?: ComponentType<{
+    entity: T
+    onSave: (patch: Partial<T>) => Promise<void>
+    onCancel: () => void
+  }>
+}
+
+export type EntityConfig<T extends { id: number }> = {
+  list: ListPageConfig<T>
+  detail?: EntityDetailConfig<T>
+}
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/frontend/src/features/files/config.ts
+========================================
+import type { ListPageConfig } from '../entity-list/types'
+
+type FileRow = {
+  id: number
+  file_path: string
+  file_type: string
+  original_name: string
+  size: number
+  mime_type: string
+  uploaded_by_id: number | null
+}
+
+export const filesConfig: ListPageConfig<FileRow> = {
+  entityKey: 'files',
+  title: 'Файлы',
+  apiUrl: '/api/v1/files',
+  columns: [
+    { id: 'id', label: 'ID', type: 'number' },
+    { id: 'original_name', label: 'Имя файла', type: 'text' },
+    { id: 'file_type', label: 'Тип', type: 'text' },
+    { id: 'size', label: 'Размер', type: 'number' },
+    { id: 'mime_type', label: 'MIME тип', type: 'text' },
+  ],
+  filters: [
+    { id: 'original_name', type: 'text', label: 'Имя файла' },
+    { id: 'file_type', type: 'text', label: 'Тип' },
+  ],
+}
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/frontend/src/features/integration-logs/config.ts
+========================================
+import type { ListPageConfig } from '../entity-list/types'
+
+type IntegrationLogRow = {
+  id: number
+  profile_id: number
+  status: string
+  total_rows: number
+  success_rows: number
+  error_rows: number
+  file_id: number | null
+}
+
+export const integrationLogsConfig: ListPageConfig<IntegrationLogRow> = {
+  entityKey: 'integration-logs',
+  title: 'Логи интеграций',
+  apiUrl: '/api/v1/integrations/logs',
+  columns: [
+    { id: 'id', label: 'ID', type: 'number' },
+    { id: 'profile_id', label: 'Профиль ID', type: 'number' },
+    { id: 'status', label: 'Статус', type: 'text' },
+    { id: 'total_rows', label: 'Всего строк', type: 'number' },
+    { id: 'success_rows', label: 'Успешно', type: 'number' },
+    { id: 'error_rows', label: 'С ошибками', type: 'number' },
+  ],
+  filters: [
+    { id: 'profile_id', type: 'text', label: 'Профиль ID' },
+    { id: 'status', type: 'text', label: 'Статус' },
+  ],
+}
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/frontend/src/features/integration-profiles/config.ts
+========================================
+import type { ListPageConfig } from '../entity-list/types'
+
+type IntegrationProfileRow = {
+  id: number
+  depositor_id: number
+  name: string
+  source_type: string
+  config: Record<string, unknown>
+}
+
+export const integrationProfilesConfig: ListPageConfig<IntegrationProfileRow> = {
+  entityKey: 'integration-profiles',
+  title: 'Профили интеграций',
+  apiUrl: '/api/v1/integrations/profiles',
+  columns: [
+    { id: 'id', label: 'ID', type: 'number' },
+    { id: 'name', label: 'Название', type: 'text' },
+    { id: 'source_type', label: 'Тип источника', type: 'text' },
+    { id: 'depositor_id', label: 'Поклажедатель ID', type: 'number' },
+  ],
+  filters: [
+    { id: 'name', type: 'text', label: 'Название' },
+    { id: 'source_type', type: 'text', label: 'Тип источника' },
+  ],
+}
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/frontend/src/features/legal-entities/config.ts
+========================================
+import type { ListPageConfig } from '../entity-list/types'
+
+type LegalEntityRow = {
+  id: number
+  name: string
+  legal_name: string
+  inn: string
+  kpp: string
+  ogrn: string
+  phone: string
+  email: string
+  is_deleted: boolean
+  is_active: boolean
+}
+
+export const legalEntityConfig = {
+  list: {
+    entityKey: 'legal_entities',
+    title: 'Юридические лица',
+    apiUrl: '/api/v1/parties/legal-entities',
+    columns: [
+      { id: 'id', label: 'ID', type: 'number' },
+      { id: 'name', label: 'Наименование', type: 'text' },
+      { id: 'legal_name', label: 'Полное', type: 'text' },
+      { id: 'inn', label: 'ИНН', type: 'text' },
+      { id: 'kpp', label: 'КПП', type: 'text' },
+      { id: 'ogrn', label: 'ОГРН', type: 'text' },
+      { id: 'phone', label: 'Телефон', type: 'text' },
+      { id: 'email', label: 'Email', type: 'text' },
+      { id: 'is_active', label: 'Активно', type: 'bool' },
+      { id: 'is_deleted', label: 'Удалено', type: 'bool' },
+    ],
+    filters: [
+      { id: 'name', type: 'text', label: 'Наименование' },
+      { id: 'inn', type: 'text', label: 'ИНН' },
+    ],
+    toolbar: {
+      createHref: '/reference/legal-entities/new',
+    },
+    columnOverrides: {
+      name: { href: (row) => `/reference/legal-entities/${row.id}` },
+    },
+  } as ListPageConfig<LegalEntityRow>,
+}
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/frontend/src/features/lists/columnWidthConstants.ts
+========================================
+/** Минимальная ширина колонки данных (px). */
+export const LIST_COL_WIDTH_MIN = 4
+/** Максимальная ширина колонки данных (px). */
+export const LIST_COL_WIDTH_MAX = 480
+/** Ширина по умолчанию, если в prefs нет записи (px). */
+export const LIST_COL_WIDTH_DEFAULT = 112
+/** При измерении подгонки не учитывать больше символов (одна «простыня» не раздует колонку). */
+export const LIST_COL_MEASURE_MAX_CHARS = 80
+
+export function clampListColumnWidthPx(w: number): number {
+  if (!Number.isFinite(w)) return LIST_COL_WIDTH_DEFAULT
+  return Math.min(LIST_COL_WIDTH_MAX, Math.max(LIST_COL_WIDTH_MIN, Math.round(w)))
+}
+
+/** Значения для полей «ширина, px» в диалоге «Вид» при открытии. */
+export function columnWidthsDraftFromRecord(
+  order: readonly string[],
+  widths: Record<string, number>,
+): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const id of order) {
+    const w = widths[id]
+    out[id] = typeof w === 'number' && Number.isFinite(w) ? String(w) : ''
+  }
+  return out
+}
+
+/**
+ * Итоговый `widths` для prefs: пустое поле — убрать переопределение (как у таблицы по умолчанию);
+ * число — записать с clamp.
+ */
+export function mergeColumnWidthsFromDraft(
+  base: Record<string, number>,
+  order: readonly string[],
+  draft: Record<string, string>,
+): Record<string, number> {
+  const next: Record<string, number> = { ...base }
+  for (const id of order) {
+    const raw = (draft[id] ?? '').trim()
+    if (raw === '') {
+      delete next[id]
+      continue
+    }
+    const n = Math.round(Number(raw))
+    if (Number.isFinite(n)) next[id] = clampListColumnWidthPx(n)
+    else delete next[id]
+  }
+  return next
+}
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/frontend/src/features/lists/dateTimeFilterCodec.ts
+========================================
+import { LIST_FILTER_EMPTY_DATE } from './filterTypes'
+import { matchDateTimeFilter, matchLegacyDateTimeSubstring } from './filterEngine'
+
+/** Версия сериализации в строке фильтра (хранится в Record<string, string>). */
+export type DateTimeFilterPayloadV1 = {
+  v: 1
+  /** contains | after | before | between | empty | notEmpty */
+  m: 'ct' | 'aft' | 'bef' | 'btw' | 'emp' | 'nem'
+  /** подстрока для ct */
+  t?: string
+  /** datetime-local или ISO */
+  a?: string
+  b?: string
+}
+
+export function encodeDateTimeFilter(p: DateTimeFilterPayloadV1): string {
+  return JSON.stringify(p)
+}
+
+/** Пустая строка → null. Не-JSON → режим «содержит» с этим текстом. */
+export function decodeDateTimeFilter(raw: string): DateTimeFilterPayloadV1 | null {
+  const s = raw.trim()
+  if (s === '') return null
+  if (s.startsWith('{')) {
+    try {
+      const o = JSON.parse(s) as DateTimeFilterPayloadV1
+      if (o && o.v === 1 && typeof o.m === 'string') return o
+    } catch {
+      /* legacy */
+    }
+  }
+  return { v: 1, m: 'ct', t: raw }
+}
+
+export function isDateTimeFilterActive(raw: string): boolean {
+  if (raw.trim() === '') return false
+  if (raw === LIST_FILTER_EMPTY_DATE) return true
+  const d = decodeDateTimeFilter(raw)
+  if (!d) return false
+  switch (d.m) {
+    case 'ct':
+      return (d.t ?? '').trim() !== ''
+    case 'aft':
+    case 'bef':
+      return (d.a ?? '').trim() !== ''
+    case 'btw':
+      return (d.a ?? '').trim() !== '' && (d.b ?? '').trim() !== ''
+    case 'emp':
+    case 'nem':
+      return true
+    default:
+      return false
+  }
+}
+
+export function dateTimeFilterHint(raw: string): string | null {
+  if (raw === LIST_FILTER_EMPTY_DATE) return null
+  const d = decodeDateTimeFilter(raw)
+  if (!d) return null
+  const ta = (d.a ?? '').slice(0, 16)
+  const tb = (d.b ?? '').slice(0, 16)
+  const tt = (d.t ?? '').slice(0, 20)
+  switch (d.m) {
+    case 'ct':
+      return tt ? `содерж.: ${tt}${(d.t ?? '').length > 20 ? '…' : ''}` : null
+    case 'aft':
+      return `после ${ta || '…'}`
+    case 'bef':
+      return `до ${ta || '…'}`
+    case 'btw':
+      return `${ta || '…'}–${tb || '…'}`
+    case 'emp':
+      return 'пусто'
+    case 'nem':
+      return 'не пусто'
+    default:
+      return null
+  }
+}
+
+/** Сопоставление ISO даты строки с фильтром из ячейки фильтра. */
+export function matchDateTimeColumnFilter(
+  iso: string | null,
+  raw: string,
+  formatDisplay: (iso: string | null) => string,
+): boolean {
+  const emptyOnly = raw === LIST_FILTER_EMPTY_DATE
+  if (emptyOnly) return iso == null
+
+  const d = decodeDateTimeFilter(raw)
+  if (!d) return true
+
+  switch (d.m) {
+    case 'ct':
+      return matchLegacyDateTimeSubstring(iso, d.t ?? '', formatDisplay(iso))
+    case 'emp':
+      return iso == null || iso === ''
+    case 'nem':
+      return iso != null && iso !== ''
+    case 'aft':
+      return matchDateTimeFilter(iso, { op: 'after', value: d.a }, formatDisplay(iso))
+    case 'bef':
+      return matchDateTimeFilter(iso, { op: 'before', value: d.a }, formatDisplay(iso))
+    case 'btw':
+      return matchDateTimeFilter(
+        iso,
+        { op: 'between', value: d.a, valueTo: d.b },
+        formatDisplay(iso),
+      )
+    default:
+      return true
+  }
+}
+
+/** Для «фильтр по значению ячейки» по колонке даты. */
+export function encodeDateTimeFilterFromCellValue(iso: string | null, formatDisplay: (iso: string | null) => string): string {
+  if (iso == null || iso === '') {
+    return LIST_FILTER_EMPTY_DATE
+  }
+  return encodeDateTimeFilter({ v: 1, m: 'ct', t: formatDisplay(iso) })
+}
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/frontend/src/features/lists/filterEngine.ts
+========================================
+import type { DateTimeFilterState, NumberFilterState, TextFilterState } from './filterTypes'
+
+/** Парсинг числа из строки фильтра (запятая/точка). */
+export function parseFilterNumber(raw: string): number | null {
+  const t = raw.trim().replace(',', '.')
+  if (t === '') return null
+  const n = Number(t)
+  return Number.isFinite(n) ? n : null
+}
+
+/** Миллисекунды из ISO или null. */
+export function parseIsoToMs(iso: string | null | undefined): number | null {
+  if (iso == null || iso === '') return null
+  const ms = Date.parse(iso)
+  return Number.isNaN(ms) ? null : ms
+}
+
+/** Дата без времени из фильтра → полночь локального дня (как в datetime-local). */
+export function normalizeFilterDateTimeLocal(raw: string): string {
+  const t = raw.trim()
+  if (!t) return ''
+  if (/^\d{4}-\d{2}-\d{2}$/.test(t)) return `${t}T00:00`
+  if (/^\d{4}-\d{2}-\d{2}T$/.test(t)) return `${t}00:00`
+  return t
+}
+
+/** Парсинг даты из строки фильтра (input type=date / datetime-local или ISO). */
+export function parseFilterDateMs(raw: string | undefined): number | null {
+  if (raw == null || raw.trim() === '') return null
+  const ms = Date.parse(normalizeFilterDateTimeLocal(raw.trim()))
+  return Number.isNaN(ms) ? null : ms
+}
+
+/** Последняя миллисекунда локального календарного дня для момента startOfDayMs. */
+export function endOfLocalDayMs(startOfDayMs: number): number {
+  const d = new Date(startOfDayMs)
+  d.setHours(23, 59, 59, 999)
+  return d.getTime()
+}
+
+function isLocalMidnight(ms: number): boolean {
+  const d = new Date(ms)
+  return (
+    d.getHours() === 0 &&
+    d.getMinutes() === 0 &&
+    d.getSeconds() === 0 &&
+    d.getMilliseconds() === 0
+  )
+}
+
+/**
+ * Если raw совпадает с sentinel — вернуть, пустое ли поле даты в строке.
+ * Иначе undefined (смотреть обычное сопоставление).
+ */
+export function matchDateEmptySentinel(
+  iso: string | null,
+  raw: string,
+  sentinel: string,
+): boolean | undefined {
+  if (raw !== sentinel) return undefined
+  return iso == null
+}
+
+/** Select по bool в стиле текущего UI: '', 'true', 'false'. */
+export function matchBoolSelect(isActive: boolean, raw: string): boolean {
+  if (raw === 'true') return isActive
+  if (raw === 'false') return !isActive
+  return true
+}
+
+/** Подстрока в ID как сейчас: без перевода регистра. */
+export function matchIdSubstring(id: number, needleRaw: string): boolean {
+  const t = needleRaw.trim()
+  if (t === '') return true
+  return String(id).includes(t)
+}
+
+/** Текстовые операторы (покрытие будущего UI; сейчас можно передавать только contains). */
+export function matchTextFilter(haystack: string, state: TextFilterState): boolean {
+  const needle = state.value.trim()
+  if (needle === '') return true
+  const hc = haystack.toLowerCase()
+  const nc = needle.toLowerCase()
+  switch (state.op) {
+    case 'contains':
+      return hc.includes(nc)
+    case 'not_contains':
+      return !hc.includes(nc)
+    case 'equals':
+      return haystack === needle
+    case 'starts_with':
+      return hc.startsWith(nc)
+    case 'ends_with':
+      return hc.endsWith(nc)
+    default:
+      return hc.includes(nc)
+  }
+}
+
+/** Как сейчас для code/name: регистронезависимое «содержит». */
+export function matchLegacyTextContains(haystack: string, needleRaw: string): boolean {
+  return matchTextFilter(haystack, { op: 'contains', value: needleRaw })
+}
+
+/**
+ * Как сейчас для колонок даты: поиск по подстроке в ISO и в отформатированном отображении.
+ */
+export function matchLegacyDateTimeSubstring(
+  iso: string | null,
+  needleRaw: string,
+  formattedDisplay: string,
+): boolean {
+  const t = needleRaw.trim()
+  if (t === '') return true
+  const low = t.toLowerCase()
+  const r = (iso ?? '').toLowerCase()
+  const d = formattedDisplay.toLowerCase()
+  return r.includes(low) || d.includes(low)
+}
+
+/** Числовое сравнение по состоянию фильтра (для заказов и т.д.). */
+export function matchNumberFilter(value: number | null, state: NumberFilterState): boolean {
+  const v = value
+  const a = parseFilterNumber(state.value)
+  const b = state.valueTo != null && state.valueTo !== '' ? parseFilterNumber(state.valueTo) : null
+
+  if (state.op === 'between') {
+    if (v == null || Number.isNaN(v)) return false
+    if (a == null || b == null) return true
+    const lo = Math.min(a, b)
+    const hi = Math.max(a, b)
+    return v >= lo && v <= hi
+  }
+
+  if (v == null || Number.isNaN(v)) return false
+  if (a == null) return true
+
+  switch (state.op) {
+    case 'eq':
+      return v === a
+    case 'ne':
+      return v !== a
+    case 'gt':
+      return a != null && v > a
+    case 'gte':
+      return a != null && v >= a
+    case 'lt':
+      return a != null && v < a
+    case 'lte':
+      return a != null && v <= a
+    default:
+      return true
+  }
+}
+
+/** Дата/время по полному состоянию (будущий UI). Legacy-подстрока — отдельно. */
+export function matchDateTimeFilter(
+  iso: string | null,
+  state: DateTimeFilterState,
+  localeDisplay: string,
+): boolean {
+  const ms = parseIsoToMs(iso)
+
+  switch (state.op) {
+    case 'is_empty':
+      return iso == null || iso === ''
+    case 'is_not_empty':
+      return iso != null && iso !== ''
+    case 'after': {
+      const t = parseFilterDateMs(state.value)
+      if (t == null) return false
+      if (ms == null) return false
+      return ms > t
+    }
+    case 'before': {
+      const t = parseFilterDateMs(state.value)
+      if (t == null) return false
+      if (ms == null) return false
+      return ms < t
+    }
+    case 'between': {
+      const t1 = parseFilterDateMs(state.value)
+      const t2 = parseFilterDateMs(state.valueTo)
+      if (t1 == null || t2 == null) return false
+      if (ms == null) return false
+      const lo = Math.min(t1, t2)
+      const hiStart = Math.max(t1, t2)
+      const dateOnlyRange = isLocalMidnight(t1) && isLocalMidnight(t2)
+      const hi = dateOnlyRange ? endOfLocalDayMs(hiStart) : hiStart
+      return ms >= lo && ms <= hi
+    }
+    default:
+      return matchLegacyDateTimeSubstring(iso, state.value ?? '', localeDisplay)
+  }
+}
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/frontend/src/features/lists/filterTypes.ts
+========================================
+/**
+ * Общие типы фильтров списков.
+ * UI пока остаётся строковым; операторы задел под будущие даты/числа/операторы как в 1С.
+ * Сопоставление строки с строкой — через filterEngine (legacy «содержит» и расширения).
+ */
+
+/** Значение фильтра «только пустая дата» (контекстное меню и т.п.) */
+export const LIST_FILTER_EMPTY_DATE = '__ss_empty__'
+
+/** Текстовые операторы (будущий UI) */
+export type TextFilterOp =
+  | 'contains'
+  | 'equals'
+  | 'not_contains'
+  | 'starts_with'
+  | 'ends_with'
+
+/** Числовые операторы (заказы, вес, количество) */
+export type NumberFilterOp = 'eq' | 'ne' | 'gt' | 'gte' | 'lt' | 'lte' | 'between'
+
+/** Операторы по дате/времени */
+export type DateTimeFilterOp = 'before' | 'after' | 'between' | 'is_empty' | 'is_not_empty'
+
+export type TextFilterState = {
+  op: TextFilterOp
+  value: string
+}
+
+export type NumberFilterState = {
+  op: NumberFilterOp
+  /** Строка с поля ввода; парсинг в filterEngine */
+  value: string
+  valueTo?: string
+}
+
+export type DateTimeFilterState = {
+  op: DateTimeFilterOp
+  value?: string
+  valueTo?: string
+}
+
+/** Тип колонки для выбора набора операторов в будущем UI */
+export type ListColumnFilterKind = 'text' | 'number' | 'datetime' | 'select' | 'bool'
+
+/** Состояние фильтра одной колонки (полная модель на будущее) */
+export type ColumnFilterState =
+  | { kind: 'text'; text: TextFilterState }
+  | { kind: 'number'; number: NumberFilterState }
+  | { kind: 'datetime'; datetime: DateTimeFilterState }
+  | { kind: 'select'; value: string }
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/frontend/src/features/lists/listExcludeFilters.ts
+========================================
+import { isDateTimeFilterActive } from './dateTimeFilterCodec'
+
+type ColFilterKind = 'text' | 'datetime' | 'select'
+
+/** Есть ли по колонке хотя бы одно «живое» значение в списке исключений. */
+export function excludeColumnHasActiveEntries(
+  entries: string[] | undefined,
+  def: { kind: ColFilterKind },
+): boolean {
+  const list = entries ?? []
+  if (list.length === 0) return false
+  if (def.kind === 'datetime') return list.some((s) => isDateTimeFilterActive(s))
+  if (def.kind === 'select') return list.some((s) => s !== '')
+  return list.some((s) => s.trim() !== '')
+}
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/frontend/src/features/lpns/config.ts
+========================================
+import type { ListPageConfig } from '../entity-list/types'
+
+type LpnRow = {
+  id: number
+  number: string
+  status: string
+}
+
+export const lpnsConfig: ListPageConfig<LpnRow> = {
+  entityKey: 'lpns',
+  title: 'LPN',
+  apiUrl: '/api/v1/reference/lpns',
+  columns: [
+    { id: 'id', label: 'ID', type: 'number' },
+    { id: 'number', label: 'Номер LPN', type: 'text' },
+    { id: 'status', label: 'Статус', type: 'text' },
+  ],
+  filters: [
+    { id: 'number', type: 'text', label: 'Номер LPN' },
+    { id: 'status', type: 'text', label: 'Статус' },
+  ],
+}
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/frontend/src/features/notifications/config.ts
+========================================
+import type { ListPageConfig } from '../entity-list/types'
+
+type NotificationRow = {
+  id: number
+  user_id: number
+  title: string
+  text: string
+  notification_type: string
+  status: string
+  link: string
+  sent_at: string | null
+  read_at: string | null
+}
+
+export const notificationsConfig: ListPageConfig<NotificationRow> = {
+  entityKey: 'notifications',
+  title: 'Уведомления',
+  apiUrl: '/api/v1/notifications',
+  columns: [
+    { id: 'id', label: 'ID', type: 'number' },
+    { id: 'title', label: 'Заголовок', type: 'text' },
+    { id: 'text', label: 'Сообщение', type: 'text' },
+    { id: 'notification_type', label: 'Тип', type: 'text' },
+    { id: 'status', label: 'Статус', type: 'text' },
+    { id: 'read_at', label: 'Прочитано', type: 'date' },
+  ],
+  filters: [
+    { id: 'title', type: 'text', label: 'Заголовок' },
+    { id: 'status', type: 'text', label: 'Статус' },
+  ],
+}
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/frontend/src/features/products/config.ts
+========================================
+import type { ListPageConfig } from '../entity-list/types'
+
+type ProductRow = {
+  id: number
+  depositor_id: number
+  external_id: string
+  name: string
+  sku: string
+  legal_name: string
+  weight: string
+  volume: string
+  price: string | null
+  shelf_life_days: number | null
+  min_shelf_life_days: number | null
+  is_marked: boolean
+  is_serial_tracked: boolean
+  is_batch_tracked: boolean
+  is_expiration_tracked: boolean
+  temperature_requirements: string
+}
+
+export const productsConfig: ListPageConfig<ProductRow> = {
+  entityKey: 'products',
+  title: 'Товары',
+  apiUrl: '/api/v1/reference/products',
+  columns: [
+    { id: 'id', label: 'ID', type: 'number' },
+    { id: 'name', label: 'Название', type: 'text' },
+    { id: 'sku', label: 'SKU', type: 'text' },
+    { id: 'external_id', label: 'Внешний ID', type: 'text' },
+    { id: 'depositor_id', label: 'Поклажедатель', type: 'number' },
+    { id: 'weight', label: 'Вес', type: 'text' },
+    { id: 'volume', label: 'Объём', type: 'text' },
+    { id: 'price', label: 'Цена', type: 'text' },
+    { id: 'is_marked', label: 'Маркировка', type: 'bool' },
+    { id: 'is_batch_tracked', label: 'Партионный учёт', type: 'bool' },
+  ],
+  filters: [
+    { id: 'name', type: 'text', label: 'Название' },
+    { id: 'sku', type: 'text', label: 'SKU' },
+    { id: 'depositor_id', type: 'text', label: 'Поклажедатель ID' },
+  ],
+  columnOverrides: {
+    name: { href: (row) => `/reference/products/${row.id}` },
+  },
+}
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/frontend/src/features/roles/config.ts
+========================================
+import type { ListPageConfig } from '../entity-list/types'
+
+type RoleRow = {
+  id: number
+  name: string
+  code: string
+  permissions: Record<string, unknown>
+}
+
+export const rolesConfig: ListPageConfig<RoleRow> = {
+  entityKey: 'roles',
+  title: 'Роли',
+  apiUrl: '/api/v1/roles',
+  columns: [
+    { id: 'id', label: 'ID', type: 'number' },
+    { id: 'name', label: 'Название', type: 'text' },
+    { id: 'code', label: 'Код', type: 'text' },
+  ],
+  filters: [
+    { id: 'name', type: 'text', label: 'Название' },
+    { id: 'code', type: 'text', label: 'Код' },
+  ],
+}
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/frontend/src/features/routes/config.ts
+========================================
+import type { ListPageConfig } from '../entity-list/types'
+
+type RouteRow = {
+  id: number
+  number: string
+  driver_id: number
+  vehicle_id: number
+  date: string
+  status: string
+}
+
+export const routesConfig: ListPageConfig<RouteRow> = {
+  entityKey: 'routes',
+  title: 'Маршруты',
+  apiUrl: '/api/v1/reference/routes',
+  columns: [
+    { id: 'id', label: 'ID', type: 'number' },
+    { id: 'number', label: 'Номер', type: 'text' },
+    { id: 'date', label: 'Дата', type: 'date' },
+    { id: 'status', label: 'Статус', type: 'text' },
+    { id: 'driver_id', label: 'Водитель ID', type: 'number' },
+    { id: 'vehicle_id', label: 'Транспорт ID', type: 'number' },
+  ],
+  filters: [
+    { id: 'number', type: 'text', label: 'Номер' },
+    { id: 'status', type: 'text', label: 'Статус' },
+  ],
+}
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/frontend/src/features/tariffs/config.ts
+========================================
+import type { ListPageConfig } from '../entity-list/types'
+
+type TariffRow = {
+  id: number
+  document_id: number
+  service_group: string
+  name: string
+  description: string
+  unit: string
+  price: string
+  is_deleted: boolean
+  is_active: boolean
+}
+
+export const tariffConfig = {
+  list: {
+    entityKey: 'tariffs',
+    title: 'Тарифы',
+    apiUrl: '/api/v1/parties/tariffs',
+    columns: [
+      { id: 'id', label: 'ID', type: 'number' },
+      { id: 'name', label: 'Название', type: 'text' },
+      { id: 'service_group', label: 'Группа', type: 'text' },
+      { id: 'unit', label: 'Единица', type: 'text' },
+      { id: 'price', label: 'Цена', type: 'number' },
+      { id: 'is_active', label: 'Активен', type: 'bool' },
+      { id: 'is_deleted', label: 'Удалён', type: 'bool' },
+    ],
+    filters: [
+      { id: 'name', type: 'text', label: 'Название' },
+      { id: 'service_group', type: 'text', label: 'Группа' },
+    ],
+    columnOverrides: {
+      name: { href: (row) => `/reference/tariffs/${row.id}` },
+    },
+  } as ListPageConfig<TariffRow>,
+}
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/frontend/src/features/tasks/config.ts
+========================================
+import type { ListPageConfig } from '../entity-list/types'
+
+type TaskRow = {
+  id: number
+  task_type: string
+  document_id: number | null
+  assignee_id: number | null
+  status: string
+}
+
+export const tasksConfig: ListPageConfig<TaskRow> = {
+  entityKey: 'tasks',
+  title: 'Задания',
+  apiUrl: '/api/v1/tasks',
+  columns: [
+    { id: 'id', label: 'ID', type: 'number' },
+    { id: 'task_type', label: 'Тип задания', type: 'text' },
+    { id: 'status', label: 'Статус', type: 'text' },
+    { id: 'document_id', label: 'Документ ID', type: 'number' },
+    { id: 'assignee_id', label: 'Исполнитель ID', type: 'number' },
+  ],
+  filters: [
+    { 
+      id: 'task_type', 
+      type: 'select', 
+      label: 'Тип задания',
+      options: [
+        { value: 'receiving', label: 'Приёмка' },
+        { value: 'putaway', label: 'Размещение' },
+        { value: 'picking', label: 'Отбор' },
+        { value: 'shipping', label: 'Отгрузка' },
+        { value: 'movement', label: 'Перемещение' },
+      ],
+    },
+    { 
+      id: 'status', 
+      type: 'select', 
+      label: 'Статус',
+      options: [
+        { value: 'new', label: 'Новое' },
+        { value: 'in_progress', label: 'В работе' },
+        { value: 'completed', label: 'Завершено' },
+        { value: 'completed_with_deviations', label: 'С отклонениями' },
+      ],
+    },
+  ],
+  columnOverrides: {
+    id: { href: (row) => `/tasks/${row.id}` },
+  },
+}
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/frontend/src/features/trade-points/config.ts
+========================================
+import type { ListPageConfig } from '../entity-list/types'
+
+type TradePointRow = {
+  id: number
+  client_id: number
+  address_id: number
+  name: string
+  is_deleted: boolean
+  is_active: boolean
+}
+
+export const tradePointConfig = {
+  list: {
+    entityKey: 'trade_points',
+    title: 'Торговые точки',
+    apiUrl: '/api/v1/parties/trade-points',
+    columns: [
+      { id: 'id', label: 'ID', type: 'number' },
+      { id: 'name', label: 'Название', type: 'text' },
+      { id: 'client_id', label: 'Клиент ID', type: 'number' },
+      { id: 'address_id', label: 'Адрес ID', type: 'number' },
+      { id: 'is_active', label: 'Активна', type: 'bool' },
+      { id: 'is_deleted', label: 'Удалена', type: 'bool' },
+    ],
+    filters: [
+      { id: 'name', type: 'text', label: 'Название' },
+    ],
+    toolbar: {
+      createHref: '/reference/trade-points/new',
+    },
+    columnOverrides: {
+      name: { href: (row) => `/reference/trade-points/${row.id}` },
+    },
+  } as ListPageConfig<TradePointRow>,
+}
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/frontend/src/features/users/config.ts
+========================================
+import type { ListPageConfig } from '../entity-list/types'
+
+type UserRow = {
+  id: number
+  username: string
+  phone: string
+  email: string
+  is_superuser: boolean
+  is_active: boolean
+}
+
+export const usersConfig: ListPageConfig<UserRow> = {
+  entityKey: 'users',
+  title: 'Пользователи',
+  apiUrl: '/api/v1/users',
+  columns: [
+    { id: 'id', label: 'ID', type: 'number' },
+    { id: 'username', label: 'Имя пользователя', type: 'text' },
+    { id: 'email', label: 'Email', type: 'text' },
+    { id: 'phone', label: 'Телефон', type: 'text' },
+    { id: 'is_superuser', label: 'Суперпользователь', type: 'bool' },
+    { id: 'is_active', label: 'Активен', type: 'bool' },
+  ],
+  filters: [
+    { id: 'username', type: 'text', label: 'Имя пользователя' },
+    { id: 'email', type: 'text', label: 'Email' },
+  ],
+}
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/frontend/src/features/vehicles/config.ts
+========================================
+import type { ListPageConfig } from '../entity-list/types'
+
+type VehicleRow = {
+  id: number
+  number: string
+  brand: string
+  model: string
+  capacity: number | null
+  volume: number | null
+  carrier_id: number | null
+}
+
+export const vehiclesConfig: ListPageConfig<VehicleRow> = {
+  entityKey: 'vehicles',
+  title: 'Транспорт',
+  apiUrl: '/api/v1/reference/vehicles',
+  columns: [
+    { id: 'id', label: 'ID', type: 'number' },
+    { id: 'number', label: 'Гос. номер', type: 'text' },
+    { id: 'brand', label: 'Марка', type: 'text' },
+    { id: 'model', label: 'Модель', type: 'text' },
+    { id: 'capacity', label: 'Грузоподъёмность', type: 'number' },
+    { id: 'volume', label: 'Объём', type: 'number' },
+  ],
+  filters: [
+    { id: 'number', type: 'text', label: 'Гос. номер' },
+    { id: 'brand', type: 'text', label: 'Марка' },
+  ],
+}
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/frontend/src/hooks/useColumnPrefs.ts
+========================================
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { apiFetch } from '../lib/http'
+import { clampListColumnWidthPx } from '../features/lists/columnWidthConstants'
+
+export type ColumnDef = { id: string; label: string }
+
+export type PrefsPayload = { order: string[]; hidden: string[]; widths: Record<string, number> }
+
+type ApiGetResponse = { prefs: PrefsPayload | null }
+
+/** Сливает ответ сервера с дефолтным списком колонок: новые поля в конец, чужие id отбрасываются. */
+function mergePrefs(
+  defaults: readonly ColumnDef[],
+  saved: Partial<PrefsPayload> | null,
+  defaultHiddenColumnIds: readonly string[],
+): PrefsPayload {
+  const allowed = new Set(defaults.map((c) => c.id))
+  const defaultHiddenSet = new Set(defaultHiddenColumnIds.filter((id) => allowed.has(id)))
+  const prevOrder = (saved?.order ?? []).filter((id) => allowed.has(id))
+  const prevOrderSet = new Set(prevOrder)
+
+  const order = [...prevOrder]
+  for (const c of defaults) {
+    if (!order.includes(c.id)) order.push(c.id)
+  }
+
+  let hidden: string[]
+  if (saved == null) {
+    hidden = defaults.filter((c) => defaultHiddenSet.has(c.id)).map((c) => c.id)
+  } else {
+    const base = (saved.hidden ?? []).filter((id) => allowed.has(id))
+    const hiddenSet = new Set(base)
+    for (const c of defaults) {
+      if (!prevOrderSet.has(c.id) && defaultHiddenSet.has(c.id)) {
+        hiddenSet.add(c.id)
+      }
+    }
+    hidden = [...hiddenSet]
+  }
+  const widths: Record<string, number> = {}
+  const rawW = saved?.widths
+  if (rawW && typeof rawW === 'object') {
+    for (const id of allowed) {
+      const v = rawW[id]
+      if (typeof v === 'number' && Number.isFinite(v)) {
+        widths[id] = clampListColumnWidthPx(v)
+      }
+    }
+  }
+  return { order, hidden, widths }
+}
+
+function emptyPrefs(defaults: readonly ColumnDef[], defaultHiddenColumnIds: readonly string[]): PrefsPayload {
+  return mergePrefs(defaults, null, defaultHiddenColumnIds)
+}
+
+/**
+ * Загрузка/сохранение порядка, скрытых колонок и ширин на сервере (таблица ui_list_preferences).
+ * entityKey — одна строка на экран (например "warehouses").
+ * defaultHiddenColumnIds — id колонок, скрытых по умолчанию (пока нет сохранённых prefs и для новых колонок после обновления).
+ */
+export function useColumnPrefs(
+  entityKey: string,
+  defaults: readonly ColumnDef[],
+  defaultHiddenColumnIds: readonly string[] = [],
+) {
+  const defaultsSig = useMemo(
+    () => defaults.map((c) => `${c.id}:${c.label}`).join('|'),
+    [defaults],
+  )
+  const defaultHiddenSig = useMemo(
+    () => [...defaultHiddenColumnIds].join('|'),
+    [defaultHiddenColumnIds],
+  )
+  const defaultsRef = useRef(defaults)
+  const defaultHiddenRef = useRef(defaultHiddenColumnIds)
+  useEffect(() => {
+    defaultsRef.current = defaults
+    defaultHiddenRef.current = defaultHiddenColumnIds
+  }, [defaultsSig, defaultHiddenSig, defaults, defaultHiddenColumnIds])
+
+  const [order, setOrder] = useState<string[]>(
+    () => emptyPrefs(defaultsRef.current, defaultHiddenRef.current).order,
+  )
+  const [hidden, setHidden] = useState<string[]>(
+    () => emptyPrefs(defaultsRef.current, defaultHiddenRef.current).hidden,
+  )
+  const [widths, setWidths] = useState<Record<string, number>>({})
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const lastAutoLoadKeyRef = useRef<string | null>(null)
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const url = `/api/v1/table-settings/${encodeURIComponent(entityKey)}`
+      const res = await apiFetch(url)
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const data = (await res.json()) as ApiGetResponse
+      const m = mergePrefs(defaultsRef.current, data.prefs, defaultHiddenRef.current)
+      setOrder(m.order)
+      setHidden(m.hidden)
+      setWidths(m.widths)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Ошибка загрузки настроек колонок')
+      const m = mergePrefs(defaultsRef.current, null, defaultHiddenRef.current)
+      setOrder(m.order)
+      setHidden(m.hidden)
+      setWidths(m.widths)
+    } finally {
+      setLoading(false)
+    }
+  }, [entityKey, defaultsSig, defaultHiddenSig])
+
+  const autoLoadKey = `${entityKey}::${defaultsSig}::${defaultHiddenSig}`
+  useEffect(() => {
+    if (lastAutoLoadKeyRef.current === autoLoadKey) return
+    lastAutoLoadKeyRef.current = autoLoadKey
+    void load()
+  }, [autoLoadKey, load])
+
+  const savePrefs = useCallback(
+    async (next: PrefsPayload) => {
+      const url = `/api/v1/table-settings/${encodeURIComponent(entityKey)}`
+      const res = await apiFetch(url, {
+        method: 'PUT',
+        body: JSON.stringify(next),
+      })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const data = (await res.json()) as { prefs: PrefsPayload }
+      if (data.prefs) {
+        const m = mergePrefs(defaultsRef.current, data.prefs, defaultHiddenRef.current)
+        setOrder(m.order)
+        setHidden(m.hidden)
+        setWidths(m.widths)
+      }
+    },
+    [entityKey, defaultsSig, defaultHiddenSig],
+  )
+
+  const hiddenSet = new Set(hidden)
+  const visibleOrderedIds = order.filter((id) => !hiddenSet.has(id))
+
+  return {
+    order,
+    hidden,
+    widths,
+    hiddenSet,
+    visibleOrderedIds,
+    loading,
+    error,
+    setOrder,
+    setHidden,
+    savePrefs,
+    reload: load,
+  }
+}
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/frontend/src/hooks/useListController.ts
+========================================
+import { useCallback, useMemo, useState, type MouseEvent } from 'react'
+
+type SortState<ColId extends string> = {
+  col: ColId | null
+  dir: 'asc' | 'desc'
+}
+
+type CtxMenuState<Row, ColId extends string> = {
+  x: number
+  y: number
+  row: Row
+  colId: ColId
+}
+
+type Params<Row extends { id: number }, ColId extends string> = {
+  rows: Row[]
+  matchRow: (row: Row, filters: Record<string, string>, excludeFilters: Record<string, string[]>) => boolean
+  compareRows: (a: Row, b: Row, col: ColId) => number
+  filterValueFromRow: (row: Row, col: ColId) => string
+  clampMenuPosition: (x: number, y: number) => { x: number; y: number }
+}
+
+export function useListController<Row extends { id: number }, ColId extends string>({
+  rows,
+  matchRow,
+  compareRows,
+  filterValueFromRow,
+  clampMenuPosition,
+}: Params<Row, ColId>) {
+  const [filters, setFilters] = useState<Record<string, string>>({})
+  const [excludeFilters, setExcludeFilters] = useState<Record<string, string[]>>({})
+  const [sort, setSort] = useState<SortState<ColId>>({ col: null, dir: 'asc' })
+  const [selected, setSelected] = useState<Set<number>>(() => new Set())
+  const [ctxMenu, setCtxMenu] = useState<CtxMenuState<Row, ColId> | null>(null)
+
+  const filtered = useMemo(
+    () => rows.filter((row) => matchRow(row, filters, excludeFilters)),
+    [rows, filters, excludeFilters, matchRow],
+  )
+
+  const sortedFiltered = useMemo(() => {
+    const col = sort.col
+    if (!col) return filtered
+    const mul = sort.dir === 'asc' ? 1 : -1
+    return [...filtered].sort((a, b) => mul * compareRows(a, b, col))
+  }, [filtered, sort, compareRows])
+
+  const selectedCount = selected.size
+  const allSelected =
+    sortedFiltered.length > 0 && sortedFiltered.every((row) => selected.has(row.id))
+
+  const onSortHeaderClick = useCallback((cid: ColId) => {
+    setSort((s) => {
+      if (s.col !== cid) return { col: cid, dir: 'asc' }
+      return { col: cid, dir: s.dir === 'asc' ? 'desc' : 'asc' }
+    })
+  }, [])
+
+  const resetFilters = useCallback(() => {
+    setFilters({})
+    setExcludeFilters({})
+  }, [])
+
+  const clearSelection = useCallback(() => {
+    setSelected(new Set())
+  }, [])
+
+  const onCellContextMenu = useCallback(
+    (e: MouseEvent<HTMLTableCellElement>, row: Row, colId: ColId) => {
+      e.preventDefault()
+      const { x, y } = clampMenuPosition(e.clientX, e.clientY)
+      setCtxMenu({ x, y, row, colId })
+    },
+    [clampMenuPosition],
+  )
+
+  const applyFilterByCellValue = useCallback(() => {
+    setCtxMenu((m) => {
+      if (!m) return null
+      const v = filterValueFromRow(m.row, m.colId)
+      setFilters((prev) => ({ ...prev, [m.colId]: v }))
+      return null
+    })
+  }, [filterValueFromRow])
+
+  const applyExcludeCellValue = useCallback(() => {
+    setCtxMenu((m) => {
+      if (!m) return null
+      const v = filterValueFromRow(m.row, m.colId)
+      setExcludeFilters((prev) => {
+        const cur = prev[m.colId] ?? []
+        if (cur.includes(v)) return prev
+        return { ...prev, [m.colId]: [...cur, v] }
+      })
+      return null
+    })
+  }, [filterValueFromRow])
+
+  const closeCtxMenu = useCallback(() => setCtxMenu(null), [])
+
+  const toggleAll = useCallback(
+    (checked: boolean) => {
+      if (checked) {
+        setSelected(new Set(sortedFiltered.map((row) => row.id)))
+      } else {
+        setSelected(new Set())
+      }
+    },
+    [sortedFiltered],
+  )
+
+  const toggleRow = useCallback((id: number, checked: boolean) => {
+    setSelected((prev) => {
+      const n = new Set(prev)
+      if (checked) n.add(id)
+      else n.delete(id)
+      return n
+    })
+  }, [])
+
+  return {
+    filters,
+    setFilters,
+    excludeFilters,
+    setExcludeFilters,
+    sort,
+    onSortHeaderClick,
+    selected,
+    selectedCount,
+    allSelected,
+    toggleAll,
+    toggleRow,
+    filtered,
+    sortedFiltered,
+    resetFilters,
+    clearSelection,
+    ctxMenu,
+    setCtxMenu,
+    closeCtxMenu,
+    onCellContextMenu,
+    applyFilterByCellValue,
+    applyExcludeCellValue,
+  }
+}
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/frontend/src/index.css
+========================================
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+  background: #f4f6f8;
+  color: #222;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+/* ===== СТИЛИ ФОРМЫ ВХОДА ===== */
+.login-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  padding: 20px;
+}
+
+.login-container {
+  background: white;
+  border-radius: 20px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  width: 100%;
+  max-width: 420px;
+  padding: 40px;
+  animation: login-appear 0.3s ease-out;
+}
+
+@keyframes login-appear {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.login-header {
+  text-align: center;
+  margin-bottom: 30px;
+}
+
+.login-logo {
+  color: #667eea;
+  margin-bottom: 15px;
+  display: inline-block;
+}
+
+.login-title {
+  font-size: 24px;
+  font-weight: 700;
+  color: #1a202c;
+  margin: 0 0 8px;
+}
+
+.login-subtitle {
+  font-size: 14px;
+  color: #718096;
+  margin: 0;
+}
+
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.login-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.login-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: #2d3748;
+}
+
+.login-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.login-input-icon {
+  position: absolute;
+  left: 12px;
+  color: #a0aec0;
+  pointer-events: none;
+}
+
+.login-input {
+  width: 100%;
+  padding: 12px 40px 12px 40px;
+  border: 2px solid #e2e8f0;
+  border-radius: 10px;
+  font-size: 15px;
+  transition: all 0.2s;
+  outline: none;
+}
+
+.login-input:focus {
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.login-input::placeholder {
+  color: #a0aec0;
+}
+
+.login-password-toggle {
+  position: absolute;
+  right: 12px;
+  background: none;
+  border: none;
+  color: #a0aec0;
+  cursor: pointer;
+  padding: 5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.2s;
+}
+
+.login-password-toggle:hover {
+  color: #667eea;
+}
+
+.login-error {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  background: #fed7d7;
+  border: 1px solid #fc8181;
+  border-radius: 10px;
+  color: #c53030;
+  font-size: 14px;
+}
+
+.login-submit {
+  padding: 14px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  border-radius: 10px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.login-submit:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 20px rgba(102, 126, 234, 0.4);
+}
+
+.login-submit:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.login-submit:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.login-spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: login-spin 0.8s linear infinite;
+}
+
+@keyframes login-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.login-footer {
+  text-align: center;
+  margin-top: 30px;
+  padding-top: 20px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.login-footer p {
+  font-size: 12px;
+  color: #a0aec0;
+  margin: 0;
+}
+
+@media (max-width: 480px) {
+  .login-container {
+    padding: 30px 20px;
+  }
+  
+  .login-title {
+    font-size: 20px;
+  }
+}
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/frontend/src/lib/arrayMove.ts
+========================================
+/** Перемещает элемент с индекса `from` на позицию `to` (как в dnd-kit arrayMove). */
+export function arrayMove<T>(list: T[], from: number, to: number): T[] {
+  if (from === to || from < 0 || to < 0 || from >= list.length || to >= list.length) {
+    return [...list]
+  }
+  const next = [...list]
+  const [item] = next.splice(from, 1)
+  if (item === undefined) return [...list]
+  next.splice(to, 0, item)
+  return next
+}
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/frontend/src/lib/formatDt.ts
+========================================
+/** Локальное время, 24 ч: «28.03.2026 23:15:10» */
+export function formatDt(iso: string | null): string {
+  if (!iso) return '—'
+  try {
+    const d = new Date(iso)
+    if (Number.isNaN(d.getTime())) return iso
+    const p = (n: number) => String(n).padStart(2, '0')
+    return `${p(d.getDate())}.${p(d.getMonth() + 1)}.${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
+  } catch {
+    return iso
+  }
+}
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/frontend/src/lib/http.ts
+========================================
+import { getAccessToken } from './token'
+
+/** Запросы к защищённому API: Bearer из sessionStorage. */
+export function apiFetch(input: string, init: RequestInit = {}): Promise<Response> {
+  const headers = new Headers(init.headers)
+  const t = getAccessToken()
+  if (t) headers.set('Authorization', `Bearer ${t}`)
+  if (
+    init.body &&
+    typeof init.body === 'string' &&
+    !headers.has('Content-Type')
+  ) {
+    headers.set('Content-Type', 'application/json')
+  }
+  return fetch(input, { ...init, headers })
+}
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/frontend/src/lib/measureColumnTextWidth.ts
+========================================
+import {
+  LIST_COL_MEASURE_MAX_CHARS,
+  clampListColumnWidthPx,
+} from '../features/lists/columnWidthConstants'
+
+/** Сжать строку для измерения ширины (длинный текст + «…»). */
+export function clipTextForColumnMeasure(s: string): string {
+  const t = String(s).replace(/\s+/g, ' ').trim()
+  if (t.length === 0) return ' '
+  if (t.length <= LIST_COL_MEASURE_MAX_CHARS) return t
+  return `${t.slice(0, LIST_COL_MEASURE_MAX_CHARS)}…`
+}
+
+export function measureStringWidthPx(text: string, font: string): number {
+  const canvas = document.createElement('canvas')
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return 0
+  ctx.font = font
+  return ctx.measureText(text).width
+}
+
+const HEADER_FONT = '500 11px system-ui, -apple-system, "Segoe UI", sans-serif'
+const CELL_FONT = 'normal 11px system-ui, -apple-system, "Segoe UI", sans-serif'
+
+/** Доп. место под стрелку сортировки и отступы шапки (px). */
+const HEADER_EXTRA_PX = 28
+/** Горизонтальные отступы ячейки + границы (прибл., px). */
+const CELL_EXTRA_PX = 14
+
+/**
+ * Ширина колонки по заголовку и текстам строк (с ограничением max и усечением длинных строк).
+ */
+export function computeAutoFitColumnWidthPx(
+  headerLabel: string,
+  rowTexts: readonly string[],
+): number {
+  let maxInner = 0
+  const h = clipTextForColumnMeasure(headerLabel)
+  maxInner = Math.max(maxInner, measureStringWidthPx(h, HEADER_FONT) + HEADER_EXTRA_PX)
+  for (const raw of rowTexts) {
+    const t = clipTextForColumnMeasure(raw)
+    maxInner = Math.max(maxInner, measureStringWidthPx(t, CELL_FONT) + CELL_EXTRA_PX)
+  }
+  return clampListColumnWidthPx(Math.ceil(maxInner))
+}
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/frontend/src/lib/token.ts
+========================================
+const ACCESS_TOKEN_KEY = 'sslogistics_access_token'
+
+export function getAccessToken(): string | null {
+  try {
+    return sessionStorage.getItem(ACCESS_TOKEN_KEY)
+  } catch {
+    return null
+  }
+}
+
+export function setAccessToken(token: string | null): void {
+  try {
+    if (token) sessionStorage.setItem(ACCESS_TOKEN_KEY, token)
+    else sessionStorage.removeItem(ACCESS_TOKEN_KEY)
+  } catch {
+    /* ignore */
+  }
+}
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/frontend/src/main.tsx
+========================================
+import { StrictMode } from 'react'
+import { createRoot } from 'react-dom/client'
+import './index.css'
+import App from './App.tsx'
+
+createRoot(document.getElementById('root')!).render(
+  <StrictMode>
+    <App />
+  </StrictMode>,
+)
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/frontend/src/notifications/AppNoticeContext.tsx
+========================================
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from 'react'
+import type { ListNoticeKind } from '../components/ListTableShell'
+
+type AppNotice = {
+  message: string
+  kind: ListNoticeKind
+}
+
+type AppNoticeContextValue = {
+  notice: AppNotice | null
+  notify: (message: string, kind: ListNoticeKind) => void
+  clearNotice: () => void
+}
+
+const AppNoticeContext = createContext<AppNoticeContextValue | null>(null)
+
+export function AppNoticeProvider({ children }: { children: ReactNode }) {
+  const [notice, setNotice] = useState<AppNotice | null>(null)
+
+  const notify = useCallback((message: string, kind: ListNoticeKind) => {
+    setNotice({ message, kind })
+  }, [])
+
+  const clearNotice = useCallback(() => {
+    setNotice(null)
+  }, [])
+
+  useEffect(() => {
+    if (!notice) return
+    const timer = window.setTimeout(() => setNotice(null), 3000)
+    return () => window.clearTimeout(timer)
+  }, [notice])
+
+  const value = useMemo(
+    () => ({
+      notice,
+      notify,
+      clearNotice,
+    }),
+    [notice, notify, clearNotice],
+  )
+
+  return <AppNoticeContext.Provider value={value}>{children}</AppNoticeContext.Provider>
+}
+
+export function useAppNotice(): AppNoticeContextValue {
+  const ctx = useContext(AppNoticeContext)
+  if (!ctx) throw new Error('useAppNotice вне AppNoticeProvider')
+  return ctx
+}
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/frontend/src/pages/AddressDetailPage.tsx
+========================================
+import { useEffect, useState } from 'react'
+import { useParams } from 'react-router-dom'
+import { DetailPageShell } from '../components/DetailPageShell'
+import { apiFetch } from '../lib/http'
+import { formatDt } from '../lib/formatDt'
+
+type AddressDetail = {
+  id: number
+  region: string
+  city: string
+  street: string
+  house: string
+  building: string | null
+  structure: string | null
+  flat: string | null
+  postal_code: string | null
+  full_address: string
+  short_address: string
+  full_address_with_postal_code: string
+  delivery_zone_id: number | null
+  fias_id: string | null
+  latitude: number | null
+  longitude: number | null
+  source_raw: string | null
+  created_at?: string
+  updated_at?: string
+}
+
+export function AddressDetailPage() {
+  const { addressId } = useParams<{ addressId: string }>()
+  const idNum = addressId ? Number(addressId) : NaN
+  const validId = Number.isInteger(idNum) && idNum > 0
+  
+  const [address, setAddress] = useState<AddressDetail | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  
+  useEffect(() => {
+    if (!validId) {
+      setLoading(false)
+      setError('Некорректный идентификатор')
+      return
+    }
+    
+    let cancelled = false
+    
+    async function load() {
+      setLoading(true)
+      setError(null)
+      try {
+        const res = await apiFetch(`/api/v1/parties/addresses/${idNum}`)
+        if (res.status === 404) {
+          if (!cancelled) setError('Адрес не найден')
+          return
+        }
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        const data = await res.json() as AddressDetail
+        if (!cancelled) setAddress(data)
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : 'Ошибка загрузки')
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+    
+    void load()
+    return () => {
+      cancelled = true
+    }
+  }, [validId, idNum])
+  
+  return (
+    <DetailPageShell
+      title={`Адрес${address ? ` #${address.id}` : ''}`}
+      backHref="/reference/addresses"
+      backLabel="← К списку адресов"
+      loading={loading}
+      error={error}
+    >
+      {!loading && !error && address ? (
+        <dl className="entity-dl">
+          <div className="entity-dl__row">
+            <dt className="entity-dl__dt">ID</dt>
+            <dd className="entity-dl__dd">{address.id}</dd>
+          </div>
+          <div className="entity-dl__row">
+            <dt className="entity-dl__dt">Полный адрес</dt>
+            <dd className="entity-dl__dd">{address.full_address}</dd>
+          </div>
+          <div className="entity-dl__row">
+            <dt className="entity-dl__dt">Краткий</dt>
+            <dd className="entity-dl__dd">{address.short_address}</dd>
+          </div>
+          <div className="entity-dl__row">
+            <dt className="entity-dl__dt">С индексом</dt>
+            <dd className="entity-dl__dd">{address.full_address_with_postal_code}</dd>
+          </div>
+          <div className="entity-dl__row">
+            <dt className="entity-dl__dt">Регион</dt>
+            <dd className="entity-dl__dd">{address.region}</dd>
+          </div>
+          <div className="entity-dl__row">
+            <dt className="entity-dl__dt">Город</dt>
+            <dd className="entity-dl__dd">{address.city}</dd>
+          </div>
+          <div className="entity-dl__row">
+            <dt className="entity-dl__dt">Улица</dt>
+            <dd className="entity-dl__dd">{address.street}</dd>
+          </div>
+          <div className="entity-dl__row">
+            <dt className="entity-dl__dt">Дом</dt>
+            <dd className="entity-dl__dd">{address.house}</dd>
+          </div>
+          {address.building ? (
+            <div className="entity-dl__row">
+              <dt className="entity-dl__dt">Корпус</dt>
+              <dd className="entity-dl__dd">{address.building}</dd>
+            </div>
+          ) : null}
+          {address.structure ? (
+            <div className="entity-dl__row">
+              <dt className="entity-dl__dt">Строение</dt>
+              <dd className="entity-dl__dd">{address.structure}</dd>
+            </div>
+          ) : null}
+          {address.flat ? (
+            <div className="entity-dl__row">
+              <dt className="entity-dl__dt">Квартира</dt>
+              <dd className="entity-dl__dd">{address.flat}</dd>
+            </div>
+          ) : null}
+          <div className="entity-dl__row">
+            <dt className="entity-dl__dt">Индекс</dt>
+            <dd className="entity-dl__dd">{address.postal_code ?? '—'}</dd>
+          </div>
+          {address.fias_id ? (
+            <div className="entity-dl__row">
+              <dt className="entity-dl__dt">ФИАС ID</dt>
+              <dd className="entity-dl__dd">
+                <code>{address.fias_id}</code>
+              </dd>
+            </div>
+          ) : null}
+          {address.latitude != null ? (
+            <div className="entity-dl__row">
+              <dt className="entity-dl__dt">Широта</dt>
+              <dd className="entity-dl__dd">{address.latitude}</dd>
+            </div>
+          ) : null}
+          {address.longitude != null ? (
+            <div className="entity-dl__row">
+              <dt className="entity-dl__dt">Долгота</dt>
+              <dd className="entity-dl__dd">{address.longitude}</dd>
+            </div>
+          ) : null}
+          {address.delivery_zone_id != null ? (
+            <div className="entity-dl__row">
+              <dt className="entity-dl__dt">Зона доставки (ID)</dt>
+              <dd className="entity-dl__dd">{address.delivery_zone_id}</dd>
+            </div>
+          ) : null}
+          {address.source_raw ? (
+            <div className="entity-dl__row">
+              <dt className="entity-dl__dt">Исходная строка</dt>
+              <dd className="entity-dl__dd">{address.source_raw}</dd>
+            </div>
+          ) : null}
+          {address.created_at ? (
+            <div className="entity-dl__row">
+              <dt className="entity-dl__dt">Создан</dt>
+              <dd className="entity-dl__dd">{formatDt(address.created_at)}</dd>
+            </div>
+          ) : null}
+          {address.updated_at ? (
+            <div className="entity-dl__row">
+              <dt className="entity-dl__dt">Обновлён</dt>
+              <dd className="entity-dl__dd">{formatDt(address.updated_at)}</dd>
+            </div>
+          ) : null}
+        </dl>
+      ) : null}
+    </DetailPageShell>
+  )
+}
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/frontend/src/pages/AddressesPage.tsx
+========================================
+import { useNavigate } from 'react-router-dom'
+import { EntityListPage } from '../features/entity-list/EntityListPage'
+import { addressConfig } from '../features/addresses/config'
+
+export function AddressesPage() {
+  const navigate = useNavigate()
+
+  return (
+    <EntityListPage
+      config={addressConfig.list}
+      onBack={() => navigate('/references')}
+      breadcrumbs={[
+        { label: 'Справочники', to: '/references' },
+        { label: 'Адреса' },
+      ]}
+    />
+  )
+}
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/frontend/src/pages/AddressInputAliasDetailPage.tsx
+========================================
+import { useEffect, useState } from 'react'
+import { useParams } from 'react-router-dom'
+import { DetailPageShell } from '../components/DetailPageShell'
+import { apiFetch } from '../lib/http'
+import { formatDt } from '../lib/formatDt'
+
+type AddressInputAliasDetail = {
+  id: number
+  raw_text: string
+  hash: string
+  normalized_address_id: number
+  full_address: string | null
+  source: string
+  created_at?: string
+  updated_at?: string
+}
+
+export function AddressInputAliasDetailPage() {
+  const { aliasId } = useParams<{ aliasId: string }>()
+  const idNum = aliasId ? Number(aliasId) : NaN
+  const validId = Number.isInteger(idNum) && idNum > 0
+  
+  const [alias, setAlias] = useState<AddressInputAliasDetail | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  
+  useEffect(() => {
+    if (!validId) {
+      setLoading(false)
+      setError('Некорректный идентификатор')
+      return
+    }
+    
+    let cancelled = false
+    
+    async function load() {
+      setLoading(true)
+      setError(null)
+      try {
+        const res = await apiFetch(`/api/v1/parties/aliases/${idNum}`)
+        if (res.status === 404) {
+          if (!cancelled) setError('Вариант ввода не найден')
+          return
+        }
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        const data = await res.json() as AddressInputAliasDetail
+        if (!cancelled) setAlias(data)
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : 'Ошибка загрузки')
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+    
+    void load()
+    return () => {
+      cancelled = true
+    }
+  }, [validId, idNum])
+  
+  return (
+    <DetailPageShell
+      title={`Вариант ввода${alias ? ` #${alias.id}` : ''}`}
+      backHref="/reference/address-input-aliases"
+      backLabel="← К списку вариантов ввода"
+      loading={loading}
+      error={error}
+    >
+      {!loading && !error && alias ? (
+        <dl className="entity-dl">
+          <div className="entity-dl__row">
+            <dt className="entity-dl__dt">ID</dt>
+            <dd className="entity-dl__dd">{alias.id}</dd>
+          </div>
+          <div className="entity-dl__row">
+            <dt className="entity-dl__dt">Исходная строка</dt>
+            <dd className="entity-dl__dd">{alias.raw_text}</dd>
+          </div>
+          <div className="entity-dl__row">
+            <dt className="entity-dl__dt">Норм. ключ</dt>
+            <dd className="entity-dl__dd">
+              <code>{alias.hash}</code>
+            </dd>
+          </div>
+          <div className="entity-dl__row">
+            <dt className="entity-dl__dt">Адрес ID</dt>
+            <dd className="entity-dl__dd">{alias.normalized_address_id}</dd>
+          </div>
+          {alias.full_address ? (
+            <div className="entity-dl__row">
+              <dt className="entity-dl__dt">Адрес</dt>
+              <dd className="entity-dl__dd">{alias.full_address}</dd>
+            </div>
+          ) : null}
+          {alias.source ? (
+            <div className="entity-dl__row">
+              <dt className="entity-dl__dt">Источник</dt>
+              <dd className="entity-dl__dd">{alias.source}</dd>
+            </div>
+          ) : null}
+          {alias.created_at ? (
+            <div className="entity-dl__row">
+              <dt className="entity-dl__dt">Создан</dt>
+              <dd className="entity-dl__dd">{formatDt(alias.created_at)}</dd>
+            </div>
+          ) : null}
+          {alias.updated_at ? (
+            <div className="entity-dl__row">
+              <dt className="entity-dl__dt">Обновлён</dt>
+              <dd className="entity-dl__dd">{formatDt(alias.updated_at)}</dd>
+            </div>
+          ) : null}
+        </dl>
+      ) : null}
+    </DetailPageShell>
+  )
+}
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/frontend/src/pages/AddressInputAliasesPage.tsx
+========================================
+import { useNavigate } from 'react-router-dom'
+import { EntityListPage } from '../features/entity-list/EntityListPage'
+import { addressInputAliasConfig } from '../features/addresses/addressInputAliasConfig'
+
+export function AddressInputAliasesPage() {
+  const navigate = useNavigate()
+
+  return (
+    <EntityListPage
+      config={addressInputAliasConfig.list}
+      onBack={() => navigate('/references')}
+      breadcrumbs={[
+        { label: 'Справочники', to: '/references' },
+        { label: 'Варианты ввода' },
+      ]}
+    />
+  )
+}
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/frontend/src/pages/BatchesPage.tsx
+========================================
+import { useNavigate } from 'react-router-dom'
+import { EntityListPage } from '../features/entity-list/EntityListPage'
+import { batchesConfig } from '../features/batches/config'
+
+export function BatchesPage() {
+  const navigate = useNavigate()
+  return (
+    <EntityListPage
+      config={batchesConfig}
+      onBack={() => navigate(-1)}
+      breadcrumbs={[
+        { label: 'Справочники', to: '/references' },
+        { label: 'Партии' },
+      ]}
+    />
+  )
+}
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/frontend/src/pages/ClientCreatePage.tsx
+========================================
+import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { apiFetch } from '../lib/http'
+
+export function ClientCreatePage() {
+  const navigate = useNavigate()
+  const [form, setForm] = useState({
+    depositor_id: '',
+    external_id: '',
+    name: '',
+    legal_name: '',
+    inn: '',
+    kpp: '',
+    is_edo: false,
+  })
+  const [depositors, setDepositors] = useState<{id: number, code: string}[]>([])
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    ;(async () => {
+      const res = await apiFetch('/api/v1/parties/depositors')
+      if (res.ok) setDepositors(await res.json())
+    })()
+  }, [])
+
+  async function onSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    setSaving(true)
+    setError(null)
+    try {
+      const res = await apiFetch('/api/v1/parties/clients', {
+        method: 'POST',
+        body: JSON.stringify({
+          ...form,
+          depositor_id: Number(form.depositor_id),
+        }),
+      })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const created = await res.json()
+      navigate(`/reference/clients/${created.id}`)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Ошибка')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  function set(field: string, value: string | boolean) {
+    setForm((prev) => ({ ...prev, [field]: value }))
+  }
+
+  return (
+    <section className="app-card app-card--wide">
+      <h1 className="page-title">Новый клиент</h1>
+      <form onSubmit={onSubmit} className="wh-form">
+        <label>Поклажедатель *
+          <select value={form.depositor_id} onChange={(e) => set('depositor_id', e.target.value)} required>
+            <option value="">— выберите —</option>
+            {depositors.map((d) => <option key={d.id} value={d.id}>{d.code}</option>)}
+          </select>
+        </label>
+        <label>Внешний код *<input value={form.external_id} onChange={(e) => set('external_id', e.target.value)} required /></label>
+        <label>Наименование *<input value={form.name} onChange={(e) => set('name', e.target.value)} required /></label>
+        <label>Полное наименование<input value={form.legal_name} onChange={(e) => set('legal_name', e.target.value)} /></label>
+        <label>ИНН<input value={form.inn} onChange={(e) => set('inn', e.target.value)} /></label>
+        <label>КПП<input value={form.kpp} onChange={(e) => set('kpp', e.target.value)} /></label>
+        <label className="wh-form__check"><input type="checkbox" checked={form.is_edo} onChange={(e) => set('is_edo', e.target.checked)} /> ЭДО</label>
+        {error ? <p className="wh-form__err">{error}</p> : null}
+        <div className="wh-form__actions">
+          <button type="submit" disabled={saving}>{saving ? 'Создание...' : 'Создать'}</button>
+          <button type="button" onClick={() => navigate('/reference/clients')}>Отмена</button>
+        </div>
+      </form>
+    </section>
+  )
+}
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/frontend/src/pages/ClientDetailPage.tsx
+========================================
+import { useEffect, useState } from 'react'
+import { useParams, useNavigate } from 'react-router-dom'
+import { useAuth } from '../auth/AuthContext'
+import { DetailPageShell } from '../components/DetailPageShell'
+import { apiFetch } from '../lib/http'
+
+type Client = {
+  id: number
+  depositor_id: number
+  external_id: string
+  name: string
+  legal_name: string
+  inn: string
+  kpp: string
+  is_edo: boolean
+  is_deleted: boolean
+  is_active: boolean
+}
+
+export function ClientDetailPage() {
+  const navigate = useNavigate()
+  const { user } = useAuth()
+  const canEdit = user?.permissions?.all === true
+  const { clientId } = useParams<{ clientId: string }>()
+  const [client, setClient] = useState<Client | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!clientId) return
+    ;(async () => {
+      setLoading(true)
+      try {
+        const res = await apiFetch(`/api/v1/parties/clients/${clientId}`)
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        setClient(await res.json())
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Ошибка')
+      } finally {
+        setLoading(false)
+      }
+    })()
+  }, [clientId])
+
+  return (
+    <DetailPageShell
+      title={client ? client.name : 'Клиент'}
+      breadcrumbs={[
+        { label: 'Справочники', to: '/references' },
+        { label: 'Клиенты', to: '/reference/clients' },
+        { label: client ? `#${client.id}` : '' },
+      ]}
+      loading={loading}
+      error={error}
+      canEdit={canEdit}
+      onEdit={() => navigate('edit')}
+    >
+      {client ? (
+        <dl className="entity-dl">
+          <div className="entity-dl__row"><dt>ID</dt><dd>{client.id}</dd></div>
+          <div className="entity-dl__row"><dt>Внешний код</dt><dd>{client.external_id}</dd></div>
+          <div className="entity-dl__row"><dt>Наименование</dt><dd>{client.name}</dd></div>
+          <div className="entity-dl__row"><dt>Полное</dt><dd>{client.legal_name}</dd></div>
+          <div className="entity-dl__row"><dt>ИНН</dt><dd>{client.inn}</dd></div>
+          <div className="entity-dl__row"><dt>КПП</dt><dd>{client.kpp}</dd></div>
+          <div className="entity-dl__row"><dt>ЭДО</dt><dd>{client.is_edo ? 'Да' : 'Нет'}</dd></div>
+        </dl>
+      ) : null}
+    </DetailPageShell>
+  )
+}
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/frontend/src/pages/ClientsPage.tsx
+========================================
+import { useNavigate } from 'react-router-dom'
+import { useAuth } from '../auth/AuthContext'
+import { EntityListPage } from '../features/entity-list/EntityListPage'
+import { clientConfig } from '../features/clients/config'
+
+export function ClientsPage() {
+  const navigate = useNavigate()
+  const { user } = useAuth()
+  const canCreate = user?.permissions?.all === true
+  return (
+    <EntityListPage
+      config={clientConfig.list}
+      onBack={() => navigate('/references')}
+      canCreate={canCreate}
+      breadcrumbs={[{ label: 'Справочники', to: '/references' }, { label: 'Клиенты' }]}
+    />
+  )
+}
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/frontend/src/pages/ContractCreatePage.tsx
+========================================
+import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { apiFetch } from '../lib/http'
+
+export function ContractCreatePage() {
+  const navigate = useNavigate()
+  const [form, setForm] = useState({
+    number: '',
+    customer_id: '',
+    executor_id: '',
+    contract_type: 'storage',
+    start_date: '',
+    end_date: '',
+  })
+  const [legalEntities, setLegalEntities] = useState<{id: number, name: string}[]>([])
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    ;(async () => {
+      const res = await apiFetch('/api/v1/parties/legal-entities')
+      if (res.ok) setLegalEntities(await res.json())
+    })()
+  }, [])
+
+  async function onSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    setSaving(true)
+    setError(null)
+    try {
+      const res = await apiFetch('/api/v1/parties/contracts', {
+        method: 'POST',
+        body: JSON.stringify({
+          number: form.number,
+          customer_id: Number(form.customer_id),
+          executor_id: Number(form.executor_id),
+          contract_type: form.contract_type,
+          start_date: form.start_date,
+          end_date: form.end_date || null,
+        }),
+      })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const created = await res.json()
+      navigate(`/reference/contracts/${created.id}`)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Ошибка')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <section className="app-card app-card--wide">
+      <h1 className="page-title">Новый договор</h1>
+      <form onSubmit={onSubmit} className="wh-form">
+        <label>Номер *<input value={form.number} onChange={(e) => setForm((p) => ({...p, number: e.target.value}))} required /></label>
+        <label>Заказчик *
+          <select value={form.customer_id} onChange={(e) => setForm((p) => ({...p, customer_id: e.target.value}))} required>
+            <option value="">— выберите —</option>
+            {legalEntities.map((le) => <option key={le.id} value={le.id}>{le.name}</option>)}
+          </select>
+        </label>
+        <label>Исполнитель *
+          <select value={form.executor_id} onChange={(e) => setForm((p) => ({...p, executor_id: e.target.value}))} required>
+            <option value="">— выберите —</option>
+            {legalEntities.map((le) => <option key={le.id} value={le.id}>{le.name}</option>)}
+          </select>
+        </label>
+        <label>Тип
+          <select value={form.contract_type} onChange={(e) => setForm((p) => ({...p, contract_type: e.target.value}))}>
+            <option value="storage">Хранение</option>
+            <option value="delivery">Доставка</option>
+            <option value="services">Услуги</option>
+          </select>
+        </label>
+        <label>Дата начала *<input type="date" value={form.start_date} onChange={(e) => setForm((p) => ({...p, start_date: e.target.value}))} required /></label>
+        <label>Дата окончания<input type="date" value={form.end_date} onChange={(e) => setForm((p) => ({...p, end_date: e.target.value}))} /></label>
+        {error ? <p className="wh-form__err">{error}</p> : null}
+        <div className="wh-form__actions">
+          <button type="submit" disabled={saving}>{saving ? 'Создание...' : 'Создать'}</button>
+          <button type="button" onClick={() => navigate('/reference/contracts')}>Отмена</button>
+        </div>
+      </form>
+    </section>
+  )
+}
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/frontend/src/pages/ContractDetailPage.tsx
+========================================
+import { useEffect, useState } from 'react'
+import { useParams, useNavigate } from 'react-router-dom'
+import { useAuth } from '../auth/AuthContext'
+import { DetailPageShell } from '../components/DetailPageShell'
+import { apiFetch } from '../lib/http'
+
+type Contract = {
+  id: number
+  number: string
+  customer_id: number
+  executor_id: number
+  contract_type: string
+  start_date: string
+  end_date: string | null
+  status: string
+  is_deleted: boolean
+  is_active: boolean
+}
+
+export function ContractDetailPage() {
+  const navigate = useNavigate()
+  const { user } = useAuth()
+  const canEdit = user?.permissions?.all === true
+  const { contractId } = useParams<{ contractId: string }>()
+  const [contract, setContract] = useState<Contract | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!contractId) return
+    ;(async () => {
+      setLoading(true)
+      try {
+        const res = await apiFetch(`/api/v1/parties/contracts/${contractId}`)
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        setContract(await res.json())
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Ошибка')
+      } finally {
+        setLoading(false)
+      }
+    })()
+  }, [contractId])
+
+  return (
+    <DetailPageShell
+      title={contract ? `Договор ${contract.number}` : 'Договор'}
+      breadcrumbs={[
+        { label: 'Справочники', to: '/references' },
+        { label: 'Договоры', to: '/reference/contracts' },
+        { label: contract ? contract.number : '' },
+      ]}
+      loading={loading}
+      error={error}
+      canEdit={canEdit}
+      onEdit={() => navigate('edit')}
+    >
+      {contract ? (
+        <dl className="entity-dl">
+          <div className="entity-dl__row"><dt>ID</dt><dd>{contract.id}</dd></div>
+          <div className="entity-dl__row"><dt>Номер</dt><dd>{contract.number}</dd></div>
+          <div className="entity-dl__row"><dt>Тип</dt><dd>{contract.contract_type}</dd></div>
+          <div className="entity-dl__row"><dt>Начало</dt><dd>{contract.start_date}</dd></div>
+          <div className="entity-dl__row"><dt>Окончание</dt><dd>{contract.end_date || '—'}</dd></div>
+          <div className="entity-dl__row"><dt>Статус</dt><dd>{contract.status}</dd></div>
+        </dl>
+      ) : null}
+    </DetailPageShell>
+  )
+}
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/frontend/src/pages/ContractsPage.tsx
+========================================
+import { useNavigate } from 'react-router-dom'
+import { useAuth } from '../auth/AuthContext'
+import { EntityListPage } from '../features/entity-list/EntityListPage'
+import { contractConfig } from '../features/contracts/config'
+
+export function ContractsPage() {
+  const navigate = useNavigate()
+  const { user } = useAuth()
+  const canCreate = user?.permissions?.all === true
+  return (
+    <EntityListPage
+      config={contractConfig.list}
+      onBack={() => navigate('/references')}
+      canCreate={canCreate}
+      breadcrumbs={[{ label: 'Справочники', to: '/references' }, { label: 'Договоры' }]}
+    />
+  )
+}
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/frontend/src/pages/DeliveryOrdersPage.tsx
+========================================
+import { useNavigate } from 'react-router-dom'
+import { EntityListPage } from '../features/entity-list/EntityListPage'
+import { deliveryOrdersConfig } from '../features/delivery-orders/config'
+
+export function DeliveryOrdersPage() {
+  const navigate = useNavigate()
+  return (
+    <EntityListPage
+      config={deliveryOrdersConfig}
+      onBack={() => navigate(-1)}
+      breadcrumbs={[
+        { label: 'Доставка', to: '/' },
+        { label: 'Заказы' },
+      ]}
+    />
+  )
+}
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/frontend/src/pages/DeliveryZonesPage.tsx
+========================================
+import { useNavigate } from 'react-router-dom'
+import { EntityListPage } from '../features/entity-list/EntityListPage'
+import { deliveryZoneConfig } from '../features/delivery-zones/config'
+
+export function DeliveryZonesPage() {
+  const navigate = useNavigate()
+
+  return (
+    <EntityListPage
+      config={deliveryZoneConfig.list}
+      onBack={() => navigate('/references')}
+      breadcrumbs={[
+        { label: 'Справочники', to: '/references' },
+        { label: 'Зоны доставки' },
+      ]}
+    />
+  )
+}
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/frontend/src/pages/DepositorCreatePage.tsx
+========================================
+import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { apiFetch } from '../lib/http'
+
+export function DepositorCreatePage() {
+  const navigate = useNavigate()
+  const [form, setForm] = useState({ code: '', legal_entity_id: '' })
+  const [legalEntities, setLegalEntities] = useState<{id: number, name: string}[]>([])
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    ;(async () => {
+      const res = await apiFetch('/api/v1/parties/legal-entities')
+      if (res.ok) setLegalEntities(await res.json())
+    })()
+  }, [])
+
+  async function onSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    setSaving(true)
+    setError(null)
+    try {
+      const res = await apiFetch('/api/v1/parties/depositors', {
+        method: 'POST',
+        body: JSON.stringify({
+          code: form.code,
+          legal_entity_id: Number(form.legal_entity_id),
+        }),
+      })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const created = await res.json()
+      navigate(`/reference/depositors/${created.id}`)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Ошибка')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <section className="app-card app-card--wide">
+      <h1 className="page-title">Новый поклажедатель</h1>
+      <form onSubmit={onSubmit} className="wh-form">
+        <label>Код<input value={form.code} onChange={(e) => setForm((p) => ({...p, code: e.target.value}))} /></label>
+        <label>Юрлицо *
+          <select value={form.legal_entity_id} onChange={(e) => setForm((p) => ({...p, legal_entity_id: e.target.value}))} required>
+            <option value="">— выберите —</option>
+            {legalEntities.map((le) => <option key={le.id} value={le.id}>{le.name}</option>)}
+          </select>
+        </label>
+        {error ? <p className="wh-form__err">{error}</p> : null}
+        <div className="wh-form__actions">
+          <button type="submit" disabled={saving}>{saving ? 'Создание...' : 'Создать'}</button>
+          <button type="button" onClick={() => navigate('/reference/depositors')}>Отмена</button>
+        </div>
+      </form>
+    </section>
+  )
+}
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/frontend/src/pages/DepositorDetailPage.tsx
+========================================
+import { useEffect, useState } from 'react'
+import { useParams, useNavigate } from 'react-router-dom'
+import { useAuth } from '../auth/AuthContext'
+import { DetailPageShell } from '../components/DetailPageShell'
+import { apiFetch } from '../lib/http'
+
+type Depositor = {
+  id: number
+  code: string
+  legal_entity_id: number
+  is_deleted: boolean
+  is_active: boolean
+}
+
+export function DepositorDetailPage() {
+  const navigate = useNavigate()
+  const { user } = useAuth()
+  const canEdit = user?.permissions?.all === true
+  const { depositorId } = useParams<{ depositorId: string }>()
+  const [depositor, setDepositor] = useState<Depositor | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!depositorId) return
+    ;(async () => {
+      setLoading(true)
+      try {
+        const res = await apiFetch(`/api/v1/parties/depositors/${depositorId}`)
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        setDepositor(await res.json())
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Ошибка')
+      } finally {
+        setLoading(false)
+      }
+    })()
+  }, [depositorId])
+
+  return (
+    <DetailPageShell
+      title={depositor ? `Поклажедатель #${depositor.id}` : 'Поклажедатель'}
+      breadcrumbs={[
+        { label: 'Справочники', to: '/references' },
+        { label: 'Поклажедатели', to: '/reference/depositors' },
+        { label: depositor ? `#${depositor.id}` : '' },
+      ]}
+      loading={loading}
+      error={error}
+      canEdit={canEdit}
+      onEdit={() => navigate('edit')}
+    >
+      {depositor ? (
+        <dl className="entity-dl">
+          <div className="entity-dl__row"><dt>ID</dt><dd>{depositor.id}</dd></div>
+          <div className="entity-dl__row"><dt>Код</dt><dd>{depositor.code}</dd></div>
+          <div className="entity-dl__row"><dt>Юрлицо ID</dt><dd>{depositor.legal_entity_id}</dd></div>
+          <div className="entity-dl__row"><dt>Удалён</dt><dd>{depositor.is_deleted ? 'Да' : 'Нет'}</dd></div>
+        </dl>
+      ) : null}
+    </DetailPageShell>
+  )
+}
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/frontend/src/pages/DepositorsPage.tsx
+========================================
+import { useNavigate } from 'react-router-dom'
+import { useAuth } from '../auth/AuthContext'
+import { EntityListPage } from '../features/entity-list/EntityListPage'
+import { depositorConfig } from '../features/depositors/config'
+
+export function DepositorsPage() {
+  const navigate = useNavigate()
+  const { user } = useAuth()
+  const canCreate = user?.permissions?.all === true
+  return (
+    <EntityListPage
+      config={depositorConfig.list}
+      onBack={() => navigate('/references')}
+      canCreate={canCreate}
+      breadcrumbs={[{ label: 'Справочники', to: '/references' }, { label: 'Поклажедатели' }]}
+    />
+  )
+}
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/frontend/src/pages/DocumentsPage.tsx
+========================================
+import { useNavigate } from 'react-router-dom'
+import { EntityListPage } from '../features/entity-list/EntityListPage'
+import { documentsConfig } from '../features/documents/config'
+
+export function DocumentsPage() {
+  const navigate = useNavigate()
+  return (
+    <EntityListPage
+      config={documentsConfig}
+      onBack={() => navigate(-1)}
+      breadcrumbs={[
+        { label: 'Главная', to: '/' },
+        { label: 'Документы' },
+      ]}
+    />
+  )
+}
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/frontend/src/pages/DriversPage.tsx
+========================================
+import { useNavigate } from 'react-router-dom'
+import { EntityListPage } from '../features/entity-list/EntityListPage'
+import { driversConfig } from '../features/drivers/config'
+
+export function DriversPage() {
+  const navigate = useNavigate()
+  return (
+    <EntityListPage
+      config={driversConfig}
+      onBack={() => navigate(-1)}
+      breadcrumbs={[
+        { label: 'Справочники', to: '/references' },
+        { label: 'Водители' },
+      ]}
+    />
+  )
+}
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/frontend/src/pages/FilesPage.tsx
+========================================
+import { useNavigate } from 'react-router-dom'
+import { EntityListPage } from '../features/entity-list/EntityListPage'
+import { filesConfig } from '../features/files/config'
+
+export function FilesPage() {
+  const navigate = useNavigate()
+  return (
+    <EntityListPage
+      config={filesConfig}
+      onBack={() => navigate(-1)}
+      breadcrumbs={[
+        { label: 'Главная', to: '/' },
+        { label: 'Файлы' },
+      ]}
+    />
+  )
+}
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/frontend/src/pages/HomePage.tsx
+========================================
+export function HomePage() {
+  return (
+    <section className="app-card app-card--wide">
+      <h1 className="page-title">Главная</h1>
+      <p>Добро пожаловать в систему управления складом</p>
+    </section>
+  )
+}
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/frontend/src/pages/IntegrationLogsPage.tsx
+========================================
+import { useNavigate } from 'react-router-dom'
+import { EntityListPage } from '../features/entity-list/EntityListPage'
+import { integrationLogsConfig } from '../features/integration-logs/config'
+
+export function IntegrationLogsPage() {
+  const navigate = useNavigate()
+  return (
+    <EntityListPage
+      config={integrationLogsConfig}
+      onBack={() => navigate(-1)}
+      breadcrumbs={[
+        { label: 'Интеграции', to: '/' },
+        { label: 'Логи' },
+      ]}
+    />
+  )
+}
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/frontend/src/pages/IntegrationProfilesPage.tsx
+========================================
+import { useNavigate } from 'react-router-dom'
+import { EntityListPage } from '../features/entity-list/EntityListPage'
+import { integrationProfilesConfig } from '../features/integration-profiles/config'
+
+export function IntegrationProfilesPage() {
+  const navigate = useNavigate()
+  return (
+    <EntityListPage
+      config={integrationProfilesConfig}
+      onBack={() => navigate(-1)}
+      breadcrumbs={[
+        { label: 'Интеграции', to: '/' },
+        { label: 'Профили' },
+      ]}
+    />
+  )
+}
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/frontend/src/pages/LegalEntitiesPage.tsx
+========================================
+import { useNavigate } from 'react-router-dom'
+import { useAuth } from '../auth/AuthContext'
+import { EntityListPage } from '../features/entity-list/EntityListPage'
+import { legalEntityConfig } from '../features/legal-entities/config'
+
+export function LegalEntitiesPage() {
+  const navigate = useNavigate()
+  const { user } = useAuth()
+  const canCreate = user?.permissions?.all === true
+  return (
+    <EntityListPage
+      config={legalEntityConfig.list}
+      onBack={() => navigate('/references')}
+      canCreate={canCreate}
+      breadcrumbs={[{ label: 'Справочники', to: '/references' }, { label: 'Юрлица' }]}
+    />
+  )
+}
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/frontend/src/pages/LegalEntityCreatePage.tsx
+========================================
+import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { apiFetch } from '../lib/http'
+
+export function LegalEntityCreatePage() {
+  const navigate = useNavigate()
+  const [form, setForm] = useState({
+    name: '',
+    legal_name: '',
+    inn: '',
+    kpp: '',
+    ogrn: '',
+    phone: '',
+    email: '',
+  })
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function onSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    setSaving(true)
+    setError(null)
+    try {
+      const res = await apiFetch('/api/v1/parties/legal-entities', {
+        method: 'POST',
+        body: JSON.stringify(form),
+      })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const created = await res.json()
+      navigate(`/reference/legal-entities/${created.id}`)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Ошибка')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  function set(field: string, value: string) {
+    setForm((prev) => ({ ...prev, [field]: value }))
+  }
+
+  return (
+    <section className="app-card app-card--wide">
+      <h1 className="page-title">Новое юрлицо</h1>
+      <form onSubmit={onSubmit} className="wh-form">
+        <label>Наименование *<input value={form.name} onChange={(e) => set('name', e.target.value)} required /></label>
+        <label>Полное наименование<input value={form.legal_name} onChange={(e) => set('legal_name', e.target.value)} /></label>
+        <label>ИНН<input value={form.inn} onChange={(e) => set('inn', e.target.value)} /></label>
+        <label>КПП<input value={form.kpp} onChange={(e) => set('kpp', e.target.value)} /></label>
+        <label>ОГРН<input value={form.ogrn} onChange={(e) => set('ogrn', e.target.value)} /></label>
+        <label>Телефон<input value={form.phone} onChange={(e) => set('phone', e.target.value)} /></label>
+        <label>Email<input type="email" value={form.email} onChange={(e) => set('email', e.target.value)} /></label>
+        {error ? <p className="wh-form__err">{error}</p> : null}
+        <div className="wh-form__actions">
+          <button type="submit" disabled={saving}>{saving ? 'Создание...' : 'Создать'}</button>
+          <button type="button" onClick={() => navigate('/reference/legal-entities')}>Отмена</button>
+        </div>
+      </form>
+    </section>
+  )
+}
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/frontend/src/pages/LegalEntityDetailPage.tsx
+========================================
+import { useEffect, useState } from 'react'
+import { useParams } from 'react-router-dom'
+import { useAuth } from '../auth/AuthContext'
+import { DetailPageShell } from '../components/DetailPageShell'
+import { apiFetch } from '../lib/http'
+
+type LegalEntity = {
+  id: number
+  name: string
+  legal_name: string
+  inn: string
+  kpp: string
+  ogrn: string
+  phone: string
+  email: string
+  is_deleted: boolean
+  is_active: boolean
+}
+
+export function LegalEntityDetailPage() {
+  
+  const { user } = useAuth()
+  const canEdit = user?.permissions?.all === true
+  const { entityId } = useParams<{ entityId: string }>()
+  const [entity, setEntity] = useState<LegalEntity | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!entityId) return
+    ;(async () => {
+      setLoading(true)
+      try {
+        const res = await apiFetch(`/api/v1/parties/legal-entities/${entityId}`)
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        setEntity(await res.json())
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Ошибка')
+      } finally {
+        setLoading(false)
+      }
+    })()
+  }, [entityId])
+
+  return (
+    <DetailPageShell
+      title={entity ? entity.name : 'Юрлицо'}
+      breadcrumbs={[
+        { label: 'Справочники', to: '/references' },
+        { label: 'Юрлица', to: '/reference/legal-entities' },
+        { label: entity ? `#${entity.id}` : '' },
+      ]}
+      loading={loading}
+      error={error}
+      canEdit={canEdit}
+      editPath={entity ? `/reference/legal-entities/${entity.id}/edit` : undefined}
+    >
+      {entity ? (
+        <dl className="entity-dl">
+          <div className="entity-dl__row"><dt>ID</dt><dd>{entity.id}</dd></div>
+          <div className="entity-dl__row"><dt>Наименование</dt><dd>{entity.name}</dd></div>
+          <div className="entity-dl__row"><dt>Полное</dt><dd>{entity.legal_name}</dd></div>
+          <div className="entity-dl__row"><dt>ИНН</dt><dd>{entity.inn}</dd></div>
+          <div className="entity-dl__row"><dt>КПП</dt><dd>{entity.kpp}</dd></div>
+          <div className="entity-dl__row"><dt>ОГРН</dt><dd>{entity.ogrn}</dd></div>
+          <div className="entity-dl__row"><dt>Телефон</dt><dd>{entity.phone}</dd></div>
+          <div className="entity-dl__row"><dt>Email</dt><dd>{entity.email}</dd></div>
+          <div className="entity-dl__row"><dt>Удалено</dt><dd>{entity.is_deleted ? 'Да' : 'Нет'}</dd></div>
+        </dl>
+      ) : null}
+    </DetailPageShell>
+  )
+}
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/frontend/src/pages/LegalEntityEditPage.tsx
+========================================
+import { useEffect, useState } from 'react'
+import { useNavigate, useParams } from 'react-router-dom'
+import { apiFetch } from '../lib/http'
+
+export function LegalEntityEditPage() {
+  const { entityId } = useParams<{ entityId: string }>()
+  const navigate = useNavigate()
+  const [form, setForm] = useState({
+    name: '',
+    legal_name: '',
+    inn: '',
+    kpp: '',
+    ogrn: '',
+    phone: '',
+    email: '',
+  })
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!entityId) return
+    ;(async () => {
+      setLoading(true)
+      try {
+        const res = await apiFetch(`/api/v1/parties/legal-entities/${entityId}`)
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        const data = await res.json()
+        setForm({
+          name: data.name,
+          legal_name: data.legal_name,
+          inn: data.inn,
+          kpp: data.kpp,
+          ogrn: data.ogrn,
+          phone: data.phone,
+          email: data.email,
+        })
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Ошибка')
+      } finally {
+        setLoading(false)
+      }
+    })()
+  }, [entityId])
+
+  async function onSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    setSaving(true)
+    setError(null)
+    try {
+      const res = await apiFetch(`/api/v1/parties/legal-entities/${entityId}`, {
+        method: 'PATCH',
+        body: JSON.stringify(form),
+      })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      navigate(`/reference/legal-entities/${entityId}`)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Ошибка')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  function set(field: string, value: string) {
+    setForm((prev) => ({ ...prev, [field]: value }))
+  }
+
+  if (loading) return <p>Загрузка...</p>
+
+  return (
+    <section className="app-card app-card--wide">
+      <h1 className="page-title">Редактирование юрлица</h1>
+      <form onSubmit={onSubmit} className="wh-form">
+        <label>Наименование *<input value={form.name} onChange={(e) => set('name', e.target.value)} required /></label>
+        <label>Полное наименование<input value={form.legal_name} onChange={(e) => set('legal_name', e.target.value)} /></label>
+        <label>ИНН<input value={form.inn} onChange={(e) => set('inn', e.target.value)} /></label>
+        <label>КПП<input value={form.kpp} onChange={(e) => set('kpp', e.target.value)} /></label>
+        <label>ОГРН<input value={form.ogrn} onChange={(e) => set('ogrn', e.target.value)} /></label>
+        <label>Телефон<input value={form.phone} onChange={(e) => set('phone', e.target.value)} /></label>
+        <label>Email<input type="email" value={form.email} onChange={(e) => set('email', e.target.value)} /></label>
+        {error ? <p className="wh-form__err">{error}</p> : null}
+        <div className="wh-form__actions">
+          <button type="submit" disabled={saving}>{saving ? 'Сохранение...' : 'Сохранить'}</button>
+          <button type="button" onClick={() => navigate(`/reference/legal-entities/${entityId}`)}>Отмена</button>
+        </div>
+      </form>
+    </section>
+  )
+}
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/frontend/src/pages/LoginPage.tsx
+========================================
+import { type FormEvent, useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
+import { useAuth } from '../auth/AuthContext'
+
+export function LoginPage() {
+  const { login } = useAuth()
+  const navigate = useNavigate()
+  const location = useLocation()
+  const [username, setUsername] = useState('')
+  const [password, setPassword] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
+
+  const from = (location.state as { from?: string })?.from ?? '/'
+
+  async function onSubmit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+    setError(null)
+    setLoading(true)
+    try {
+      await login(username, password)
+      navigate(from, { replace: true })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Ошибка входа')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="login-page">
+      <div className="login-container">
+        <div className="login-header">
+          <div className="login-logo">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" aria-hidden>
+              <path
+                d="M3 21V8l9-5 9 5v13h-6v-8H9v8H3z"
+                fill="currentColor"
+                opacity="0.9"
+              />
+            </svg>
+          </div>
+          <h1 className="login-title">Складская система</h1>
+          <p className="login-subtitle">Войдите в систему для продолжения работы</p>
+        </div>
+
+        <form className="login-form" onSubmit={onSubmit}>
+          <div className="login-field">
+            <label htmlFor="username" className="login-label">
+              Логин
+            </label>
+            <div className="login-input-wrapper">
+              <svg
+                className="login-input-icon"
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                aria-hidden
+              >
+                <path
+                  d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"
+                  stroke="currentColor"
+                  strokeWidth="2"

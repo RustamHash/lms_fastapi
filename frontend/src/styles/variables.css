@@ -1,0 +1,55 @@
+/* CSS-переменные для всего приложения */
+:root {
+  /* Основные цвета */
+  --color-primary: #2563eb;
+  --color-primary-hover: #1d4ed8;
+  --color-success: #27ae60;
+  --color-success-hover: #229954;
+  --color-danger: #c0392b;
+  --color-danger-hover: #a93226;
+  --color-warning: #b45309;
+  --color-info: #1d4ed8;
+  
+  /* Фоны */
+  --bg-body: #f4f6f8;
+  --bg-card: #ffffff;
+  --bg-navbar: #1f2d3d;
+  --bg-navbar-hover: #2e4358;
+  --bg-table-header: #2c3e50;
+  --bg-table-filter: #34495e;
+  --bg-hover: #e8f4f8;
+  
+  /* Текст */
+  --text-primary: #222222;
+  --text-secondary: #64748b;
+  --text-light: #ffffff;
+  --text-muted: #94a3b8;
+  --text-link: #2c7be5;
+  
+  /* Границы */
+  --border-color: #e2e8f0;
+  --border-color-light: #f1f5f9;
+  --border-radius-sm: 4px;
+  --border-radius-md: 6px;
+  --border-radius-lg: 8px;
+  
+  /* Отступы */
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 16px;
+  --spacing-lg: 24px;
+  
+  /* Тени */
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.1);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.15);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.2);
+  
+  /* Типографика */
+  --font-family: Arial, sans-serif;
+  --font-size-xs: 11px;
+  --font-size-sm: 13px;
+  --font-size-md: 14px;
+  --font-size-lg: 16px;
+  --font-size-xl: 20px;
+  --font-size-2xl: 24px;
+}

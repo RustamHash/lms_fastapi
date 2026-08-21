@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom'
-import { EntityListPage } from '../features/entity-list/EntityListPage'
+import { EntityListPage } from '../features/entity-system/EntityListPage'
 import { deliveryZoneConfig } from '../features/delivery-zones/config'
 
 export function DeliveryZonesPage() {

@@ -2,6 +2,8 @@ import { useCallback, useMemo, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from '../../../lib/http'
 import { useColumnPrefs } from '../../../hooks/useColumnPrefs'
+import { useTableSettings, type TablePrefs } from '../../../hooks/useTableSettings'
+import { useListPresets } from '../../../hooks/useListPresets'
 import type { ListPageConfig, ColumnConfig } from '../types'
 
 type SortState = {
@@ -13,13 +15,13 @@ export function useEntityList<Row extends { id: number }>(config: ListPageConfig
   const queryClient = useQueryClient()
   
   const { data: rows = [], isLoading, error } = useQuery({
-    queryKey: ['entity-list', config.entityKey],
+    queryKey: ['entity-system', config.entityKey],
     queryFn: async () => {
       const res = await apiFetch(config.apiUrl)
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       return res.json() as Promise<Row[]>
     },
-    staleTime: 5 * 60 * 1000,
+    staleTime: config.staleTime ?? 5 * 60 * 1000,
     refetchOnWindowFocus: false,
   })
   
@@ -35,13 +37,50 @@ export function useEntityList<Row extends { id: number }>(config: ListPageConfig
   
   const prefs = useColumnPrefs(config.entityKey, columnDefs, defaultHidden)
   
+  const tableSettings = useTableSettings(config.entityKey)
+  const listPresets = useListPresets(config.entityKey)
+  
   const [sort, setSort] = useState<SortState>(
-    config.defaultSort ? { col: config.defaultSort.column, dir: config.defaultSort.direction } : { col: null, dir: 'asc' }
+    tableSettings.prefs?.sort
+      ? { col: tableSettings.prefs.sort.column, dir: tableSettings.prefs.sort.direction }
+      : config.defaultSort
+        ? { col: config.defaultSort.column, dir: config.defaultSort.direction }
+        : { col: null, dir: 'asc' }
   )
-  const [filters, setFilters] = useState<Record<string, string>>({})
-  const [excludeFilters, setExcludeFilters] = useState<Record<string, string[]>>({})
+  const [filters, setFilters] = useState<Record<string, string>>(
+    tableSettings.prefs?.filters ?? {}
+  )
+  const [excludeFilters, setExcludeFilters] = useState<Record<string, string[]>>(
+    tableSettings.prefs?.exclude_filters ?? {}
+  )
+  const [quickFilters, setQuickFilters] = useState<string[]>(
+    tableSettings.prefs?.quick_filters ?? []
+  )
   const [selected, setSelected] = useState<Set<number>>(() => new Set())
   
+  // Автосохранение настроек при изменении
+  const currentPrefs: TablePrefs = {
+    order: prefs.order,
+    hidden: prefs.hidden,
+    widths: prefs.widths,
+    filters,
+    exclude_filters: excludeFilters,
+    sort: sort.col ? { column: sort.col, direction: sort.dir } : null,
+    quick_filters: quickFilters,
+  }
+
+  const saveCurrentPrefs = useCallback(() => {
+    void tableSettings.save(currentPrefs)
+  }, [currentPrefs, tableSettings])
+
+  const resetToDefaults = useCallback(async () => {
+    const defaults = await tableSettings.resetToDefaults()
+    setFilters(defaults.filters)
+    setExcludeFilters(defaults.exclude_filters)
+    setSort(defaults.sort ? { col: defaults.sort.column, dir: defaults.sort.direction } : { col: null, dir: 'asc' })
+    setQuickFilters(defaults.quick_filters)
+  }, [tableSettings])
+
   const filtered = useMemo(() => {
     let result = [...rows]
     
@@ -109,7 +148,7 @@ export function useEntityList<Row extends { id: number }>(config: ListPageConfig
   }, [])
   
   const reload = useCallback(() => {
-    queryClient.invalidateQueries({ queryKey: ['entity-list', config.entityKey] })
+    queryClient.invalidateQueries({ queryKey: ['entity-system', config.entityKey] })
     clearSelection()
   }, [queryClient, config.entityKey, clearSelection])
   
@@ -178,6 +217,14 @@ export function useEntityList<Row extends { id: number }>(config: ListPageConfig
     cellText,
     renderCell,
     reload,
+    
+    // настройки таблицы и пресеты
+    tableSettings,
+    listPresets,
+    quickFilters,
+    setQuickFilters,
+    saveCurrentPrefs,
+    resetToDefaults,
   }
 }
 

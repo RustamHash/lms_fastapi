@@ -37,26 +37,17 @@ const REFERENCE_GROUPS: ReferenceGroup[] = [
   {
     title: 'Товары',
     items: [
-      { to: '/warehouse/products', label: 'Товары', description: 'Номенклатура товаров' },
-      { to: '/warehouse/batches', label: 'Партии', description: 'Партии товаров' },
-      { to: '/warehouse/lpns', label: 'LPN', description: 'Паллеты' },
-    ],
-  },
-  {
-    title: 'Складская топология',
-    items: [
-      { to: '/warehouse/warehouses', label: 'Склады', description: 'Склады' },
-      { to: '/warehouse/virtual-warehouses', label: 'Виртуальные склады', description: 'Виртуальные склады' },
-      { to: '/warehouse/zones', label: 'Зоны', description: 'Зоны склада' },
-      { to: '/warehouse/racks', label: 'Стеллажи', description: 'Стеллажи' },
-      { to: '/warehouse/locations', label: 'Ячейки', description: 'Ячейки хранения' },
+      { to: '/reference/products', label: 'Товары', description: 'Номенклатура товаров' },
+      { to: '/reference/batches', label: 'Партии', description: 'Партии товаров' },
+      { to: '/reference/lpns', label: 'LPN', description: 'Паллеты' },
     ],
   },
   {
     title: 'Доставка',
     items: [
-      { to: '/delivery/drivers', label: 'Водители', description: 'Водители' },
-      { to: '/delivery/vehicles', label: 'Транспорт', description: 'Автомобили' },
+      { to: '/reference/drivers', label: 'Водители', description: 'Водители' },
+      { to: '/reference/vehicles', label: 'Транспорт', description: 'Автомобили' },
+      { to: '/reference/routes', label: 'Маршруты', description: 'Маршруты доставки' },
     ],
   },
 ]

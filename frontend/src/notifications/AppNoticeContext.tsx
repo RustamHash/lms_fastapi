@@ -14,13 +14,17 @@ type AppNotice = {
   kind: ListNoticeKind
 }
 
-type AppNoticeContextValue = {
+type AppNoticeStateContextValue = {
   notice: AppNotice | null
+}
+
+type AppNoticeActionsContextValue = {
   notify: (message: string, kind: ListNoticeKind) => void
   clearNotice: () => void
 }
 
-const AppNoticeContext = createContext<AppNoticeContextValue | null>(null)
+const AppNoticeStateContext = createContext<AppNoticeStateContextValue | null>(null)
+const AppNoticeActionsContext = createContext<AppNoticeActionsContextValue | null>(null)
 
 export function AppNoticeProvider({ children }: { children: ReactNode }) {
   const [notice, setNotice] = useState<AppNotice | null>(null)
@@ -39,20 +43,40 @@ export function AppNoticeProvider({ children }: { children: ReactNode }) {
     return () => window.clearTimeout(timer)
   }, [notice])
 
-  const value = useMemo(
-    () => ({
-      notice,
-      notify,
-      clearNotice,
-    }),
-    [notice, notify, clearNotice],
+  const stateValue = useMemo(
+    () => ({ notice }),
+    [notice],
   )
 
-  return <AppNoticeContext.Provider value={value}>{children}</AppNoticeContext.Provider>
+  const actionsValue = useMemo(
+    () => ({ notify, clearNotice }),
+    [notify, clearNotice],
+  )
+
+  return (
+    <AppNoticeStateContext.Provider value={stateValue}>
+      <AppNoticeActionsContext.Provider value={actionsValue}>
+        {children}
+      </AppNoticeActionsContext.Provider>
+    </AppNoticeStateContext.Provider>
+  )
 }
 
-export function useAppNotice(): AppNoticeContextValue {
-  const ctx = useContext(AppNoticeContext)
-  if (!ctx) throw new Error('useAppNotice вне AppNoticeProvider')
+export function useAppNoticeState(): AppNoticeStateContextValue {
+  const ctx = useContext(AppNoticeStateContext)
+  if (!ctx) throw new Error('useAppNoticeState вне AppNoticeProvider')
   return ctx
+}
+
+export function useAppNoticeActions(): AppNoticeActionsContextValue {
+  const ctx = useContext(AppNoticeActionsContext)
+  if (!ctx) throw new Error('useAppNoticeActions вне AppNoticeProvider')
+  return ctx
+}
+
+// Обратная совместимость
+export function useAppNotice() {
+  const state = useAppNoticeState()
+  const actions = useAppNoticeActions()
+  return { ...state, ...actions }
 }

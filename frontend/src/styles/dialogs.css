@@ -90,7 +90,7 @@
 
 .dialog__hint {
   font-size: 13px;
-  color: #64748b;
+  color: var(--text-secondary);
   margin: 0 0 12px;
 }
 
@@ -124,7 +124,7 @@
 
 .dialog-cols__row--drop-over {
   background: #f1f5f9;
-  box-shadow: inset 0 0 0 1px #94a3b8;
+  box-shadow: inset 0 0 0 1px var(--text-muted);
   border-radius: 4px;
 }
 
@@ -140,7 +140,7 @@
   margin: 0;
   font-size: 14px;
   line-height: 1;
-  color: #94a3b8;
+  color: var(--text-muted);
   letter-spacing: -2px;
 }
 
@@ -173,7 +173,7 @@
 }
 
 .dialog-cols__width-input::placeholder {
-  color: #94a3b8;
+  color: var(--text-muted);
   font-size: 11px;
 }
 

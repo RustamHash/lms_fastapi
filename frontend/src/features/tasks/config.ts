@@ -1,4 +1,4 @@
-import type { ListPageConfig } from '../entity-list/types'
+import type { ListPageConfig } from '../entity-system/types'
 
 type TaskRow = {
   id: number
@@ -20,10 +20,31 @@ export const tasksConfig: ListPageConfig<TaskRow> = {
     { id: 'assignee_id', label: 'Исполнитель ID', type: 'number' },
   ],
   filters: [
-    { id: 'task_type', type: 'text', label: 'Тип задания' },
-    { id: 'status', type: 'text', label: 'Статус' },
+    { 
+      id: 'task_type', 
+      type: 'select', 
+      label: 'Тип задания',
+      options: [
+        { value: 'receiving', label: 'Приёмка' },
+        { value: 'putaway', label: 'Размещение' },
+        { value: 'picking', label: 'Отбор' },
+        { value: 'shipping', label: 'Отгрузка' },
+        { value: 'movement', label: 'Перемещение' },
+      ],
+    },
+    { 
+      id: 'status', 
+      type: 'select', 
+      label: 'Статус',
+      options: [
+        { value: 'new', label: 'Новое' },
+        { value: 'in_progress', label: 'В работе' },
+        { value: 'completed', label: 'Завершено' },
+        { value: 'completed_with_deviations', label: 'С отклонениями' },
+      ],
+    },
   ],
   columnOverrides: {
-    id: { href: (row) => `/warehouse/tasks/${row.id}` },
+    id: { href: (row) => `/tasks/${row.id}` },
   },
 }

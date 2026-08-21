@@ -1,4 +1,4 @@
-import type { ListPageConfig } from '../entity-list/types'
+import type { ListPageConfig } from '../entity-system/types'
 
 type ProductRow = {
   id: number
@@ -41,6 +41,6 @@ export const productsConfig: ListPageConfig<ProductRow> = {
     { id: 'depositor_id', type: 'text', label: 'Поклажедатель ID' },
   ],
   columnOverrides: {
-    name: { href: (row) => `/warehouse/products/${row.id}` },
+    name: { href: (row) => `/reference/products/${row.id}` },
   },
 }

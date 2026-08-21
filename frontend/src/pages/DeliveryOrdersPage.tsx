@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom'
-import { EntityListPage } from '../features/entity-list/EntityListPage'
+import { EntityListPage } from '../features/entity-system/EntityListPage'
 import { deliveryOrdersConfig } from '../features/delivery-orders/config'
 
 export function DeliveryOrdersPage() {
@@ -9,7 +9,7 @@ export function DeliveryOrdersPage() {
       config={deliveryOrdersConfig}
       onBack={() => navigate(-1)}
       breadcrumbs={[
-        { label: 'Доставка', to: '/' },
+        { label: 'Главная', to: '/' },
         { label: 'Заказы' },
       ]}
     />

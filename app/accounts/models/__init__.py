@@ -5,6 +5,7 @@ from app.accounts.models.role import Role, user_roles
 from app.accounts.models.audit import Audit
 from app.accounts.models.user_settings import UserSettings
 from app.accounts.models.user_table_settings import UserTableSettings
+from app.accounts.models.user_list_preset import UserListPreset
 from app.accounts.models.user_depositor import UserDepositor
 from app.accounts.models.user_trade_point import UserTradePoint
 
@@ -15,6 +16,7 @@ __all__ = [
     "Audit",
     "UserSettings",
     "UserTableSettings",
+    "UserListPreset",
     "UserDepositor",
     "UserTradePoint",
 ]

@@ -3,27 +3,23 @@
 from __future__ import annotations
 
 import os
-from typing import Annotated
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, UploadFile, status
 from fastapi.responses import FileResponse
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import SessionDep, UserDep, require_permission
 from app.api.v1.files import schemas
-from app.core.dependencies import get_current_user_id, get_session
+from app.core.exceptions import NotFoundError
 from app.infrastructure.files.models import File as FileModel
 
 router = APIRouter(prefix="/files", tags=["files"])
 
-SessionDep = Annotated[AsyncSession, Depends(get_session)]
-UserDep = Annotated[int | None, Depends(get_current_user_id)]
-
 UPLOAD_DIR = "uploads"
 
 
-@router.post("/upload", response_model=schemas.FileRead, status_code=status.HTTP_201_CREATED)
+@router.post("/upload", response_model=schemas.FileRead, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_permission("create", "files"))])
 async def upload_file(
     file: UploadFile = File(...),
     file_type: str = "document_scan",
@@ -53,7 +49,7 @@ async def upload_file(
     return schemas.FileRead.model_validate(file_model)
 
 
-@router.get("", response_model=list[schemas.FileRead])
+@router.get("", response_model=list[schemas.FileRead], dependencies=[Depends(require_permission("view", "files"))])
 async def list_files(session: SessionDep) -> list[schemas.FileRead]:
     rows = list(await session.scalars(
         select(FileModel).where(FileModel.is_deleted.is_(False))
@@ -61,11 +57,11 @@ async def list_files(session: SessionDep) -> list[schemas.FileRead]:
     return [schemas.FileRead.model_validate(r) for r in rows]
 
 
-@router.get("/{file_id}", response_model=schemas.FileRead)
+@router.get("/{file_id}", response_model=schemas.FileRead, dependencies=[Depends(require_permission("view", "files"))])
 async def get_file(file_id: int, session: SessionDep) -> schemas.FileRead:
     file_model = await session.get(FileModel, file_id)
     if file_model is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Файл не найден")
+        raise NotFoundError("Файл не найден")
     return schemas.FileRead.model_validate(file_model)
 
 
@@ -73,10 +69,10 @@ async def get_file(file_id: int, session: SessionDep) -> schemas.FileRead:
 async def download_file(file_id: int, session: SessionDep):
     file_model = await session.get(FileModel, file_id)
     if file_model is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Файл не найден")
+        raise NotFoundError("Файл не найден")
 
     if not os.path.exists(file_model.file_path):
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Файл отсутствует на диске")
+        raise NotFoundError("Файл отсутствует на диске")
 
     return FileResponse(
         file_model.file_path,
@@ -85,10 +81,31 @@ async def download_file(file_id: int, session: SessionDep):
     )
 
 
-@router.delete("/{file_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.patch(
+    "/{file_id}",
+    response_model=schemas.FileRead,
+    dependencies=[Depends(require_permission("update", "files"))],
+)
+async def update_file(
+    file_id: int,
+    file_type: str | None = None,
+    session: SessionDep = None,
+    user_id: UserDep = None,
+) -> schemas.FileRead:
+    file_model = await session.get(FileModel, file_id)
+    if file_model is None:
+        raise NotFoundError("Файл не найден")
+    if file_type:
+        file_model.file_type = file_type
+    file_model.updated_by_id = user_id
+    await session.flush()
+    return schemas.FileRead.model_validate(file_model)
+
+
+@router.delete("/{file_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_permission("delete", "files"))])
 async def delete_file(file_id: int, session: SessionDep, user_id: UserDep) -> None:
     file_model = await session.get(FileModel, file_id)
     if file_model is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Файл не найден")
+        raise NotFoundError("Файл не найден")
     file_model.soft_delete(user_id)
     await session.flush()

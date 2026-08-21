@@ -5,13 +5,12 @@ from __future__ import annotations
 from datetime import date
 from decimal import Decimal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel
+
+from app.api.v1.base_schemas import BaseRead
 
 
-class DocumentRead(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: int
+class DocumentRead(BaseRead):
     document_number: str
     document_date: date | None = None
     delivery_date: date | None = None
@@ -38,10 +37,7 @@ class DocumentCreate(BaseModel):
     is_edo: bool = False
 
 
-class DocumentLineRead(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: int
+class DocumentLineRead(BaseRead):
     document_id: int
     product_id: int
     batch_id: int | None = None

@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom'
-import { EntityListPage } from '../features/entity-list/EntityListPage'
+import { EntityListPage } from '../features/entity-system/EntityListPage'
 import { integrationProfilesConfig } from '../features/integration-profiles/config'
 
 export function IntegrationProfilesPage() {
@@ -9,7 +9,7 @@ export function IntegrationProfilesPage() {
       config={integrationProfilesConfig}
       onBack={() => navigate(-1)}
       breadcrumbs={[
-        { label: 'Интеграции', to: '/' },
+        { label: 'Главная', to: '/' },
         { label: 'Профили' },
       ]}
     />

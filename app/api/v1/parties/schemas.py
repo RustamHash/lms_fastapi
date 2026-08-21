@@ -5,15 +5,12 @@ from __future__ import annotations
 from datetime import date
 from decimal import Decimal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, Field
+
+from app.api.v1.base_schemas import BaseRead
 
 
-# ========== Адреса ==========
-
-class DeliveryZoneRead(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: int
+class DeliveryZoneRead(BaseRead):
     name: str
 
 
@@ -21,10 +18,7 @@ class DeliveryZoneCreate(BaseModel):
     name: str = Field(min_length=1, max_length=255)
 
 
-class AddressRead(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: int
+class AddressRead(BaseRead):
     full_address: str
     region: str = ""
     city: str = ""
@@ -34,12 +28,10 @@ class AddressRead(BaseModel):
     structure: str = ""
     flat: str = ""
     fias_id: str = ""
-    latitude: Decimal | None = None
-    longitude: Decimal | None = None
+    latitude: float | None = None
+    longitude: float | None = None
     postal_code: str = ""
     delivery_zone_id: int | None = None
-    is_deleted: bool = False
-    is_active: bool = True
 
 
 class AddressResolve(BaseModel):
@@ -47,12 +39,23 @@ class AddressResolve(BaseModel):
     source: str = ""
 
 
-# ========== Юрлица ==========
+class AddressUpdate(BaseModel):
+    full_address: str | None = None
+    region: str | None = None
+    city: str | None = None
+    street: str | None = None
+    house: str | None = None
+    building: str | None = None
+    structure: str | None = None
+    flat: str | None = None
+    fias_id: str | None = None
+    latitude: float | None = None
+    longitude: float | None = None
+    postal_code: str | None = None
+    delivery_zone_id: int | None = None
 
-class LegalEntityRead(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
 
-    id: int
+class LegalEntityRead(BaseRead):
     name: str
     legal_name: str = ""
     inn: str = ""
@@ -91,12 +94,23 @@ class LegalEntityUpdate(BaseModel):
     edo_uuid: str | None = None
 
 
-# ========== Поклажедатели ==========
+class CarrierRead(BaseRead):
+    legal_entity_id: int
 
-class DepositorRead(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
 
-    id: int
+class CarrierCreate(BaseModel):
+    legal_entity_id: int
+
+
+class KeeperRead(BaseRead):
+    legal_entity_id: int
+
+
+class KeeperCreate(BaseModel):
+    legal_entity_id: int
+
+
+class DepositorRead(BaseRead):
     legal_entity_id: int
     code: str = ""
     legal_entity_name: str = ""
@@ -107,12 +121,12 @@ class DepositorCreate(BaseModel):
     code: str = ""
 
 
-# ========== Клиенты ==========
+class DepositorUpdate(BaseModel):
+    code: str | None = None
+    legal_entity_id: int | None = None
 
-class ClientRead(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
 
-    id: int
+class ClientRead(BaseRead):
     depositor_id: int
     external_id: str
     name: str
@@ -143,10 +157,7 @@ class ClientUpdate(BaseModel):
     is_edo: bool | None = None
 
 
-class TradePointRead(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: int
+class TradePointRead(BaseRead):
     client_id: int
     address_id: int
     name: str = ""
@@ -158,12 +169,13 @@ class TradePointCreate(BaseModel):
     name: str = ""
 
 
-# ========== Договоры ==========
+class TradePointUpdate(BaseModel):
+    name: str | None = None
+    client_id: int | None = None
+    address_id: int | None = None
 
-class ContractRead(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
 
-    id: int
+class ContractRead(BaseRead):
     number: str
     customer_id: int
     executor_id: int
@@ -184,12 +196,14 @@ class ContractCreate(BaseModel):
     terms: dict = Field(default_factory=dict)
 
 
-# ========== Тарифы ==========
+class ContractUpdate(BaseModel):
+    number: str | None = None
+    end_date: date | None = None
+    status: str | None = None
+    terms: dict | None = None
 
-class TariffDocumentRead(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
 
-    id: int
+class TariffDocumentRead(BaseRead):
     contract_id: int
     document_type: str
     number: str
@@ -211,10 +225,16 @@ class TariffDocumentCreate(BaseModel):
     vat_rate: str = "20"
 
 
-class TariffRead(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
+class TariffDocumentUpdate(BaseModel):
+    number: str | None = None
+    document_date: date | None = None
+    valid_from: date | None = None
+    valid_until: date | None = None
+    currency: str | None = None
+    vat_rate: str | None = None
 
-    id: int
+
+class TariffRead(BaseRead):
     document_id: int
     service_group: str
     name: str
@@ -232,88 +252,28 @@ class TariffCreate(BaseModel):
     price: Decimal
 
 
-class RawAddressRead(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: int
-    raw_text: str
-    hash: str
-    normalized_address_id: int
-    source: str = ""
-    full_address: str | None = None
-    is_deleted: bool = False
-
-
-# ========== Update-схемы ==========
-
-class LegalEntityUpdate(BaseModel):
-    name: str | None = None
-    legal_name: str | None = None
-    inn: str | None = None
-    kpp: str | None = None
-    ogrn: str | None = None
-    legal_address_id: int | None = None
-    actual_address_id: int | None = None
-    phone: str | None = None
-    email: str | None = None
-    edo_uuid: str | None = None
-
-
-class AddressUpdate(BaseModel):
-    full_address: str | None = None
-    region: str | None = None
-    city: str | None = None
-    street: str | None = None
-    house: str | None = None
-    building: str | None = None
-    structure: str | None = None
-    flat: str | None = None
-    fias_id: str | None = None
-    latitude: Decimal | None = None
-    longitude: Decimal | None = None
-    postal_code: str | None = None
-    delivery_zone_id: int | None = None
-
-
-class DepositorUpdate(BaseModel):
-    code: str | None = None
-    legal_entity_id: int | None = None
-
-
-class ClientUpdate(BaseModel):
-    name: str | None = None
-    legal_name: str | None = None
-    inn: str | None = None
-    kpp: str | None = None
-    legal_address_id: int | None = None
-    is_edo: bool | None = None
-
-
-class TradePointUpdate(BaseModel):
-    name: str | None = None
-    client_id: int | None = None
-    address_id: int | None = None
-
-
-class ContractUpdate(BaseModel):
-    number: str | None = None
-    end_date: date | None = None
-    status: str | None = None
-    terms: dict | None = None
-
-
-class TariffDocumentUpdate(BaseModel):
-    number: str | None = None
-    document_date: date | None = None
-    valid_from: date | None = None
-    valid_until: date | None = None
-    currency: str | None = None
-    vat_rate: str | None = None
-
-
 class TariffUpdate(BaseModel):
     name: str | None = None
     description: str | None = None
     unit: str | None = None
     price: Decimal | None = None
     service_group: str | None = None
+
+
+class AliasCreate(BaseModel):
+    raw_text: str = Field(min_length=1)
+    source: str = ""
+
+
+class AliasUpdate(BaseModel):
+    raw_text: str | None = None
+    source: str | None = None
+    normalized_address_id: int | None = None
+
+
+class RawAddressRead(BaseRead):
+    raw_text: str
+    hash: str
+    normalized_address_id: int
+    source: str = ""
+    full_address: str | None = None

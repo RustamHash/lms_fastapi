@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom'
-import { EntityListPage } from '../features/entity-list/EntityListPage'
+import { EntityListPage } from '../features/entity-system/EntityListPage'
 import { lpnsConfig } from '../features/lpns/config'
 
 export function LpnsPage() {
@@ -9,7 +9,7 @@ export function LpnsPage() {
       config={lpnsConfig}
       onBack={() => navigate(-1)}
       breadcrumbs={[
-        { label: 'Склад', to: '/' },
+        { label: 'Справочники', to: '/references' },
         { label: 'LPN' },
       ]}
     />

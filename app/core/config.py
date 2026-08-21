@@ -24,6 +24,11 @@ class Settings(BaseSettings):
 
     geosuggest_api_key: str | None = Field(default=None)
 
+    cors_origins: list[str] = Field(
+        default=["http://127.0.0.1:5173", "http://localhost:5173"],
+        description="Разрешенные origins для CORS",
+    )
+
     log_level: str = Field(default="INFO")
     debug_sql: bool = Field(default=False)
     app_log_file_path: str = Field(default="logs/app.log")

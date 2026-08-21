@@ -1,4 +1,4 @@
-import { type ReactNode } from 'react'
+import { memo, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { TopologyBackBar } from './TopologyBackBar'
 
@@ -23,7 +23,7 @@ type DetailPageShellProps = {
   children?: ReactNode
 }
 
-export function DetailPageShell({
+function DetailPageShellInner({
   title,
   backHref,
   backLabel,
@@ -113,3 +113,6 @@ export function DetailPageShell({
     </section>
   )
 }
+
+
+export const DetailPageShell = memo(DetailPageShellInner)

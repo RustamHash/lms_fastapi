@@ -1,4 +1,4 @@
-import type { ListPageConfig } from '../entity-list/types'
+import type { ListPageConfig } from '../entity-system/types'
 
 type DeliveryZoneRow = {
   id: number
@@ -11,7 +11,7 @@ export const deliveryZoneConfig = {
   list: {
     entityKey: 'delivery_zones',
     title: 'Зоны доставки',
-    apiUrl: '/api/v1/parties/delivery-zones',
+    apiUrl: '/api/v1/delivery-zones',
     
     columns: [
       { id: 'id', label: 'ID', type: 'number' },

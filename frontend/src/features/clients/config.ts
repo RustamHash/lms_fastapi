@@ -1,4 +1,4 @@
-import type { ListPageConfig } from '../entity-list/types'
+import type { ListPageConfig } from '../entity-system/types'
 
 type ClientRow = {
   id: number
@@ -8,9 +8,8 @@ type ClientRow = {
   legal_name: string
   inn: string
   kpp: string
+  legal_address_id: number | null
   is_edo: boolean
-  is_deleted: boolean
-  is_active: boolean
 }
 
 export const clientConfig = {

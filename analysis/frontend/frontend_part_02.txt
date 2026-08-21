@@ -1,0 +1,3281 @@
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+                <circle
+                  cx="12"
+                  cy="7"
+                  r="4"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+              <input
+                id="username"
+                type="text"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="Введите логин"
+                required
+                autoFocus
+                autoComplete="username"
+                className="login-input"
+              />
+            </div>
+          </div>
+
+          <div className="login-field">
+            <label htmlFor="password" className="login-label">
+              Пароль
+            </label>
+            <div className="login-input-wrapper">
+              <svg
+                className="login-input-icon"
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                aria-hidden
+              >
+                <rect
+                  x="3"
+                  y="11"
+                  width="18"
+                  height="11"
+                  rx="2"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+                <path
+                  d="M7 11V7a5 5 0 0 1 10 0v4"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+              <input
+                id="password"
+                type={showPassword ? 'text' : 'password'}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Введите пароль"
+                required
+                autoComplete="current-password"
+                className="login-input"
+              />
+              <button
+                type="button"
+                className="login-password-toggle"
+                onClick={() => setShowPassword(!showPassword)}
+                aria-label={showPassword ? 'Скрыть пароль' : 'Показать пароль'}
+                title={showPassword ? 'Скрыть пароль' : 'Показать пароль'}
+              >
+                {showPassword ? (
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden>
+                    <path
+                      d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                    <line
+                      x1="1"
+                      y1="1"
+                      x2="23"
+                      y2="23"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                ) : (
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden>
+                    <path
+                      d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                    <circle
+                      cx="12"
+                      cy="12"
+                      r="3"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                )}
+              </button>
+            </div>
+          </div>
+
+          {error ? (
+            <div className="login-error" role="alert">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden>
+                <circle
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+                <line
+                  x1="12"
+                  y1="8"
+                  x2="12"
+                  y2="12"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+                <line
+                  x1="12"
+                  y1="16"
+                  x2="12.01"
+                  y2="16"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+              <span>{error}</span>
+            </div>
+          ) : null}
+
+          <button
+            type="submit"
+            className="login-submit"
+            disabled={loading}
+          >
+            {loading ? (
+              <>
+                <span className="login-spinner" aria-hidden />
+                Вход...
+              </>
+            ) : (
+              'Войти'
+            )}
+          </button>
+        </form>
+
+        <div className="login-footer">
+          <p>© 2026 Складская система. Все права защищены.</p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/frontend/src/pages/LpnsPage.tsx
+========================================
+import { useNavigate } from 'react-router-dom'
+import { EntityListPage } from '../features/entity-list/EntityListPage'
+import { lpnsConfig } from '../features/lpns/config'
+
+export function LpnsPage() {
+  const navigate = useNavigate()
+  return (
+    <EntityListPage
+      config={lpnsConfig}
+      onBack={() => navigate(-1)}
+      breadcrumbs={[
+        { label: 'Справочники', to: '/references' },
+        { label: 'LPN' },
+      ]}
+    />
+  )
+}
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/frontend/src/pages/NotificationsPage.tsx
+========================================
+import { useNavigate } from 'react-router-dom'
+import { EntityListPage } from '../features/entity-list/EntityListPage'
+import { notificationsConfig } from '../features/notifications/config'
+
+export function NotificationsPage() {
+  const navigate = useNavigate()
+  return (
+    <EntityListPage
+      config={notificationsConfig}
+      onBack={() => navigate(-1)}
+      breadcrumbs={[
+        { label: 'Главная', to: '/' },
+        { label: 'Уведомления' },
+      ]}
+    />
+  )
+}
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/frontend/src/pages/ProductsPage.tsx
+========================================
+import { useNavigate } from 'react-router-dom'
+import { EntityListPage } from '../features/entity-list/EntityListPage'
+import { productsConfig } from '../features/products/config'
+
+export function ProductsPage() {
+  const navigate = useNavigate()
+  return (
+    <EntityListPage
+      config={productsConfig}
+      onBack={() => navigate(-1)}
+      breadcrumbs={[
+        { label: 'Справочники', to: '/references' },
+        { label: 'Товары' },
+      ]}
+    />
+  )
+}
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/frontend/src/pages/ReferencesPage.tsx
+========================================
+import { Link } from 'react-router-dom'
+
+type ReferenceGroup = {
+  title: string
+  items: {
+    to: string
+    label: string
+    description: string
+  }[]
+}
+
+const REFERENCE_GROUPS: ReferenceGroup[] = [
+  {
+    title: 'Адреса',
+    items: [
+      { to: '/reference/addresses', label: 'Адреса', description: 'Канонические адреса' },
+      { to: '/reference/address-input-aliases', label: 'Варианты ввода', description: 'Сырые адреса' },
+      { to: '/reference/delivery-zones', label: 'Зоны доставки', description: 'Зоны на карте' },
+    ],
+  },
+  {
+    title: 'Контрагенты',
+    items: [
+      { to: '/reference/legal-entities', label: 'Юрлица', description: 'ИНН, КПП, ОГРН' },
+      { to: '/reference/depositors', label: 'Поклажедатели', description: 'Владельцы груза' },
+      { to: '/reference/clients', label: 'Клиенты', description: 'Клиенты поклажедателей' },
+      { to: '/reference/trade-points', label: 'Торговые точки', description: 'Точки доставки' },
+    ],
+  },
+  {
+    title: 'Договоры и тарифы',
+    items: [
+      { to: '/reference/contracts', label: 'Договоры', description: 'Договоры с контрагентами' },
+      { to: '/reference/tariffs', label: 'Тарифы', description: 'Услуги и цены' },
+    ],
+  },
+  {
+    title: 'Товары',
+    items: [
+      { to: '/reference/products', label: 'Товары', description: 'Номенклатура товаров' },
+      { to: '/reference/batches', label: 'Партии', description: 'Партии товаров' },
+      { to: '/reference/lpns', label: 'LPN', description: 'Паллеты' },
+    ],
+  },
+  {
+    title: 'Доставка',
+    items: [
+      { to: '/reference/drivers', label: 'Водители', description: 'Водители' },
+      { to: '/reference/vehicles', label: 'Транспорт', description: 'Автомобили' },
+      { to: '/reference/routes', label: 'Маршруты', description: 'Маршруты доставки' },
+    ],
+  },
+]
+
+export function ReferencesPage() {
+  return (
+    <section className="app-card app-card--wide">
+      <h1 className="page-title">Справочники</h1>
+      <p className="app-intro">Все справочники системы</p>
+
+      <div className="ref-groups">
+        {REFERENCE_GROUPS.map((group) => (
+          <section key={group.title} className="ref-group">
+            <h2 className="ref-group__title">{group.title}</h2>
+            <div className="ref-group__cards">
+              {group.items.map((item) => (
+                <Link key={item.to} to={item.to} className="ref-card">
+                  <span className="ref-card__title">{item.label}</span>
+                  <span className="ref-card__desc">{item.description}</span>
+                </Link>
+              ))}
+            </div>
+          </section>
+        ))}
+      </div>
+    </section>
+  )
+}
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/frontend/src/pages/RolesPage.tsx
+========================================
+import { useNavigate } from 'react-router-dom'
+import { EntityListPage } from '../features/entity-list/EntityListPage'
+import { rolesConfig } from '../features/roles/config'
+
+export function RolesPage() {
+  const navigate = useNavigate()
+  return (
+    <EntityListPage
+      config={rolesConfig}
+      onBack={() => navigate(-1)}
+      breadcrumbs={[
+        { label: 'Система', to: '/' },
+        { label: 'Роли' },
+      ]}
+    />
+  )
+}
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/frontend/src/pages/RoutesPage.tsx
+========================================
+import { useNavigate } from 'react-router-dom'
+import { EntityListPage } from '../features/entity-list/EntityListPage'
+import { routesConfig } from '../features/routes/config'
+
+export function RoutesPage() {
+  const navigate = useNavigate()
+  return (
+    <EntityListPage
+      config={routesConfig}
+      onBack={() => navigate(-1)}
+      breadcrumbs={[
+        { label: 'Справочники', to: '/references' },
+        { label: 'Маршруты' },
+      ]}
+    />
+  )
+}
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/frontend/src/pages/TariffDetailPage.tsx
+========================================
+import { useEffect, useState } from 'react'
+import { useParams, useNavigate } from 'react-router-dom'
+import { useAuth } from '../auth/AuthContext'
+import { DetailPageShell } from '../components/DetailPageShell'
+import { apiFetch } from '../lib/http'
+
+type Tariff = {
+  id: number
+  document_id: number
+  service_group: string
+  name: string
+  description: string
+  unit: string
+  price: string
+  is_deleted: boolean
+  is_active: boolean
+}
+
+export function TariffDetailPage() {
+  const navigate = useNavigate()
+  const { user } = useAuth()
+  const canEdit = user?.permissions?.all === true
+  const { tariffId } = useParams<{ tariffId: string }>()
+  const [tariff, setTariff] = useState<Tariff | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!tariffId) return
+    ;(async () => {
+      setLoading(true)
+      try {
+        const res = await apiFetch(`/api/v1/parties/tariffs/${tariffId}`)
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        setTariff(await res.json())
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Ошибка')
+      } finally {
+        setLoading(false)
+      }
+    })()
+  }, [tariffId])
+
+  return (
+    <DetailPageShell
+      title={tariff ? tariff.name : 'Тариф'}
+      breadcrumbs={[
+        { label: 'Справочники', to: '/references' },
+        { label: 'Тарифы', to: '/reference/tariffs' },
+        { label: tariff ? `#${tariff.id}` : '' },
+      ]}
+      loading={loading}
+      error={error}
+      canEdit={canEdit}
+      onEdit={() => navigate('edit')}
+    >
+      {tariff ? (
+        <dl className="entity-dl">
+          <div className="entity-dl__row"><dt>ID</dt><dd>{tariff.id}</dd></div>
+          <div className="entity-dl__row"><dt>Название</dt><dd>{tariff.name}</dd></div>
+          <div className="entity-dl__row"><dt>Группа</dt><dd>{tariff.service_group}</dd></div>
+          <div className="entity-dl__row"><dt>Единица</dt><dd>{tariff.unit}</dd></div>
+          <div className="entity-dl__row"><dt>Цена</dt><dd>{tariff.price}</dd></div>
+          <div className="entity-dl__row"><dt>Описание</dt><dd>{tariff.description}</dd></div>
+        </dl>
+      ) : null}
+    </DetailPageShell>
+  )
+}
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/frontend/src/pages/TariffsPage.tsx
+========================================
+import { useNavigate } from 'react-router-dom'
+import { useAuth } from '../auth/AuthContext'
+import { EntityListPage } from '../features/entity-list/EntityListPage'
+import { tariffConfig } from '../features/tariffs/config'
+
+export function TariffsPage() {
+  const navigate = useNavigate()
+  const { user } = useAuth()
+  const canCreate = user?.permissions?.all === true
+  return (
+    <EntityListPage
+      config={tariffConfig.list}
+      onBack={() => navigate('/references')}
+      canCreate={canCreate}
+      breadcrumbs={[{ label: 'Справочники', to: '/references' }, { label: 'Тарифы' }]}
+    />
+  )
+}
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/frontend/src/pages/TasksPage.tsx
+========================================
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { EntityListPage } from '../features/entity-list/EntityListPage'
+import { tasksConfig } from '../features/tasks/config'
+
+const TASK_TYPES = [
+  { value: 'all', label: 'Все задания' },
+  { value: 'picking', label: 'Отбор' },
+  { value: 'receiving', label: 'Приёмка' },
+  { value: 'putaway', label: 'Размещение' },
+  { value: 'shipping', label: 'Отгрузка' },
+  { value: 'movement', label: 'Перемещение' },
+]
+
+function todayString(): string {
+  const d = new Date()
+  const yyyy = d.getFullYear()
+  const mm = String(d.getMonth() + 1).padStart(2, '0')
+  const dd = String(d.getDate()).padStart(2, '0')
+  return `${yyyy}-${mm}-${dd}`
+}
+
+export function TasksPage() {
+  const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const activeType = searchParams.get('task_type') || 'all'
+  const dateFrom = searchParams.get('date_from') || todayString()
+  const dateTo = searchParams.get('date_to') || ''
+
+  function handleTypeChange(event: React.ChangeEvent<HTMLSelectElement>) {
+    const type = event.target.value
+    if (type === 'all') {
+      searchParams.delete('task_type')
+    } else {
+      searchParams.set('task_type', type)
+    }
+    setSearchParams(searchParams)
+  }
+
+  function handleDateFromChange(event: React.ChangeEvent<HTMLInputElement>) {
+    const value = event.target.value
+    if (value) {
+      searchParams.set('date_from', value)
+    } else {
+      searchParams.delete('date_from')
+    }
+    setSearchParams(searchParams)
+  }
+
+  function handleDateToChange(event: React.ChangeEvent<HTMLInputElement>) {
+    const value = event.target.value
+    if (value) {
+      searchParams.set('date_to', value)
+    } else {
+      searchParams.delete('date_to')
+    }
+    setSearchParams(searchParams)
+  }
+
+  const params = new URLSearchParams()
+  if (activeType !== 'all') params.set('task_type', activeType)
+  if (dateFrom) params.set('date_from', dateFrom)
+  if (dateTo) params.set('date_to', dateTo)
+  
+  const apiUrl = `/api/v1/warehouse/tasks${params.toString() ? `?${params.toString()}` : ''}`
+
+  return (
+    <section className="app-card app-card--wide">
+      <div className="detail-nav detail-nav--with-title">
+        <button type="button" className="detail-nav__back" onClick={() => navigate('/')}>
+          ← Назад
+        </button>
+        <nav className="breadcrumbs" aria-label="Хлебные крошки">
+          <span className="breadcrumbs__item">
+            <Link to="/" className="breadcrumbs__link">Главная</Link>
+            <span className="breadcrumbs__sep">/</span>
+          </span>
+          <span className="breadcrumbs__item">
+            <span className="breadcrumbs__current">Задания</span>
+          </span>
+        </nav>
+        <h1 className="detail-nav__title">Задания</h1>
+      </div>
+
+      <div className="task-filter">
+        <select 
+          className="task-filter__select"
+          value={activeType}
+          onChange={handleTypeChange}
+        >
+          {TASK_TYPES.map((type) => (
+            <option key={type.value} value={type.value}>
+              {type.label}
+            </option>
+          ))}
+        </select>
+        
+        <label className="task-filter__date">
+          <span>От:</span>
+          <input 
+            type="date" 
+            className="task-filter__date-input"
+            value={dateFrom}
+            onChange={handleDateFromChange}
+          />
+        </label>
+        
+        <label className="task-filter__date">
+          <span>До:</span>
+          <input 
+            type="date" 
+            className="task-filter__date-input"
+            value={dateTo}
+            onChange={handleDateToChange}
+          />
+        </label>
+      </div>
+
+      <EntityListPage
+        key={`${activeType}-${dateFrom}-${dateTo}`}
+        config={{
+          ...tasksConfig,
+          title: '',
+          apiUrl,
+        }}
+        onBack={undefined}
+        breadcrumbs={undefined}
+      />
+    </section>
+  )
+}
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/frontend/src/pages/TradePointCreatePage.tsx
+========================================
+import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { apiFetch } from '../lib/http'
+
+export function TradePointCreatePage() {
+  const navigate = useNavigate()
+  const [form, setForm] = useState({ client_id: '', address_id: '', name: '' })
+  const [clients, setClients] = useState<{id: number, name: string}[]>([])
+  const [addresses, setAddresses] = useState<{id: number, full_address: string}[]>([])
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    ;(async () => {
+      const [cRes, aRes] = await Promise.all([
+        apiFetch('/api/v1/parties/clients'),
+        apiFetch('/api/v1/parties/addresses'),
+      ])
+      if (cRes.ok) setClients(await cRes.json())
+      if (aRes.ok) setAddresses(await aRes.json())
+    })()
+  }, [])
+
+  async function onSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    setSaving(true)
+    setError(null)
+    try {
+      const res = await apiFetch('/api/v1/parties/trade-points/resolve', {
+        method: 'POST',
+        body: JSON.stringify({
+          client_id: Number(form.client_id),
+          address_id: Number(form.address_id),
+          name: form.name,
+        }),
+      })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const created = await res.json()
+      navigate(`/reference/trade-points/${created.id}`)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Ошибка')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <section className="app-card app-card--wide">
+      <h1 className="page-title">Новая торговая точка</h1>
+      <form onSubmit={onSubmit} className="wh-form">
+        <label>Клиент *
+          <select value={form.client_id} onChange={(e) => setForm((p) => ({...p, client_id: e.target.value}))} required>
+            <option value="">— выберите —</option>
+            {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+        </label>
+        <label>Адрес *
+          <select value={form.address_id} onChange={(e) => setForm((p) => ({...p, address_id: e.target.value}))} required>
+            <option value="">— выберите —</option>
+            {addresses.map((a) => <option key={a.id} value={a.id}>{a.full_address}</option>)}
+          </select>
+        </label>
+        <label>Название<input value={form.name} onChange={(e) => setForm((p) => ({...p, name: e.target.value}))} /></label>
+        {error ? <p className="wh-form__err">{error}</p> : null}
+        <div className="wh-form__actions">
+          <button type="submit" disabled={saving}>{saving ? 'Создание...' : 'Создать'}</button>
+          <button type="button" onClick={() => navigate('/reference/trade-points')}>Отмена</button>
+        </div>
+      </form>
+    </section>
+  )
+}
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/frontend/src/pages/TradePointDetailPage.tsx
+========================================
+import { useEffect, useState } from 'react'
+import { useParams, useNavigate } from 'react-router-dom'
+import { useAuth } from '../auth/AuthContext'
+import { DetailPageShell } from '../components/DetailPageShell'
+import { apiFetch } from '../lib/http'
+
+type TradePoint = {
+  id: number
+  client_id: number
+  address_id: number
+  name: string
+  is_deleted: boolean
+  is_active: boolean
+}
+
+export function TradePointDetailPage() {
+  const navigate = useNavigate()
+  const { user } = useAuth()
+  const canEdit = user?.permissions?.all === true
+  const { tpId } = useParams<{ tpId: string }>()
+  const [tp, setTp] = useState<TradePoint | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!tpId) return
+    ;(async () => {
+      setLoading(true)
+      try {
+        const res = await apiFetch(`/api/v1/parties/trade-points/${tpId}`)
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        setTp(await res.json())
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Ошибка')
+      } finally {
+        setLoading(false)
+      }
+    })()
+  }, [tpId])
+
+  return (
+    <DetailPageShell
+      title={tp ? tp.name || `Точка #${tp.id}` : 'Торговая точка'}
+      breadcrumbs={[
+        { label: 'Справочники', to: '/references' },
+        { label: 'Торговые точки', to: '/reference/trade-points' },
+        { label: tp ? `#${tp.id}` : '' },
+      ]}
+      loading={loading}
+      error={error}
+      canEdit={canEdit}
+      onEdit={() => navigate('edit')}
+    >
+      {tp ? (
+        <dl className="entity-dl">
+          <div className="entity-dl__row"><dt>ID</dt><dd>{tp.id}</dd></div>
+          <div className="entity-dl__row"><dt>Название</dt><dd>{tp.name || '—'}</dd></div>
+          <div className="entity-dl__row"><dt>Клиент ID</dt><dd>{tp.client_id}</dd></div>
+          <div className="entity-dl__row"><dt>Адрес ID</dt><dd>{tp.address_id}</dd></div>
+        </dl>
+      ) : null}
+    </DetailPageShell>
+  )
+}
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/frontend/src/pages/TradePointsPage.tsx
+========================================
+import { useNavigate } from 'react-router-dom'
+import { useAuth } from '../auth/AuthContext'
+import { EntityListPage } from '../features/entity-list/EntityListPage'
+import { tradePointConfig } from '../features/trade-points/config'
+
+export function TradePointsPage() {
+  const navigate = useNavigate()
+  const { user } = useAuth()
+  const canCreate = user?.permissions?.all === true
+  return (
+    <EntityListPage
+      config={tradePointConfig.list}
+      onBack={() => navigate('/references')}
+      canCreate={canCreate}
+      breadcrumbs={[{ label: 'Справочники', to: '/references' }, { label: 'Торговые точки' }]}
+    />
+  )
+}
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/frontend/src/pages/UsersPage.tsx
+========================================
+import { useNavigate } from 'react-router-dom'
+import { EntityListPage } from '../features/entity-list/EntityListPage'
+import { usersConfig } from '../features/users/config'
+
+export function UsersPage() {
+  const navigate = useNavigate()
+  return (
+    <EntityListPage
+      config={usersConfig}
+      onBack={() => navigate(-1)}
+      breadcrumbs={[
+        { label: 'Система', to: '/' },
+        { label: 'Пользователи' },
+      ]}
+    />
+  )
+}
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/frontend/src/pages/VehiclesPage.tsx
+========================================
+import { useNavigate } from 'react-router-dom'
+import { EntityListPage } from '../features/entity-list/EntityListPage'
+import { vehiclesConfig } from '../features/vehicles/config'
+
+export function VehiclesPage() {
+  const navigate = useNavigate()
+  return (
+    <EntityListPage
+      config={vehiclesConfig}
+      onBack={() => navigate(-1)}
+      breadcrumbs={[
+        { label: 'Справочники', to: '/references' },
+        { label: 'Транспорт' },
+      ]}
+    />
+  )
+}
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/frontend/src/styles/app-cards.css
+========================================
+/* Карточки контента, типографика страниц */
+
+.app-card {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 16px;
+  max-width: 52rem;
+}
+
+.app-card--wide {
+  width: 100%;
+  max-width: min(100%, calc(100vw - 20px));
+  box-sizing: border-box;
+  padding-bottom: 12px;
+}
+
+.app-card h1 {
+  margin: 0 0 12px;
+  font-size: 1.75rem;
+  font-weight: 600;
+  color: #222;
+}
+
+.app-card p {
+  margin: 0 0 12px;
+  line-height: 1.5;
+  color: #222;
+}
+
+.app-card p:last-child {
+  margin-bottom: 0;
+}
+
+.app-card a {
+  color: #2c7be5;
+}
+
+.app-card a:hover {
+  text-decoration: underline;
+}
+
+.app-card code {
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 0.9em;
+  padding: 2px 6px;
+  background: #f1f5f9;
+  border-radius: 4px;
+}
+
+.app-intro {
+  font-size: 14px;
+  color: #475569;
+  line-height: 1.45;
+  max-width: 52rem;
+}
+
+.page-title {
+  margin-top: 0;
+}
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/frontend/src/styles/app-layout.css
+========================================
+/* Шапка, меню, основная область, полоска уведомлений */
+
+.app-navbar {
+  background: #1f2d3d;
+  padding: 4px 10px;
+  position: relative;
+  z-index: 100;
+}
+
+.app-navbar__inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.app-menu {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.app-menu--main {
+  flex: 1;
+  min-width: 0;
+}
+
+.app-menu a {
+  color: #fff;
+  text-decoration: none;
+  padding: 3px 8px;
+  border-radius: 4px;
+  display: inline-block;
+  font-size: 13px;
+  line-height: 1.2;
+}
+
+.app-menu a:hover,
+.app-menu a.active {
+  background: #2e4358;
+}
+
+.app-user-menu {
+  position: relative;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.app-user-menu__trigger {
+  list-style: none;
+  cursor: pointer;
+  user-select: none;
+  color: #e2e8f0;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 13px;
+  line-height: 1.2;
+}
+
+.app-user-menu__trigger::-webkit-details-marker {
+  display: none;
+}
+
+.app-user-menu__trigger::after {
+  content: ' ▾';
+  font-size: 10px;
+  opacity: 0.85;
+}
+
+.app-user-menu[open] .app-user-menu__trigger {
+  background: #2e4358;
+  color: #fff;
+}
+
+.app-user-menu__trigger:hover {
+  background: #2e4358;
+  color: #fff;
+}
+
+.app-user-menu__panel {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  min-width: 10rem;
+  padding: 4px;
+  background: #2e4358;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  z-index: 102;
+}
+
+.app-user-menu__logout {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  text-align: left;
+  background: transparent;
+  border: none;
+  color: #fff;
+  cursor: pointer;
+  padding: 4px 10px;
+  border-radius: 4px;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.2;
+}
+
+.app-user-menu__logout:hover {
+  background: #3d566e;
+}
+
+.app-menu details {
+  position: relative;
+}
+
+.app-ref-menu__trigger {
+  color: #fff;
+  cursor: pointer;
+  list-style: none;
+  padding: 6px 10px;
+  border-radius: 4px;
+  font-size: 13px;
+  line-height: 1.2;
+}
+
+.app-ref-menu__trigger::-webkit-details-marker {
+  display: none;
+}
+
+.app-ref-menu__trigger::after {
+  content: ' ▾';
+  font-size: 10px;
+  opacity: 0.85;
+}
+
+.app-ref-menu[open] .app-ref-menu__trigger {
+  background: #2e4358;
+  color: #fff;
+}
+
+.app-ref-menu__trigger:hover {
+  background: #2e4358;
+  color: #fff;
+}
+
+.app-submenu {
+  position: absolute;
+  top: 32px;
+  left: 0;
+  min-width: 180px;
+  background: #2e4358;
+  border-radius: 6px;
+  padding: 6px;
+  list-style: none;
+  margin: 0;
+  z-index: 101;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+}
+
+.app-submenu a {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.app-submenu a:hover {
+  background: #3d566e;
+}
+
+.app-submenu--compact {
+  padding: 4px;
+  min-width: 10rem;
+}
+
+.app-submenu__heading {
+  padding: 6px 10px 2px;
+  margin: 4px 0 0;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #94a3b8;
+  list-style: none;
+  pointer-events: none;
+}
+
+.app-submenu__heading:first-child {
+  margin-top: 0;
+}
+
+.app-main {
+  margin: 8px auto;
+  padding: 0 8px;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: none;
+}
+
+.app-notice-strip {
+  position: fixed;
+  top: 40px;
+  right: 16px;
+  z-index: 50;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  pointer-events: none;
+}
+
+.app-notice-strip__text {
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  line-height: 1.2;
+  white-space: nowrap;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.app-notice-strip__icon {
+  font-size: 12px;
+  opacity: 0.95;
+}
+
+.app-notice-strip__text--idle {
+  display: none;
+}
+
+.app-notice-strip__text--error {
+  color: #b91c1c;
+}
+
+.app-notice-strip__text--success {
+  color: #166534;
+}
+
+.app-notice-strip__text--warning {
+  color: #b45309;
+}
+
+.app-notice-strip__text--info {
+  color: #1d4ed8;
+}
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/frontend/src/styles/context-menu.css
+========================================
+/* Контекстное меню по строке таблицы */
+
+.row-context-menu__backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 299;
+}
+
+.row-context-menu {
+  position: fixed;
+  z-index: 300;
+  min-width: 14rem;
+  padding: 4px 0;
+  margin: 0;
+  background: #2e4358;
+  border: 1px solid #1f2d3d;
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+.row-context-menu__item {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 6px 12px;
+  border: none;
+  background: transparent;
+  color: #fff;
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.25;
+  text-align: left;
+  cursor: pointer;
+}
+
+.row-context-menu__item:hover {
+  background: #3d566e;
+}
+
+.row-context-menu__item:focus-visible {
+  outline: 2px solid #f0af89;
+  outline-offset: -2px;
+}
+
+.row-context-menu__item:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.row-context-menu__divider {
+  margin: 4px 0;
+  border: 0;
+  border-top: 1px solid rgba(148, 163, 184, 0.6);
+}
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/frontend/src/styles/dialogs.css
+========================================
+/* Модальные окна (в т.ч. «Вид» колонок) */
+
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+  padding: 16px;
+}
+
+/* Окно «Вид»: не центрировать по вертикали при нехватке места — шапка остаётся в зоне экрана */
+.dialog-backdrop--cols {
+  align-items: flex-start;
+  padding-top: max(12px, env(safe-area-inset-top, 0px));
+  overflow-y: auto;
+}
+
+.dialog {
+  background: #fff;
+  border-radius: 8px;
+  padding: 16px;
+  max-width: 28rem;
+  width: 100%;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+}
+
+/* «Вид» колонок: компактная шапка, прокрутка списка, кнопки всегда внизу модалки */
+.dialog--column-picker {
+  display: flex;
+  flex-direction: column;
+  max-height: min(82vh, 520px);
+  padding: 12px 14px;
+  max-width: 24rem;
+  min-height: 0;
+  margin-bottom: auto;
+}
+
+.dialog-column-picker__head {
+  flex-shrink: 0;
+}
+
+.dialog-column-picker__title {
+  margin: 0 0 4px;
+  font-size: 1.05rem;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.dialog-column-picker__hint {
+  font-size: 12px;
+  line-height: 1.35;
+  margin: 0 0 8px;
+}
+
+.dialog-column-picker__select-all {
+  margin: 0 0 6px;
+  padding-bottom: 6px;
+}
+
+.dialog-column-picker__scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  margin: 0 -2px;
+  padding: 0 2px 4px;
+}
+
+.dialog-cols--in-picker {
+  margin-bottom: 0;
+}
+
+.dialog-cols--in-picker .dialog-cols__row {
+  padding: 2px 0;
+}
+
+.dialog-column-picker__actions {
+  flex-shrink: 0;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.dialog--wide {
+  max-width: min(44rem, calc(100vw - 32px));
+}
+
+.dialog__hint {
+  font-size: 13px;
+  color: #64748b;
+  margin: 0 0 12px;
+}
+
+.dialog-cols__select-all {
+  margin: 0 0 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #e2e8f0;
+  font-size: 13px;
+}
+
+.dialog-cols__select-all label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.dialog-cols {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+}
+
+.dialog-cols__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.dialog-cols__row--drop-over {
+  background: #f1f5f9;
+  box-shadow: inset 0 0 0 1px #94a3b8;
+  border-radius: 4px;
+}
+
+.dialog-cols__row--dragging {
+  opacity: 0.55;
+}
+
+.dialog-cols__drag-handle {
+  flex-shrink: 0;
+  cursor: grab;
+  user-select: none;
+  padding: 2px 4px;
+  margin: 0;
+  font-size: 14px;
+  line-height: 1;
+  color: #94a3b8;
+  letter-spacing: -2px;
+}
+
+.dialog-cols__drag-handle:active {
+  cursor: grabbing;
+}
+
+.dialog-cols__label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1 1 auto;
+  min-width: 0;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.dialog-cols__width {
+  flex-shrink: 0;
+}
+
+.dialog-cols__width-input {
+  width: 4.25rem;
+  box-sizing: border-box;
+  font-size: 12px;
+  line-height: 1.2;
+  padding: 2px 4px;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+}
+
+.dialog-cols__width-input::placeholder {
+  color: #94a3b8;
+  font-size: 11px;
+}
+
+.dialog__actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/frontend/src/styles/forms-wh.css
+========================================
+/* Форма создания/редактирования склада */
+
+.wh-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 24rem;
+}
+
+.wh-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 14px;
+}
+
+.wh-form__hint {
+  font-size: 12px;
+  line-height: 1.4;
+  color: #64748b;
+  font-weight: 400;
+}
+
+.wh-form input[type='text'] {
+  padding: 6px 8px;
+  font-size: 14px;
+}
+
+.wh-form__check {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+
+.wh-form__err {
+  color: #b91c1c;
+  margin: 0;
+  font-size: 14px;
+}
+
+.wh-form__actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.wh-form__actions button {
+  padding: 8px 14px;
+  cursor: pointer;
+}
+
+.wh-form__actions a {
+  color: #2c7be5;
+  text-decoration: none;
+}
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/frontend/src/styles/list-pages.css
+========================================
+/* Тулбар списков, кнопки .tb, оболочка страницы, зона скролла, обёртка таблицы */
+
+.list-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+
+.list-toolbar__right {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.tb {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  border: none;
+  border-radius: 3px;
+  font-size: 11px;
+  height: 22px;
+  padding: 0 7px;
+  cursor: pointer;
+  text-decoration: none;
+  color: #fff;
+  line-height: 1;
+}
+
+.tb--icon {
+  width: 28px;
+  min-width: 28px;
+  padding: 0;
+  justify-content: center;
+  gap: 0;
+}
+
+.tb--icon svg {
+  width: 15px;
+  height: 15px;
+  display: block;
+  flex-shrink: 0;
+}
+
+.tb--refresh {
+  background: #3498db;
+}
+.tb--refresh:hover {
+  background: #2980b9;
+}
+
+.tb--create {
+  background: #27ae60;
+}
+.tb--create:hover {
+  background: #229954;
+}
+
+.tb--excel {
+  background: #2e7d32;
+}
+.tb--excel:hover {
+  background: #276b2b;
+}
+
+.tb--view {
+  background: #7e57c2;
+}
+.tb--view:hover {
+  background: #6d49ac;
+}
+
+.tb--reset {
+  background: #95a5a6;
+}
+.tb--reset:hover {
+  background: #7f8c8d;
+}
+
+.tb--danger {
+  background: #c0392b;
+}
+.tb--danger:hover {
+  background: #a93226;
+}
+
+/* Не HTML disabled: кликабельно, чтобы показать пояснение (права, пустой выбор и т.д.) */
+.tb--muted {
+  opacity: 0.55;
+  cursor: pointer;
+}
+
+.tb--muted:hover {
+  filter: brightness(0.97);
+}
+
+.list-msg {
+  font-size: 14px;
+  margin: 0 0 10px;
+}
+
+.list-msg--warn {
+  color: #92400e;
+}
+
+.list-msg--err {
+  color: #b91c1c;
+}
+
+.address-detail__mono {
+  font-size: 0.85em;
+  word-break: break-all;
+}
+
+.address-detail__mono--wrap {
+  white-space: pre-wrap;
+}
+
+.list-selection-msg {
+  margin: 0 0 6px;
+  min-height: 20px;
+  font-size: 11px;
+  color: #64748b;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  padding: 2px 6px;
+}
+
+.list-selection-msg.is-active {
+  border-color: transparent;
+  background: transparent;
+}
+
+.list-table-footer {
+  margin-top: 6px;
+  padding-top: 8px;
+  display: flex;
+  align-items: center;
+}
+
+.list-table-count {
+  font-size: 13px;
+  font-weight: 700;
+  color: #334155;
+}
+
+.list-page-shell {
+  display: flex;
+  flex-direction: column;
+  /* Держим карточку в пределах окна, а скролл уводим внутрь списка. */
+  max-height: calc(100dvh - 88px);
+  overflow: hidden;
+}
+
+.list-table-area {
+  margin-top: 0px;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  /* Единый скролл у .table-wrap: X и Y в одном контейнере. */
+  overflow: hidden;
+}
+
+/* Таблица списков: палитра как в WMS_New (list_base.css) */
+.table-wrap {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  background: #fff;
+}
+
+/* Карточка сущности: вкладки и связанные таблицы */
+
+.entity-detail__back {
+  margin: 0 0 8px;
+  font-size: 14px;
+}
+
+.entity-detail__back a {
+  color: #2c7be5;
+  text-decoration: none;
+}
+
+.entity-detail__back a:hover {
+  text-decoration: underline;
+}
+
+.entity-detail__subtitle {
+  margin: -6px 0 16px;
+  font-size: 14px;
+  color: #64748b;
+}
+
+.entity-tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid #ddd;
+  margin-bottom: 16px;
+}
+
+.entity-tabs__btn {
+  padding: 8px 14px;
+  margin-bottom: -1px;
+  border: 1px solid transparent;
+  border-radius: 6px 6px 0 0;
+  background: #f1f5f9;
+  font-size: 14px;
+  cursor: pointer;
+  color: #334155;
+}
+
+.entity-tabs__btn:hover {
+  background: #e2e8f0;
+}
+
+.entity-tabs__btn--active {
+  background: #fff;
+  border-color: #ddd;
+  border-bottom-color: #fff;
+  font-weight: 600;
+}
+
+.entity-tab-panel {
+  min-height: 120px;
+}
+
+.entity-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(320px, 1fr));
+  gap: 12px;
+}
+
+.entity-block {
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: #fff;
+}
+
+.entity-block__title {
+  margin: 0 0 8px;
+  font-size: 14px;
+  font-weight: 700;
+  color: #334155;
+}
+
+.entity-dl {
+  margin: 0;
+  max-width: 100%;
+}
+
+.entity-dl__row {
+  display: grid;
+  grid-template-columns: 9rem 1fr;
+  gap: 8px 16px;
+  padding: 6px 0;
+  border-bottom: 1px solid #f1f5f9;
+  font-size: 14px;
+}
+
+.entity-dl__row:last-child {
+  border-bottom: none;
+}
+
+.entity-dl__dt {
+  margin: 0;
+  font-weight: 600;
+  color: #64748b;
+}
+
+.entity-dl__dd {
+  margin: 0;
+  color: #0f172a;
+}
+
+.entity-inline-form {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin: 6px 0 10px;
+}
+
+.entity-inline-form input {
+  flex: 1 1 420px;
+  min-width: 260px;
+  height: 30px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  padding: 0 10px;
+  font-size: 13px;
+}
+
+.entity-inline-form--tight {
+  margin: 0;
+}
+
+.entity-field-grid {
+  display: grid;
+  gap: 8px;
+  max-width: 720px;
+}
+
+.entity-field-grid--wide {
+  max-width: 760px;
+}
+
+.entity-search-input {
+  max-width: 240px;
+}
+
+.entity-input-wide {
+  width: 100%;
+}
+
+.entity-input-wide--560 {
+  max-width: 560px;
+}
+
+.entity-json-view {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.entity-json-editor {
+  width: 100%;
+  max-width: 760px;
+  font-family: monospace;
+}
+
+.entity-edit-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(180px, 1fr));
+  gap: 8px;
+}
+
+.entity-edit-grid label {
+  display: grid;
+  gap: 4px;
+  font-size: 12px;
+  color: #475569;
+}
+
+.entity-edit-grid input {
+  width: 100%;
+  box-sizing: border-box;
+  height: 30px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  padding: 0 10px;
+  font-size: 13px;
+}
+
+.entity-edit-grid__wide {
+  grid-column: 1 / -1;
+}
+
+.entity-edit-grid__actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.entity-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  z-index: 80;
+}
+
+.entity-modal {
+  width: min(920px, 100%);
+  max-height: calc(100vh - 40px);
+  overflow: auto;
+  background: #fff;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  box-shadow: 0 14px 40px rgba(2, 6, 23, 0.25);
+  padding: 14px;
+}
+
+.entity-modal__title {
+  margin: 0 0 12px;
+  font-size: 18px;
+  color: #0f172a;
+}
+
+@media (max-width: 900px) {
+  .entity-grid {
+    grid-template-columns: 1fr;
+  }
+  .entity-edit-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.entity-related-table-wrap {
+  margin-top: 4px;
+}
+
+.entity-related-table-wrap--spaced {
+  margin-top: 12px;
+}
+
+.entity-related-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.entity-related-table th,
+.entity-related-table td {
+  padding: 8px 10px;
+  text-align: left;
+  border-bottom: 1px solid #eee;
+}
+
+.entity-related-table thead th {
+  background: #f8fafc;
+  font-weight: 600;
+  color: #334155;
+}
+
+.entity-related-table__link {
+  color: #2c7be5;
+  text-decoration: none;
+}
+
+.entity-related-table__link:hover {
+  text-decoration: underline;
+}
+
+/* Массовое создание локаций */
+.loc-bulk__tabs {
+  display: flex;
+  gap: 4px;
+  margin: 0 0 12px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.loc-bulk__tab {
+  padding: 8px 12px;
+  border: none;
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  color: #64748b;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+
+.loc-bulk__tab:hover {
+  color: #1e293b;
+}
+
+.loc-bulk__tab.is-active {
+  color: #1d4ed8;
+  font-weight: 600;
+  border-bottom-color: #1d4ed8;
+}
+
+.loc-bulk__field {
+  margin: 0 0 12px;
+}
+
+.loc-bulk__field label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+  margin-bottom: 4px;
+}
+
+.loc-bulk__field select,
+.loc-bulk__field textarea {
+  width: 100%;
+  box-sizing: border-box;
+  font: inherit;
+  font-size: 13px;
+  padding: 6px 8px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+}
+
+.loc-bulk__field textarea {
+  min-height: 120px;
+  resize: vertical;
+}
+
+.loc-bulk__checkboxes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  max-height: 140px;
+  overflow: auto;
+  padding: 8px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.loc-bulk__checkboxes label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  font-weight: 400;
+  color: #1e293b;
+}
+
+.loc-bulk__summary {
+  font-size: 13px;
+  color: #475569;
+  margin: 8px 0 0;
+}
+
+.loc-bulk__toolbar {
+  margin: 0 0 10px;
+}
+
+.loc-bulk__toolbar .tb {
+  font-size: 12px;
+}
+
+/* Единая строка: entity-inline-form слева, list-toolbar справа */
+.list-page-shell .entity-inline-form {
+  margin: 0;
+  flex-shrink: 0;
+}
+
+.list-page-toolbar-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+
+.list-page-toolbar-row .list-toolbar {
+  margin-bottom: 0;
+  margin-left: auto;
+}
+
+/* Поиск адресов с выпадающим списком */
+.address-search {
+  position: relative;
+  width: 100%;
+  max-width: 560px;
+}
+
+.address-search__loading {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 12px;
+  color: #64748b;
+}
+
+.address-search__dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  max-height: 300px;
+  overflow-y: auto;
+  background: #fff;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  z-index: 50;
+}
+
+.address-search__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  font-size: 13px;
+  color: #1e293b;
+}
+
+.address-search__item:hover {
+  background: #f1f5f9;
+}
+
+.address-search__item-id {
+  flex-shrink: 0;
+  font-weight: 600;
+  color: #64748b;
+  min-width: 40px;
+}
+
+.address-search__item-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.address-search__empty {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  padding: 8px 10px;
+  background: #fff;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #64748b;
+  z-index: 50;
+}
+
+/* Справочники */
+.ref-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.ref-group__title {
+  margin: 0 0 12px;
+  font-size: 14px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #64748b;
+}
+
+.ref-group__cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 12px;
+}
+
+.ref-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 16px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  text-decoration: none;
+  transition: all 0.15s;
+}
+
+.ref-card:hover {
+  border-color: #cbd5e1;
+  background: #fff;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
+}
+
+.ref-card__title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.ref-card__desc {
+  font-size: 13px;
+  color: #64748b;
+  line-height: 1.4;
+}
+
+/* Навигация на detail-страницах */
+.detail-nav {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 4px;
+  flex-wrap: wrap;
+}
+
+.detail-nav__back {
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 14px;
+  color: #2563eb;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.detail-nav__back:hover {
+  color: #1d4ed8;
+  text-decoration: underline;
+}
+
+
+.breadcrumbs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  color: #64748b;
+}
+
+.breadcrumbs__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.breadcrumbs__link {
+  color: #2563eb;
+  text-decoration: none;
+}
+
+.breadcrumbs__link:hover {
+  text-decoration: underline;
+}
+
+.breadcrumbs__current {
+  color: #1e293b;
+  font-weight: 500;
+}
+
+.breadcrumbs__sep {
+  color: #94a3b8;
+}
+
+
+/* Заголовок и тулбар на одной строке */
+.list-page-shell .list-page-header {
+  margin-bottom: 0;
+}
+
+.list-page-shell .list-page-toolbar-row {
+  margin-top: -32px;
+  margin-bottom: 4px;
+}
+
+.list-page-shell .list-page-toolbar-row .list-toolbar {
+  margin-left: auto;
+}
+
+
+.detail-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.detail-header .page-title {
+  margin: 0;
+}
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/frontend/src/styles/list-table.css
+========================================
+/* Таблица списков (палитра как в WMS_New), фильтры колонок */
+
+.list-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+  line-height: 1.1;
+  background: #fff;
+}
+
+.list-table.list-table--col-size {
+  table-layout: fixed;
+  min-width: 100%;
+  width: fit-content;
+  /* width: max-content; */
+}
+
+col.list-table__col-cb {
+  width: 26px;
+}
+
+.list-table__th-col {
+  position: relative;
+  vertical-align: middle;
+}
+
+.list-table__col-resize {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 6px;
+  height: 100%;
+  cursor: col-resize;
+  touch-action: none;
+  user-select: none;
+  z-index: 4;
+  box-sizing: border-box;
+}
+
+.list-table__col-resize:hover {
+  background: rgba(240, 175, 137, 0.35);
+}
+
+.list-table--col-size thead tr.list-filter-row th {
+  min-width: 0;
+}
+
+.list-table--col-size thead tr.list-filter-row th:has(.list-filter-cell--datetime) {
+  min-width: 0;
+}
+
+.list-table--col-size .list-filter-cell {
+  max-width: none;
+  min-width: 0;
+}
+
+/* Иначе th/td держат min-width: auto от содержимого — <col> не может сузить колонку (в т.ч. ID). */
+.list-table--col-size thead th:not(.list-table__cb),
+.list-table--col-size tbody td:not(.list-table__cb) {
+  min-width: 26;
+}
+
+.list-table th,
+.list-table td {
+  border: 1px solid #ddd;
+  padding: 1px 4px;
+  text-align: left;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.list-table thead tr.list-table__head-row th {
+  background: #2c3e50;
+  color: #fff;
+  font-weight: 500;
+  font-size: 11px;
+  line-height: 1.1;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.12);
+}
+
+/* Вторая строка заголовка (фильтры) закрепляется сразу под первой. */
+.list-table thead tr.list-filter-row th {
+  position: sticky;
+  top: 22px;
+  z-index: 1;
+}
+
+.list-table thead tr.list-table__head-row th:has(.list-table__sort-btn) {
+  padding: 0;
+  vertical-align: middle;
+}
+
+.list-table__sort-btn {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 2px;
+  width: 100%;
+  min-height: 100%;
+  margin: 0;
+  padding: 1px 4px;
+  box-sizing: border-box;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.list-table__sort-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.list-table__sort-btn:focus-visible {
+  outline: 2px solid #f0af89;
+  outline-offset: -2px;
+}
+
+.list-table__sort-arrow {
+  font-size: 8px;
+  opacity: 0.95;
+  flex-shrink: 0;
+}
+
+.list-table thead tr.list-filter-row {
+  --list-filter-focus: #f0af89;
+}
+
+.list-table thead tr.list-filter-row th {
+  background: #34495e;
+  color: #fff;
+  font-weight: normal;
+  vertical-align: middle;
+  padding: 1px 3px;
+}
+
+.list-table thead tr.list-filter-row th:has(.list-filter-cell__row) {
+  min-width: 0;
+}
+
+.list-table thead tr.list-filter-row th:has(.list-filter-cell--datetime) {
+  min-width: 0;
+}
+
+.list-table thead .list-table__cb input {
+  accent-color: #3498db;
+  width: 12px;
+  height: 12px;
+}
+
+.list-table tbody tr {
+  transition: background-color 0.15s ease;
+}
+
+.list-table tbody td {
+  background: #fff;
+  color: #222;
+  font-size: 11px;
+}
+
+.list-table tbody td.list-table__empty {
+  text-align: center;
+  padding: 28px 16px;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.45;
+  background: #f8fafc;
+  white-space: normal;
+}
+
+.list-table tbody tr:hover td {
+  background: #e8f4f8;
+}
+
+.list-table tbody tr:has(> td.list-table__empty):hover td {
+  background: #f8fafc;
+}
+
+.list-table th.list-table__cb,
+.list-table td.list-table__cb {
+  width: 14px;
+  min-width: 0;
+  max-width: 14px;
+  box-sizing: border-box;
+  padding: 0;
+  overflow: hidden;
+  text-align: center;
+  vertical-align: middle;
+}
+
+.list-table tbody .list-table__cb input {
+  width: 12px;
+  height: 12px;
+  accent-color: #3498db;
+  vertical-align: middle;
+}
+
+.list-filter-cell {
+  position: relative;
+  width: 100%;
+  max-width: 12rem;
+  min-width: 0;
+}
+
+.list-filter-cell--datetime {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-width: 14rem;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.list-filter-cell__row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+
+.list-filter-cell__row > .list-filter-cell__field {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: auto;
+}
+
+.list-filter-cell__clear--inline {
+  position: static;
+  transform: none;
+  flex: 0 0 18px;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
+.list-filter-cell__dt-input {
+  min-width: 0;
+}
+
+.list-filter-cell__dt-range {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.list-filter-cell__field {
+  width: 100%;
+  box-sizing: border-box;
+  font-size: 10px;
+  line-height: 1.15;
+  padding: 0 3px;
+  min-height: 18px;
+  border: 1px solid #cbd5e1;
+  border-radius: 2px;
+  background: #fff;
+  color: #1e293b;
+}
+
+.list-filter-cell--dirty .list-filter-cell__field {
+  padding-right: 18px;
+}
+
+.list-filter-cell--datetime.list-filter-cell--dirty .list-filter-cell__field {
+  padding-right: 3px;
+}
+
+.list-filter-cell--dirty .list-filter-cell__row .list-filter-cell__field {
+  padding-right: 3px;
+}
+
+.list-filter-cell__field:focus,
+.list-filter-cell__field:focus-visible {
+  outline: none;
+  border-color: var(--list-filter-focus, #f0af89);
+  box-shadow: 0 0 0 1px var(--list-filter-focus, #f0af89);
+}
+
+.list-table thead tr.list-filter-row .list-filter-cell--dirty .list-filter-cell__field {
+  border-color: var(--list-filter-focus, #f0af89);
+  box-shadow: 0 0 0 1px var(--list-filter-focus, #f0af89);
+}
+
+.list-table thead tr.list-filter-row .list-filter-cell--datetime.list-filter-cell--dirty .list-filter-cell__field {
+  padding-right: 3px;
+}
+
+.list-table thead tr.list-filter-row .list-filter-cell--dirty .list-filter-cell__row .list-filter-cell__field {
+  padding-right: 3px;
+}
+
+.list-filter-cell__field--select {
+  cursor: pointer;
+  appearance: auto;
+}
+
+.list-table thead tr.list-filter-row .list-filter-cell__field--select:hover {
+  background-color: #f8fafc;
+}
+
+.list-filter-cell__clear {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 2px;
+  background: transparent;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.list-filter-cell__clear:hover {
+  background: #e2e8f0;
+  color: #1e293b;
+}
+
+.list-table thead tr.list-filter-row .list-filter-cell__clear {
+  color: #94a3b8;
+}
+
+.list-table thead tr.list-filter-row .list-filter-cell__clear:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+}
+
+.list-table thead tr.list-filter-row .list-filter-cell__clear--inline {
+  color: #e2e8f0;
+}
+
+.list-table thead tr.list-filter-row .list-filter-cell__clear--inline:hover {
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+}
+
+/* Одна строка в ячейке — без переноса; лишнее обрезается (горизонтальный скролл у .table-wrap). */
+.list-table--col-size tbody td:not(.list-table__cb) {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/frontend/src/styles/topology-hierarchy.css
+========================================
+/* Страница «Ячейки (иерархия)»: шапка страницы отдельно, ниже общий блок «данные» (дерево | таблица) */
+
+/* display: flex + column задаёт .list-page-shell; зазор между шапкой и блоком данных */
+.topology-hierarchy {
+  gap: 16px;
+}
+
+/* Только «← Топология» и заголовок — не на одном уровне с деревом */
+.topology-hierarchy__header {
+  flex-shrink: 0;
+  padding-bottom: 14px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.topology-hierarchy__header .topology-back-bar {
+  margin-bottom: 6px;
+}
+
+.topology-hierarchy__header .page-title {
+  margin: 0;
+}
+
+/* Общий контейнер: слева дерево, справа таблица — одна «полка» под шапкой */
+.topology-hierarchy__data {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  flex: 1 1 auto;
+  min-height: 0;
+  gap: 12px;
+  padding: 12px;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+}
+
+.topology-hierarchy__tree {
+  flex: 0 0 min(120px, 32vw);
+  min-height: 0;
+  align-self: stretch;
+  overflow: auto;
+  padding: 8px 10px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.topology-hierarchy__tree-title {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.topology-hierarchy__root-reset {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  margin: 0 0 10px;
+  padding: 6px 8px;
+  font: inherit;
+  font-size: 12px;
+  color: #1e40af;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 6px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.topology-hierarchy__root-reset:hover {
+  background: #dbeafe;
+}
+
+.topology-hierarchy__tree ul {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0 14px;
+}
+
+.topology-hierarchy__tree > ul {
+  padding-left: 0;
+}
+
+.topology-hierarchy__node {
+  margin: 2px 0;
+}
+
+.topology-hierarchy__row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 26px;
+}
+
+.topology-hierarchy__toggle {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  color: #64748b;
+  font-size: 11px;
+  line-height: 1;
+  border-radius: 4px;
+}
+
+.topology-hierarchy__toggle:hover {
+  background: #e2e8f0;
+  color: #1e293b;
+}
+
+.topology-hierarchy__toggle:disabled {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.topology-hierarchy__label {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  padding: 3px 8px;
+  border: none;
+  background: transparent;
+  border-radius: 4px;
+  cursor: pointer;
+  color: #1e293b;
+  font-size: 13px;
+  line-height: 1.25;
+}
+
+.topology-hierarchy__label:hover {
+  background: #e2e8f0;
+}
+
+.topology-hierarchy__label.is-selected {
+  background: #cbd5e1;
+  font-weight: 600;
+}
+
+.topology-hierarchy__main {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.topology-hierarchy__hint {
+  margin: 0 0 8px;
+  font-size: 13px;
+  color: #64748b;
+}
+
+/* Кнопка «← Топология» над списками */
+.topology-back-bar {
+  margin: 0 0 12px;
+}
+
+.topology-back-bar__link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #1d4ed8;
+  text-decoration: none;
+  padding: 4px 0;
+}
+
+.topology-back-bar__link:hover {
+  text-decoration: underline;
+}
+
+/* Хаб «Топология» */
+.topology-hub {
+  padding: 0;
+}
+
+.topology-hub__header {
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.topology-hub__header .page-title {
+  margin: 0 0 8px;
+}
+
+.topology-hub__intro {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.45;
+  color: #475569;
+  max-width: 42rem;
+}
+
+.topology-hub__sections {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.topology-hub__section-title {
+  margin: 0 0 12px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #64748b;
+}
+
+.topology-hub__cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.topology-hub__card {
+  display: block;
+  padding: 14px 16px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  text-decoration: none;
+  color: inherit;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    background 0.15s ease;
+}
+
+.topology-hub__card:hover {
+  border-color: #cbd5e1;
+  background: #fff;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
+}
+
+.topology-hub__card-title {
+  margin: 0 0 6px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.topology-hub__card:hover .topology-hub__card-title {
+  color: #1d4ed8;
+}
+
+.topology-hub__card-desc {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.4;
+  color: #64748b;
+}
+
+/* Мастер топологии */
+.topology-wizard {
+  margin-top: 8px;
+}
+
+.topology-wizard__progress {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin-bottom: 18px;
+  padding: 0;
+  list-style: none;
+}
+
+.topology-wizard__progress-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #94a3b8;
+  font-weight: 600;
+}
+
+.topology-wizard__progress-item.is-past {
+  color: #64748b;
+}
+
+.topology-wizard__progress-item.is-active {
+  color: #1d4ed8;
+}
+
+.topology-wizard__progress-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  background: #e2e8f0;
+  font-size: 11px;
+  color: #475569;
+}
+
+.topology-wizard__progress-item.is-active .topology-wizard__progress-num {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.topology-wizard__progress-item.is-past .topology-wizard__progress-num {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.topology-wizard__alert {
+  margin-bottom: 12px;
+}
+
+.topology-wizard__panel {
+  padding: 18px 20px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  max-width: 42rem;
+}
+
+.topology-wizard__panel--done {
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+}
+
+.topology-wizard__h2 {
+  margin: 0 0 14px;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.topology-wizard__type-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
+}
+
+.topology-wizard__type-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 16px 14px;
+  text-align: left;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #fff;
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.topology-wizard__type-card:hover {
+  border-color: #3b82f6;
+  box-shadow: 0 1px 8px rgba(37, 99, 235, 0.12);
+}
+
+.topology-wizard__type-title {
+  font-weight: 700;
+  font-size: 14px;
+  color: #0f172a;
+}
+
+.topology-wizard__type-desc {
+  font-size: 12px;
+  color: #64748b;
+  line-height: 1.35;
+}
+
+.topology-wizard__nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.topology-wizard__summary-list {
+  margin: 0;
+  padding-left: 1.2rem;
+  font-size: 14px;
+  line-height: 1.65;
+  color: #334155;
+}
+
+.topology-wizard__summary-list li {
+  margin: 4px 0;
+}
+
+.topology-wizard__result {
+  margin: 0 0 10px;
+  font-size: 15px;
+  line-height: 1.5;
+  color: #14532d;
+}
+
+.topology-master__header {
+  margin-bottom: 16px;
+}
+
+.topology-master__lead {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.45;
+  color: #475569;
+  max-width: 40rem;
+}
+
+.topology-master__panel {
+  padding: 16px 18px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+}
+
+.topology-master__muted {
+  margin: 0 0 14px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #475569;
+}
+
+.topology-master__roadmap {
+  margin: 0;
+  padding-left: 1.25rem;
+  font-size: 14px;
+  line-height: 1.55;
+  color: #334155;
+}
+
+.topology-master__roadmap li {
+  margin: 6px 0;
+}
+
+/* Мастер сетки стеллаж × позиция × ярус */
+.topology-rack-grid__ranges {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 10px 14px;
+  margin-bottom: 12px;
+}
+
+.topology-rack-grid__ranges .loc-bulk__field input {
+  max-width: 100%;
+}
+
+.topology-rack-grid__summary {
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  background: #f1f5f9;
+  border-radius: 8px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #334155;
+}
+
+.topology-rack-grid__summary p {
+  margin: 4px 0;
+}
+
+.topology-rack-grid__view-toggle {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.topology-rack-grid__toggle {
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #fff;
+  color: #64748b;
+  cursor: pointer;
+}
+
+.topology-rack-grid__toggle.is-active {
+  border-color: #2563eb;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.topology-rack-grid__table-wrap {
+  max-height: min(420px, 55vh);
+  overflow: auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  margin-bottom: 14px;
+}
+
+.topology-rack-grid__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.topology-rack-grid__table th,
+.topology-rack-grid__table td {
+  padding: 6px 8px;
+  text-align: left;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.topology-rack-grid__table th {
+  position: sticky;
+  top: 0;
+  background: #f8fafc;
+  font-weight: 700;
+  color: #475569;
+  z-index: 1;
+}
+
+.topology-rack-grid__table tbody tr:hover {
+  background: #f8fafc;
+}
+
+.topology-rack-grid__tree {
+  list-style: none;
+  margin: 0 0 14px;
+  padding: 0;
+  max-height: min(420px, 55vh);
+  overflow: auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.topology-rack-grid__tree-rack {
+  margin: 8px 0;
+}
+
+.topology-rack-grid__tree-label {
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.topology-rack-grid__tree ul {
+  list-style: none;
+  margin: 4px 0 0 12px;
+  padding: 0;
+}
+
+.topology-rack-grid__tree ul li {
+  margin: 3px 0;
+  font-size: 13px;
+  color: #334155;
+}
+
+.topology-rack-grid__tree-meta {
+  font-size: 11px;
+  color: #64748b;
+}
+
+.topology-rack-grid__errors {
+  margin: 12px 0;
+  font-size: 13px;
+  color: #991b1b;
+}
+
+.topology-rack-grid__errors ul {
+  margin: 6px 0 0;
+  padding-left: 1.2rem;
+}
+
+/* Совместимость со старыми классами ссылок в иерархии */
+.topology-hub__link {
+  color: #2563eb;
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.topology-hub__link:hover {
+  text-decoration: underline;
+}
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/frontend/package.json
+========================================
+{
+  "name": "frontend",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "lint": "eslint .",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@tanstack/react-query": "^5.101.4",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "react-router-dom": "^7.13.2"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.4",
+    "@types/node": "^24.12.0",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.1",
+    "eslint": "^9.39.4",
+    "eslint-plugin-react-hooks": "^7.0.1",
+    "eslint-plugin-react-refresh": "^0.5.2",
+    "globals": "^17.4.0",
+    "typescript": "~5.9.3",
+    "typescript-eslint": "^8.57.0",
+    "vite": "^8.0.1"
+  }
+}
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/frontend/vite.config.ts
+========================================
+import { defineConfig, loadEnv } from 'vite'
+import react from '@vitejs/plugin-react'
+
+// https://vite.dev/config/
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), '')
+  /** Один URL бэкенда для dev; переопределение: `VITE_DEV_BACKEND` в `.env.development` */
+  const devBackend = env.VITE_DEV_BACKEND ?? 'http://127.0.0.1:8080'
+
+  const proxyPrefixes = ['/api', '/docs', '/openapi.json', '/redoc'] as const
+  const proxy = Object.fromEntries(
+    proxyPrefixes.map((prefix) => [
+      prefix,
+      { target: devBackend, changeOrigin: true as const },
+    ]),
+  )
+
+  return {
+    plugins: [react()],
+    server: { proxy },
+  }
+})
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/frontend/tsconfig.json
+========================================
+{
+  "files": [],
+  "references": [
+    { "path": "./tsconfig.app.json" },
+    { "path": "./tsconfig.node.json" }
+  ]
+}
+
+
+

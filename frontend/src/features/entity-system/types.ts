@@ -91,6 +91,7 @@ export type ListPageConfig<Row extends { id: number }> = {
   title: string
   subtitle?: string
   apiUrl: string
+  staleTime?: number
   
   columns: ColumnConfig[]
   filters?: FilterConfig[]

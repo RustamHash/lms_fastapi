@@ -5,15 +5,12 @@ from __future__ import annotations
 from datetime import date
 from decimal import Decimal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, Field
+
+from app.api.v1.base_schemas import BaseRead
 
 
-# ========== Топология ==========
-
-class WarehouseRead(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: int
+class WarehouseRead(BaseRead):
     name: str
     address_id: int | None = None
 
@@ -23,10 +20,7 @@ class WarehouseCreate(BaseModel):
     address_id: int | None = None
 
 
-class ZoneRead(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: int
+class ZoneRead(BaseRead):
     warehouse_id: int
     name: str
     zone_type: str
@@ -38,10 +32,7 @@ class ZoneCreate(BaseModel):
     zone_type: str
 
 
-class LocationRead(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: int
+class LocationRead(BaseRead):
     row_id: int
     position: int
     level: int = 1
@@ -49,12 +40,41 @@ class LocationRead(BaseModel):
     max_volume: float | None = None
 
 
-# ========== Товары ==========
+class VirtualWarehouseRead(BaseRead):
+    depositor_id: int
+    warehouse_id: int
+    code: str
+    name: str
 
-class ProductRead(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
 
-    id: int
+class VirtualWarehouseCreate(BaseModel):
+    depositor_id: int
+    warehouse_id: int
+    code: str = Field(min_length=1, max_length=50)
+    name: str = Field(min_length=1, max_length=255)
+
+
+class RowRead(BaseRead):
+    zone_id: int
+    code: str
+    row_type: str
+
+
+class RowCreate(BaseModel):
+    zone_id: int
+    code: str = Field(min_length=1, max_length=10)
+    row_type: str = Field(min_length=1, max_length=20)
+
+
+class LocationCreate(BaseModel):
+    row_id: int
+    position: int
+    level: int = 1
+    max_weight: float | None = None
+    max_volume: float | None = None
+
+
+class ProductRead(BaseRead):
     depositor_id: int
     external_id: str
     sku: str = ""
@@ -90,12 +110,7 @@ class ProductCreate(BaseModel):
     temperature_requirements: str = ""
 
 
-# ========== Партии ==========
-
-class BatchRead(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: int
+class BatchRead(BaseRead):
     product_id: int
     batch_number: str
     production_date: date | None = None
@@ -109,12 +124,7 @@ class BatchCreate(BaseModel):
     expiration_date: date | None = None
 
 
-# ========== LPN ==========
-
-class LPNRead(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: int
+class LPNRead(BaseRead):
     number: str
     status: str
 
@@ -123,12 +133,7 @@ class LPNCreate(BaseModel):
     status: str = "created"
 
 
-# ========== Остатки ==========
-
-class StockBalanceRead(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: int
+class StockBalanceRead(BaseRead):
     product_id: int
     location_id: int
     lpn_id: int | None = None
@@ -165,20 +170,7 @@ class StockMove(BaseModel):
     document_id: int | None = None
 
 
-class StockReserve(BaseModel):
-    product_id: int
-    location_id: int
-    quantity: Decimal
-    lpn_id: int | None = None
-    batch_id: int | None = None
-
-
-# ========== Задания ==========
-
-class TaskRead(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: int
+class TaskRead(BaseRead):
     task_type: str
     document_id: int | None = None
     assignee_id: int | None = None

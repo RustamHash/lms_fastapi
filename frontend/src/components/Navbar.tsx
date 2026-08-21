@@ -1,7 +1,8 @@
+import { memo } from 'react'
 import { NavLink } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 
-export function Navbar() {
+function NavbarInner() {
   const { user, logout } = useAuth()
 
   return (
@@ -17,13 +18,19 @@ export function Navbar() {
             <NavLink to="/references">Справочники</NavLink>
           </li>
           <li>
-            <NavLink to="/warehouse/tasks">Задания</NavLink>
+            <NavLink to="/tasks">Задания</NavLink>
           </li>
           <li>
             <NavLink to="/documents">Документы</NavLink>
           </li>
           <li>
             <NavLink to="/delivery/orders">Доставка</NavLink>
+          </li>
+          <li>
+            <NavLink to="/audit">Аудит</NavLink>
+          </li>
+          <li>
+            <NavLink to="/notification-rules">Правила</NavLink>
           </li>
           <li>
             <NavLink to="/notifications">Уведомления</NavLink>
@@ -33,6 +40,21 @@ export function Navbar() {
           </li>
           <li>
             <NavLink to="/integrations/profiles">Интеграции</NavLink>
+          </li>
+          <li>
+            <NavLink to="/carriers">Перевозчики</NavLink>
+          </li>
+          <li>
+            <NavLink to="/keepers">Хранители</NavLink>
+          </li>
+          <li>
+            <NavLink to="/deviations">Отклонения</NavLink>
+          </li>
+          <li>
+            <NavLink to="/stock">Остатки</NavLink>
+          </li>
+          <li>
+            <NavLink to="/topology/warehouses">Топология</NavLink>
           </li>
           <li>
             <NavLink to="/files">Файлы</NavLink>
@@ -55,3 +77,6 @@ export function Navbar() {
     </nav>
   )
 }
+
+
+export const Navbar = memo(NavbarInner)

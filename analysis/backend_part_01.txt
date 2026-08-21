@@ -1,0 +1,3500 @@
+    rows = await service.list_all()
+    return [schemas.AddressRead.model_validate(r) for r in rows]
+
+
+@router.post("/addresses/resolve", response_model=schemas.AddressRead)
+async def resolve_address(
+    body: schemas.AddressResolve,
+    session: SessionDep,
+    user_id: UserDep,
+) -> schemas.AddressRead:
+    service = AddressService(AddressRepository(session))
+    address = await service.get_or_create(body.raw_text, body.source, user_id)
+    return schemas.AddressRead.model_validate(address)
+
+
+@router.get("/addresses/{address_id}", response_model=schemas.AddressRead)
+async def get_address(address_id: int, session: SessionDep) -> schemas.AddressRead:
+    service = AddressService(AddressRepository(session))
+    row = await service.get_by_id(address_id)
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Адрес не найден")
+    return schemas.AddressRead.model_validate(row)
+
+
+@router.patch("/addresses/{address_id}", response_model=schemas.AddressRead)
+async def update_address(
+    address_id: int,
+    body: schemas.AddressUpdate,
+    session: SessionDep,
+    user_id: UserDep,
+) -> schemas.AddressRead:
+    service = AddressService(AddressRepository(session))
+    address = await service.update(address_id, user_id, body.model_dump(exclude_unset=True))
+    if address is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Адрес не найден")
+    return schemas.AddressRead.model_validate(address)
+
+
+@router.delete("/addresses/{address_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_address(
+    address_id: int,
+    session: SessionDep,
+    user_id: UserDep,
+) -> None:
+    service = AddressService(AddressRepository(session))
+    ok = await service.soft_delete(address_id, user_id)
+    if not ok:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Адрес не найден")
+
+
+# ========== Алиасы (сырые адреса) ==========
+
+@router.get("/aliases", response_model=list[schemas.RawAddressRead])
+async def list_aliases(
+    session: SessionDep,
+    limit: int = 1000,
+    offset: int = 0,
+) -> list[schemas.RawAddressRead]:
+    from sqlalchemy import select
+    stmt = (
+        select(RawAddress)
+        .where(RawAddress.is_deleted.is_(False))
+        .order_by(RawAddress.id.desc())
+        .limit(limit)
+        .offset(offset)
+    )
+    rows = list(await session.scalars(stmt))
+    result = []
+    for r in rows:
+        from app.parties.models import Address
+        address = await session.get(Address, r.normalized_address_id)
+        result.append(
+            schemas.RawAddressRead(
+                id=r.id,
+                raw_text=r.raw_text,
+                hash=r.hash,
+                normalized_address_id=r.normalized_address_id,
+                source=r.source,
+                full_address=address.full_address if address else None,
+            )
+        )
+    return result
+
+
+@router.get("/aliases/{alias_id}", response_model=schemas.RawAddressRead)
+async def get_alias(alias_id: int, session: SessionDep) -> schemas.RawAddressRead:
+    from app.parties.models import RawAddress
+    raw = await session.get(RawAddress, alias_id)
+    if raw is None or raw.is_deleted:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Вариант ввода не найден")
+    return schemas.RawAddressRead(
+        id=raw.id,
+        raw_text=raw.raw_text,
+        hash=raw.hash,
+        normalized_address_id=raw.normalized_address_id,
+        source=raw.source,
+    )
+
+
+@router.delete("/aliases/{alias_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_alias(alias_id: int, session: SessionDep, user_id: UserDep) -> None:
+    from app.parties.models import RawAddress
+    raw = await session.get(RawAddress, alias_id)
+    if raw is None or raw.is_deleted:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Вариант ввода не найден")
+    raw.soft_delete(user_id)
+    await session.flush()
+
+
+# ========== Юрлица ==========
+
+@router.get("/legal-entities", response_model=list[schemas.LegalEntityRead])
+async def list_legal_entities(session: SessionDep) -> list[schemas.LegalEntityRead]:
+    service = LegalEntityService(LegalEntityRepository(session))
+    rows = await service.list_all()
+    return [schemas.LegalEntityRead.model_validate(r) for r in rows]
+
+
+@router.post("/legal-entities", response_model=schemas.LegalEntityRead, status_code=status.HTTP_201_CREATED)
+async def create_legal_entity(
+    body: schemas.LegalEntityCreate,
+    session: SessionDep,
+    user_id: UserDep,
+) -> schemas.LegalEntityRead:
+    service = LegalEntityService(LegalEntityRepository(session))
+    try:
+        row = await service.create(user_id, **body.model_dump())
+    except ValueError as e:
+        raise HTTPException(status.HTTP_409_CONFLICT, detail=str(e)) from e
+    return schemas.LegalEntityRead.model_validate(row)
+
+
+@router.patch("/legal-entities/{entity_id}", response_model=schemas.LegalEntityRead)
+async def update_legal_entity(
+    entity_id: int,
+    body: schemas.LegalEntityUpdate,
+    session: SessionDep,
+    user_id: UserDep,
+) -> schemas.LegalEntityRead:
+    service = LegalEntityService(LegalEntityRepository(session))
+    row = await service.update(entity_id, user_id, **body.model_dump(exclude_unset=True))
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Юрлицо не найдено")
+    return schemas.LegalEntityRead.model_validate(row)
+
+
+@router.delete("/legal-entities/{entity_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_legal_entity(entity_id: int, session: SessionDep, user_id: UserDep) -> None:
+    service = LegalEntityService(LegalEntityRepository(session))
+    ok = await service.soft_delete(entity_id, user_id)
+    if not ok:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Юрлицо не найдено")
+
+
+@router.get("/legal-entities/{entity_id}", response_model=schemas.LegalEntityRead)
+async def get_legal_entity(entity_id: int, session: SessionDep) -> schemas.LegalEntityRead:
+    service = LegalEntityService(LegalEntityRepository(session))
+    row = await service.get_by_id(entity_id)
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Юрлицо не найдено")
+    return schemas.LegalEntityRead.model_validate(row)
+
+
+# ========== Поклажедатели ==========
+
+@router.get("/depositors", response_model=list[schemas.DepositorRead])
+async def list_depositors(session: SessionDep) -> list[schemas.DepositorRead]:
+    service = DepositorService(DepositorRepository(session))
+    rows = await service.list_all()
+    result = []
+    for r in rows:
+        from app.parties.models import LegalEntity
+        le = await session.get(LegalEntity, r.legal_entity_id)
+        result.append(
+            schemas.DepositorRead(
+                id=r.id,
+                legal_entity_id=r.legal_entity_id,
+                code=r.code,
+                legal_entity_name=le.name if le else "",
+            )
+        )
+    return result
+
+
+@router.post("/depositors", response_model=schemas.DepositorRead, status_code=status.HTTP_201_CREATED)
+async def create_depositor(
+    body: schemas.DepositorCreate,
+    session: SessionDep,
+    user_id: UserDep,
+) -> schemas.DepositorRead:
+    service = DepositorService(DepositorRepository(session))
+    try:
+        row = await service.create(body.legal_entity_id, body.code, user_id)
+    except ValueError as e:
+        raise HTTPException(status.HTTP_409_CONFLICT, detail=str(e)) from e
+    return schemas.DepositorRead.model_validate(row)
+
+
+# ========== Клиенты ==========
+
+@router.get("/depositors/{depositor_id}", response_model=schemas.DepositorRead)
+async def get_depositor(depositor_id: int, session: SessionDep) -> schemas.DepositorRead:
+    service = DepositorService(DepositorRepository(session))
+    row = await service.get_by_id(depositor_id)
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Поклажедатель не найден")
+    return schemas.DepositorRead.model_validate(row)
+
+
+@router.patch("/depositors/{depositor_id}", response_model=schemas.DepositorRead)
+async def update_depositor(
+    depositor_id: int,
+    body: schemas.DepositorUpdate,
+    session: SessionDep,
+    user_id: UserDep,
+) -> schemas.DepositorRead:
+    from app.parties.models import Depositor
+    row = await session.get(Depositor, depositor_id)
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Поклажедатель не найден")
+    for field, value in body.model_dump(exclude_unset=True).items():
+        setattr(row, field, value)
+    row.updated_by_id = user_id
+    await session.flush()
+    return schemas.DepositorRead.model_validate(row)
+
+
+@router.delete("/depositors/{depositor_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_depositor(depositor_id: int, session: SessionDep, user_id: UserDep) -> None:
+    from app.parties.models import Depositor
+    row = await session.get(Depositor, depositor_id)
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Поклажедатель не найден")
+    row.soft_delete(user_id)
+    await session.flush()
+
+
+@router.get("/clients", response_model=list[schemas.ClientRead])
+async def list_clients(
+    session: SessionDep,
+    depositor_id: Annotated[int | None, Query(ge=1)] = None,
+) -> list[schemas.ClientRead]:
+    repo = ClientRepository(session)
+    if depositor_id:
+        rows = await repo.list_by_depositor(depositor_id)
+    else:
+        rows = await repo.list_all()
+    return [schemas.ClientRead.model_validate(r) for r in rows]
+
+
+@router.post("/clients", response_model=schemas.ClientRead, status_code=status.HTTP_201_CREATED)
+async def create_client(
+    body: schemas.ClientCreate,
+    session: SessionDep,
+    user_id: UserDep,
+) -> schemas.ClientRead:
+    service = ClientService(ClientRepository(session))
+    try:
+        row = await service.create(user_id, **body.model_dump())
+    except ValueError as e:
+        raise HTTPException(status.HTTP_409_CONFLICT, detail=str(e)) from e
+    return schemas.ClientRead.model_validate(row)
+
+
+# ========== Торговые точки ==========
+
+@router.get("/clients/{client_id}", response_model=schemas.ClientRead)
+async def get_client(client_id: int, session: SessionDep) -> schemas.ClientRead:
+    service = ClientService(ClientRepository(session))
+    row = await service.get_by_id(client_id)
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Клиент не найден")
+    return schemas.ClientRead.model_validate(row)
+
+
+@router.patch("/clients/{client_id}", response_model=schemas.ClientRead)
+async def update_client(
+    client_id: int,
+    body: schemas.ClientUpdate,
+    session: SessionDep,
+    user_id: UserDep,
+) -> schemas.ClientRead:
+    service = ClientService(ClientRepository(session))
+    row = await service.update(client_id, user_id, **body.model_dump(exclude_unset=True))
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Клиент не найден")
+    return schemas.ClientRead.model_validate(row)
+
+
+@router.delete("/clients/{client_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_client(client_id: int, session: SessionDep, user_id: UserDep) -> None:
+    service = ClientService(ClientRepository(session))
+    ok = await service.soft_delete(client_id, user_id)
+    if not ok:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Клиент не найден")
+
+
+@router.get("/trade-points", response_model=list[schemas.TradePointRead])
+async def list_trade_points(session: SessionDep) -> list[schemas.TradePointRead]:
+    from sqlalchemy import select
+    from app.parties.models import TradePoint
+    rows = list(await session.scalars(select(TradePoint).where(TradePoint.is_deleted.is_(False))))
+    return [schemas.TradePointRead.model_validate(r) for r in rows]
+
+
+@router.get("/trade-points/{tp_id}", response_model=schemas.TradePointRead)
+async def get_trade_point(tp_id: int, session: SessionDep) -> schemas.TradePointRead:
+    service = TradePointService(TradePointRepository(session))
+    tp = await service.get_by_id(tp_id)
+    if tp is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Торговая точка не найдена")
+    return schemas.TradePointRead.model_validate(tp)
+
+
+@router.patch("/trade-points/{tp_id}", response_model=schemas.TradePointRead)
+async def update_trade_point(
+    tp_id: int,
+    body: schemas.TradePointUpdate,
+    session: SessionDep,
+    user_id: UserDep,
+) -> schemas.TradePointRead:
+    from app.parties.models import TradePoint
+    tp = await session.get(TradePoint, tp_id)
+    if tp is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Торговая точка не найдена")
+    for field, value in body.model_dump(exclude_unset=True).items():
+        setattr(tp, field, value)
+    tp.updated_by_id = user_id
+    await session.flush()
+    return schemas.TradePointRead.model_validate(tp)
+
+
+@router.delete("/trade-points/{tp_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_trade_point(tp_id: int, session: SessionDep, user_id: UserDep) -> None:
+    from app.parties.models import TradePoint
+    tp = await session.get(TradePoint, tp_id)
+    if tp is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Торговая точка не найдена")
+    tp.soft_delete(user_id)
+    await session.flush()
+
+
+@router.post("/trade-points/resolve", response_model=schemas.TradePointRead)
+async def resolve_trade_point(
+    body: schemas.TradePointCreate,
+    session: SessionDep,
+    user_id: UserDep,
+) -> schemas.TradePointRead:
+    service = TradePointService(TradePointRepository(session))
+    tp, _ = await service.get_or_create(
+        body.client_id, body.address_id, body.name, user_id
+    )
+    return schemas.TradePointRead.model_validate(tp)
+
+
+# ========== Договоры ==========
+
+@router.get("/contracts", response_model=list[schemas.ContractRead])
+async def list_contracts(session: SessionDep) -> list[schemas.ContractRead]:
+    repo = ContractRepository(session)
+    rows = await repo.list_all()
+    return [schemas.ContractRead.model_validate(r) for r in rows]
+
+
+@router.post("/contracts", response_model=schemas.ContractRead, status_code=status.HTTP_201_CREATED)
+async def create_contract(
+    body: schemas.ContractCreate,
+    session: SessionDep,
+    user_id: UserDep,
+) -> schemas.ContractRead:
+    service = ContractService(ContractRepository(session))
+    try:
+        row = await service.create(user_id, **body.model_dump())
+    except ValueError as e:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+    return schemas.ContractRead.model_validate(row)
+
+
+# ========== Тарифы ==========
+
+@router.get("/contracts/{contract_id}", response_model=schemas.ContractRead)
+async def get_contract(contract_id: int, session: SessionDep) -> schemas.ContractRead:
+    service = ContractService(ContractRepository(session))
+    row = await service.get_by_id(contract_id)
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Договор не найден")
+    return schemas.ContractRead.model_validate(row)
+
+
+@router.patch("/contracts/{contract_id}", response_model=schemas.ContractRead)
+async def update_contract(
+    contract_id: int,
+    body: schemas.ContractUpdate,
+    session: SessionDep,
+    user_id: UserDep,
+) -> schemas.ContractRead:
+    service = ContractService(ContractRepository(session))
+    row = await service.update(contract_id, user_id, **body.model_dump(exclude_unset=True))
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Договор не найден")
+    return schemas.ContractRead.model_validate(row)
+
+
+@router.delete("/contracts/{contract_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_contract(contract_id: int, session: SessionDep, user_id: UserDep) -> None:
+    service = ContractService(ContractRepository(session))
+    ok = await service.soft_delete(contract_id, user_id)
+    if not ok:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Договор не найден")
+
+
+@router.get("/tariff-documents", response_model=list[schemas.TariffDocumentRead])
+async def list_tariff_documents(session: SessionDep) -> list[schemas.TariffDocumentRead]:
+    from sqlalchemy import select
+    from app.parties.models import TariffDocument
+    rows = list(await session.scalars(select(TariffDocument).where(TariffDocument.is_deleted.is_(False))))
+    return [schemas.TariffDocumentRead.model_validate(r) for r in rows]
+
+
+@router.get("/tariff-documents/{doc_id}", response_model=schemas.TariffDocumentRead)
+async def get_tariff_document(doc_id: int, session: SessionDep) -> schemas.TariffDocumentRead:
+    service = TariffService(TariffRepository(session))
+    doc = await service.get_document(doc_id)
+    if doc is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Тарифный документ не найден")
+    return schemas.TariffDocumentRead.model_validate(doc)
+
+
+@router.patch("/tariff-documents/{doc_id}", response_model=schemas.TariffDocumentRead)
+async def update_tariff_document(
+    doc_id: int,
+    body: schemas.TariffDocumentUpdate,
+    session: SessionDep,
+    user_id: UserDep,
+) -> schemas.TariffDocumentRead:
+    from app.parties.models import TariffDocument
+    doc = await session.get(TariffDocument, doc_id)
+    if doc is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Тарифный документ не найден")
+    for field, value in body.model_dump(exclude_unset=True).items():
+        setattr(doc, field, value)
+    doc.updated_by_id = user_id
+    await session.flush()
+    return schemas.TariffDocumentRead.model_validate(doc)
+
+
+@router.delete("/tariff-documents/{doc_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_tariff_document(doc_id: int, session: SessionDep, user_id: UserDep) -> None:
+    from app.parties.models import TariffDocument
+    doc = await session.get(TariffDocument, doc_id)
+    if doc is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Тарифный документ не найден")
+    doc.soft_delete(user_id)
+    await session.flush()
+
+
+@router.post("/tariff-documents", response_model=schemas.TariffDocumentRead, status_code=status.HTTP_201_CREATED)
+async def create_tariff_document(
+    body: schemas.TariffDocumentCreate,
+    session: SessionDep,
+    user_id: UserDep,
+) -> schemas.TariffDocumentRead:
+    service = TariffService(TariffRepository(session))
+    try:
+        row = await service.create_document(user_id, **body.model_dump())
+    except ValueError as e:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+    return schemas.TariffDocumentRead.model_validate(row)
+
+
+@router.get("/tariffs", response_model=list[schemas.TariffRead])
+async def list_tariffs(session: SessionDep, document_id: int | None = None) -> list[schemas.TariffRead]:
+    from sqlalchemy import select
+    from app.parties.models import Tariff
+    stmt = select(Tariff).where(Tariff.is_deleted.is_(False))
+    if document_id:
+        stmt = stmt.where(Tariff.document_id == document_id)
+    rows = list(await session.scalars(stmt))
+    return [schemas.TariffRead.model_validate(r) for r in rows]
+
+
+@router.get("/tariffs/{tariff_id}", response_model=schemas.TariffRead)
+async def get_tariff(tariff_id: int, session: SessionDep) -> schemas.TariffRead:
+    from app.parties.models import Tariff
+    tariff = await session.get(Tariff, tariff_id)
+    if tariff is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Тариф не найден")
+    return schemas.TariffRead.model_validate(tariff)
+
+
+@router.patch("/tariffs/{tariff_id}", response_model=schemas.TariffRead)
+async def update_tariff(
+    tariff_id: int,
+    body: schemas.TariffUpdate,
+    session: SessionDep,
+    user_id: UserDep,
+) -> schemas.TariffRead:
+    from app.parties.models import Tariff
+    tariff = await session.get(Tariff, tariff_id)
+    if tariff is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Тариф не найден")
+    for field, value in body.model_dump(exclude_unset=True).items():
+        setattr(tariff, field, value)
+    tariff.updated_by_id = user_id
+    await session.flush()
+    return schemas.TariffRead.model_validate(tariff)
+
+
+@router.delete("/tariffs/{tariff_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_tariff(tariff_id: int, session: SessionDep, user_id: UserDep) -> None:
+    from app.parties.models import Tariff
+    tariff = await session.get(Tariff, tariff_id)
+    if tariff is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Тариф не найден")
+    tariff.soft_delete(user_id)
+    await session.flush()
+
+
+@router.post("/tariffs", response_model=schemas.TariffRead, status_code=status.HTTP_201_CREATED)
+async def create_tariff(
+    body: schemas.TariffCreate,
+    session: SessionDep,
+    user_id: UserDep,
+) -> schemas.TariffRead:
+    service = TariffService(TariffRepository(session))
+    try:
+        row = await service.create_tariff(user_id, **body.model_dump())
+    except ValueError as e:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+    return schemas.TariffRead.model_validate(row)
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/api/v1/parties/schemas.py
+========================================
+"""Схемы для модуля parties."""
+
+from __future__ import annotations
+
+from datetime import date
+from decimal import Decimal
+
+from pydantic import BaseModel, ConfigDict, Field
+
+
+# ========== Адреса ==========
+
+class DeliveryZoneRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+
+
+class DeliveryZoneCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
+
+
+class AddressRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    full_address: str
+    region: str = ""
+    city: str = ""
+    street: str = ""
+    house: str = ""
+    building: str = ""
+    structure: str = ""
+    flat: str = ""
+    fias_id: str = ""
+    latitude: Decimal | None = None
+    longitude: Decimal | None = None
+    postal_code: str = ""
+    delivery_zone_id: int | None = None
+    is_deleted: bool = False
+    is_active: bool = True
+
+
+class AddressResolve(BaseModel):
+    raw_text: str = Field(min_length=1)
+    source: str = ""
+
+
+# ========== Юрлица ==========
+
+class LegalEntityRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    legal_name: str = ""
+    inn: str = ""
+    kpp: str = ""
+    ogrn: str = ""
+    legal_address_id: int | None = None
+    actual_address_id: int | None = None
+    phone: str = ""
+    email: str = ""
+    edo_uuid: str | None = None
+
+
+class LegalEntityCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
+    legal_name: str = ""
+    inn: str = Field(max_length=12)
+    kpp: str = Field(max_length=9)
+    ogrn: str = Field(max_length=15)
+    legal_address_id: int | None = None
+    actual_address_id: int | None = None
+    phone: str = ""
+    email: str = ""
+    edo_uuid: str | None = None
+
+
+class LegalEntityUpdate(BaseModel):
+    name: str | None = None
+    legal_name: str | None = None
+    inn: str | None = None
+    kpp: str | None = None
+    ogrn: str | None = None
+    legal_address_id: int | None = None
+    actual_address_id: int | None = None
+    phone: str | None = None
+    email: str | None = None
+    edo_uuid: str | None = None
+
+
+# ========== Поклажедатели ==========
+
+class DepositorRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    legal_entity_id: int
+    code: str = ""
+    legal_entity_name: str = ""
+
+
+class DepositorCreate(BaseModel):
+    legal_entity_id: int
+    code: str = ""
+
+
+# ========== Клиенты ==========
+
+class ClientRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    depositor_id: int
+    external_id: str
+    name: str
+    legal_name: str = ""
+    inn: str = ""
+    kpp: str = ""
+    legal_address_id: int | None = None
+    is_edo: bool = False
+
+
+class ClientCreate(BaseModel):
+    depositor_id: int
+    external_id: str = Field(min_length=1, max_length=50)
+    name: str = Field(min_length=1, max_length=255)
+    legal_name: str = ""
+    inn: str = ""
+    kpp: str = ""
+    legal_address_id: int | None = None
+    is_edo: bool = False
+
+
+class ClientUpdate(BaseModel):
+    name: str | None = None
+    legal_name: str | None = None
+    inn: str | None = None
+    kpp: str | None = None
+    legal_address_id: int | None = None
+    is_edo: bool | None = None
+
+
+class TradePointRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    client_id: int
+    address_id: int
+    name: str = ""
+
+
+class TradePointCreate(BaseModel):
+    client_id: int
+    address_id: int
+    name: str = ""
+
+
+# ========== Договоры ==========
+
+class ContractRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    number: str
+    customer_id: int
+    executor_id: int
+    contract_type: str
+    start_date: date
+    end_date: date | None = None
+    status: str = "active"
+    terms: dict = Field(default_factory=dict)
+
+
+class ContractCreate(BaseModel):
+    number: str = Field(min_length=1, max_length=50)
+    customer_id: int
+    executor_id: int
+    contract_type: str
+    start_date: date
+    end_date: date | None = None
+    terms: dict = Field(default_factory=dict)
+
+
+# ========== Тарифы ==========
+
+class TariffDocumentRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    contract_id: int
+    document_type: str
+    number: str
+    date: date
+    valid_from: date
+    valid_until: date | None = None
+    currency: str = "RUB"
+    vat_rate: str = "20"
+
+
+class TariffDocumentCreate(BaseModel):
+    contract_id: int
+    document_type: str
+    number: str
+    date: date
+    valid_from: date
+    valid_until: date | None = None
+    currency: str = "RUB"
+    vat_rate: str = "20"
+
+
+class TariffRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    document_id: int
+    service_group: str
+    name: str
+    description: str = ""
+    unit: str
+    price: Decimal
+
+
+class TariffCreate(BaseModel):
+    document_id: int
+    service_group: str
+    name: str
+    description: str = ""
+    unit: str
+    price: Decimal
+
+
+class RawAddressRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    raw_text: str
+    hash: str
+    normalized_address_id: int
+    source: str = ""
+    full_address: str | None = None
+    is_deleted: bool = False
+
+
+# ========== Update-схемы ==========
+
+class LegalEntityUpdate(BaseModel):
+    name: str | None = None
+    legal_name: str | None = None
+    inn: str | None = None
+    kpp: str | None = None
+    ogrn: str | None = None
+    legal_address_id: int | None = None
+    actual_address_id: int | None = None
+    phone: str | None = None
+    email: str | None = None
+    edo_uuid: str | None = None
+
+
+class AddressUpdate(BaseModel):
+    full_address: str | None = None
+    region: str | None = None
+    city: str | None = None
+    street: str | None = None
+    house: str | None = None
+    building: str | None = None
+    structure: str | None = None
+    flat: str | None = None
+    fias_id: str | None = None
+    latitude: Decimal | None = None
+    longitude: Decimal | None = None
+    postal_code: str | None = None
+    delivery_zone_id: int | None = None
+
+
+class DepositorUpdate(BaseModel):
+    code: str | None = None
+    legal_entity_id: int | None = None
+
+
+class ClientUpdate(BaseModel):
+    name: str | None = None
+    legal_name: str | None = None
+    inn: str | None = None
+    kpp: str | None = None
+    legal_address_id: int | None = None
+    is_edo: bool | None = None
+
+
+class TradePointUpdate(BaseModel):
+    name: str | None = None
+    client_id: int | None = None
+    address_id: int | None = None
+
+
+class ContractUpdate(BaseModel):
+    number: str | None = None
+    end_date: date | None = None
+    status: str | None = None
+    terms: dict | None = None
+
+
+class TariffDocumentUpdate(BaseModel):
+    number: str | None = None
+    document_date: date | None = None
+    valid_from: date | None = None
+    valid_until: date | None = None
+    currency: str | None = None
+    vat_rate: str | None = None
+
+
+class TariffUpdate(BaseModel):
+    name: str | None = None
+    description: str | None = None
+    unit: str | None = None
+    price: Decimal | None = None
+    service_group: str | None = None
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/api/v1/router.py
+========================================
+"""Главный роутер API v1."""
+
+from fastapi import APIRouter
+
+from app.api.v1.accounts.routes import router as accounts_router
+from app.api.v1.parties.routes import router as parties_router
+from app.api.v1.warehouse.routes import router as warehouse_router
+from app.api.v1.documents.routes import router as documents_router
+from app.api.v1.delivery.routes import router as delivery_router
+from app.api.v1.notifications.routes import router as notifications_router
+from app.api.v1.integration.routes import router as integration_router
+from app.api.v1.files.routes import router as files_router
+from app.api.v1.files.routes import router as files_router
+
+api_router = APIRouter(prefix="/api/v1")
+api_router.include_router(accounts_router)
+api_router.include_router(parties_router)
+api_router.include_router(warehouse_router)
+api_router.include_router(documents_router)
+api_router.include_router(delivery_router)
+api_router.include_router(notifications_router)
+api_router.include_router(integration_router)
+api_router.include_router(files_router)
+api_router.include_router(files_router)
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/api/v1/warehouse/__init__.py
+========================================
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/api/v1/warehouse/routes.py
+========================================
+"""API для модуля warehouse."""
+
+from __future__ import annotations
+
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.api.v1.warehouse import schemas
+from app.core.dependencies import get_current_user_id, get_session
+from app.warehouse.services import (
+    BatchService,
+    LPNService,
+    PlacementService,
+    ProductService,
+    StockService,
+    TaskService,
+)
+
+router = APIRouter(prefix="/warehouse", tags=["warehouse"])
+
+SessionDep = Annotated[AsyncSession, Depends(get_session)]
+UserDep = Annotated[int | None, Depends(get_current_user_id)]
+
+
+# ========== Товары ==========
+
+@router.get("/products", response_model=list[schemas.ProductRead])
+async def list_products(
+    session: SessionDep,
+    depositor_id: int | None = None,
+) -> list[schemas.ProductRead]:
+    service = ProductService(session)
+    if depositor_id:
+        rows = await service.list_by_depositor(depositor_id)
+    else:
+        from sqlalchemy import select
+        from app.warehouse.models import Product
+        rows = list(await session.scalars(select(Product).where(Product.is_deleted.is_(False))))
+    return [schemas.ProductRead.model_validate(r) for r in rows]
+
+
+@router.post("/products", response_model=schemas.ProductRead, status_code=status.HTTP_201_CREATED)
+async def create_product(
+    body: schemas.ProductCreate,
+    session: SessionDep,
+    user_id: UserDep,
+) -> schemas.ProductRead:
+    service = ProductService(session)
+    try:
+        row = await service.create(user_id=user_id, **body.model_dump())
+    except ValueError as e:
+        raise HTTPException(status.HTTP_409_CONFLICT, detail=str(e)) from e
+    return schemas.ProductRead.model_validate(row)
+
+
+@router.patch("/products/{product_id}", response_model=schemas.ProductRead)
+async def update_product(
+    product_id: int,
+    body: schemas.ProductCreate,
+    session: SessionDep,
+    user_id: UserDep,
+) -> schemas.ProductRead:
+    from app.warehouse.models import Product
+    product = await session.get(Product, product_id)
+    if product is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Товар не найден")
+    for field, value in body.model_dump(exclude_unset=True).items():
+        setattr(product, field, value)
+    product.updated_by_id = user_id
+    await session.flush()
+    return schemas.ProductRead.model_validate(product)
+
+
+@router.get("/products/{product_id}", response_model=schemas.ProductRead)
+async def get_product(product_id: int, session: SessionDep) -> schemas.ProductRead:
+    service = ProductService(session)
+    product = await service.get_by_id(product_id)
+    if product is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Товар не найден")
+    return schemas.ProductRead.model_validate(product)
+
+
+@router.delete("/products/{product_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_product(product_id: int, session: SessionDep, user_id: UserDep) -> None:
+    service = ProductService(session)
+    ok = await service.soft_delete(product_id, user_id)
+    if not ok:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Товар не найден")
+
+
+# ========== Партии ==========
+
+@router.post("/batches", response_model=schemas.BatchRead, status_code=status.HTTP_201_CREATED)
+async def create_batch(
+    body: schemas.BatchCreate,
+    session: SessionDep,
+    user_id: UserDep,
+) -> schemas.BatchRead:
+    service = BatchService(session)
+    try:
+        row = await service.create(user_id=user_id, **body.model_dump())
+    except ValueError as e:
+        raise HTTPException(status.HTTP_409_CONFLICT, detail=str(e)) from e
+    return schemas.BatchRead.model_validate(row)
+
+
+@router.get("/batches", response_model=list[schemas.BatchRead])
+async def list_batches(session: SessionDep, product_id: int | None = None) -> list[schemas.BatchRead]:
+    service = BatchService(session)
+    if product_id:
+        rows = await service.list_by_product(product_id)
+    else:
+        from sqlalchemy import select
+        from app.warehouse.models import Batch
+        rows = list(await session.scalars(select(Batch).where(Batch.is_deleted.is_(False))))
+    return [schemas.BatchRead.model_validate(r) for r in rows]
+
+
+@router.get("/batches/{batch_id}", response_model=schemas.BatchRead)
+async def get_batch(batch_id: int, session: SessionDep) -> schemas.BatchRead:
+    service = BatchService(session)
+    batch = await service.get_by_id(batch_id)
+    if batch is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Партия не найдена")
+    return schemas.BatchRead.model_validate(batch)
+
+
+@router.delete("/batches/{batch_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_batch(batch_id: int, session: SessionDep, user_id: UserDep) -> None:
+    from app.warehouse.models import Batch
+    batch = await session.get(Batch, batch_id)
+    if batch is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Партия не найдена")
+    batch.soft_delete(user_id)
+    await session.flush()
+
+
+# ========== LPN ==========
+
+@router.post("/lpns", response_model=schemas.LPNRead, status_code=status.HTTP_201_CREATED)
+async def create_lpn(
+    body: schemas.LPNCreate,
+    session: SessionDep,
+    user_id: UserDep,
+) -> schemas.LPNRead:
+    service = LPNService(session)
+    row = await service.create(user_id=user_id, status=body.status)
+    return schemas.LPNRead.model_validate(row)
+
+
+@router.get("/lpns", response_model=list[schemas.LPNRead])
+async def list_lpns(session: SessionDep) -> list[schemas.LPNRead]:
+    from sqlalchemy import select
+    from app.warehouse.models import LPN
+    rows = list(await session.scalars(select(LPN).where(LPN.is_deleted.is_(False))))
+    return [schemas.LPNRead.model_validate(r) for r in rows]
+
+
+@router.get("/lpns/{lpn_id}", response_model=schemas.LPNRead)
+async def get_lpn(lpn_id: int, session: SessionDep) -> schemas.LPNRead:
+    from app.warehouse.models import LPN
+    lpn = await session.get(LPN, lpn_id)
+    if lpn is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="LPN не найдена")
+    return schemas.LPNRead.model_validate(lpn)
+
+
+@router.delete("/lpns/{lpn_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_lpn(lpn_id: int, session: SessionDep, user_id: UserDep) -> None:
+    from app.warehouse.models import LPN
+    lpn = await session.get(LPN, lpn_id)
+    if lpn is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="LPN не найдена")
+    lpn.soft_delete(user_id)
+    await session.flush()
+
+
+# ========== Остатки ==========
+
+@router.post("/stock/add", response_model=schemas.StockBalanceRead)
+async def add_stock(
+    body: schemas.StockAdd,
+    session: SessionDep,
+    user_id: UserDep,
+) -> schemas.StockBalanceRead:
+    service = StockService(session)
+    try:
+        balance = await service.add_stock(user_id=user_id, **body.model_dump())
+    except ValueError as e:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+    return schemas.StockBalanceRead.model_validate(balance)
+
+
+@router.post("/stock/remove", response_model=schemas.StockBalanceRead)
+async def remove_stock(
+    body: schemas.StockRemove,
+    session: SessionDep,
+    user_id: UserDep,
+) -> schemas.StockBalanceRead:
+    service = StockService(session)
+    try:
+        balance = await service.remove_stock(user_id=user_id, **body.model_dump())
+    except ValueError as e:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+    return schemas.StockBalanceRead.model_validate(balance)
+
+
+@router.post("/stock/move", response_model=schemas.StockBalanceRead)
+async def move_stock(
+    body: schemas.StockMove,
+    session: SessionDep,
+    user_id: UserDep,
+) -> schemas.StockBalanceRead:
+    service = StockService(session)
+    try:
+        balance = await service.move_stock(user_id=user_id, **body.model_dump())
+    except ValueError as e:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+    return schemas.StockBalanceRead.model_validate(balance)
+
+
+# ========== Задания ==========
+
+@router.post("/tasks", response_model=schemas.TaskRead, status_code=status.HTTP_201_CREATED)
+async def create_task(
+    body: schemas.TaskCreate,
+    session: SessionDep,
+    user_id: UserDep,
+) -> schemas.TaskRead:
+    service = TaskService(session)
+    task = await service.create(user_id=user_id, **body.model_dump())
+    return schemas.TaskRead.model_validate(task)
+
+
+@router.post("/tasks/{task_id}/lines", status_code=status.HTTP_201_CREATED)
+async def add_task_line(
+    task_id: int,
+    body: schemas.TaskLineAdd,
+    session: SessionDep,
+    user_id: UserDep,
+) -> dict:
+    service = TaskService(session)
+    line = await service.add_line(user_id=user_id, task_id=task_id, **body.model_dump())
+    return {"id": line.id}
+
+
+@router.post("/tasks/{task_id}/start", response_model=schemas.TaskRead)
+async def start_task(
+    task_id: int,
+    session: SessionDep,
+    user_id: UserDep,
+) -> schemas.TaskRead:
+    service = TaskService(session)
+    task = await service.start(user_id=user_id, task_id=task_id)
+    if task is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Задание не найдено")
+    return schemas.TaskRead.model_validate(task)
+
+
+@router.get("/tasks", response_model=list[schemas.TaskRead])
+async def list_tasks(session: SessionDep) -> list[schemas.TaskRead]:
+    from sqlalchemy import select
+    from app.warehouse.models import Task
+    rows = list(await session.scalars(select(Task).where(Task.is_deleted.is_(False))))
+    return [schemas.TaskRead.model_validate(r) for r in rows]
+
+
+@router.get("/tasks/{task_id}", response_model=schemas.TaskRead)
+async def get_task(task_id: int, session: SessionDep) -> schemas.TaskRead:
+    from app.warehouse.models import Task
+    task = await session.get(Task, task_id)
+    if task is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Задание не найдено")
+    return schemas.TaskRead.model_validate(task)
+
+
+@router.delete("/tasks/{task_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_task(task_id: int, session: SessionDep, user_id: UserDep) -> None:
+    from app.warehouse.models import Task
+    task = await session.get(Task, task_id)
+    if task is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Задание не найдено")
+    task.soft_delete(user_id)
+    await session.flush()
+
+
+@router.post("/task-lines/{line_id}/complete")
+async def complete_task_line(
+    line_id: int,
+    body: schemas.TaskLineComplete,
+    session: SessionDep,
+    user_id: UserDep,
+) -> dict:
+    service = TaskService(session)
+    try:
+        line = await service.complete_line(
+            user_id=user_id,
+            task_line_id=line_id,
+            **body.model_dump(),
+        )
+    except ValueError as e:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+    return {"id": line.id, "fact_qty": line.fact_qty}
+
+
+@router.post("/tasks/{task_id}/complete", response_model=schemas.TaskRead)
+async def complete_task(
+    task_id: int,
+    body: schemas.TaskComplete,
+    session: SessionDep,
+    user_id: UserDep,
+) -> schemas.TaskRead:
+    service = TaskService(session)
+    try:
+        task = await service.complete(user_id=user_id, task_id=task_id, force=body.force)
+    except ValueError as e:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+    return schemas.TaskRead.model_validate(task)
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/api/v1/warehouse/schemas.py
+========================================
+"""Схемы для модуля warehouse."""
+
+from __future__ import annotations
+
+from datetime import date
+from decimal import Decimal
+
+from pydantic import BaseModel, ConfigDict, Field
+
+
+# ========== Топология ==========
+
+class WarehouseRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    address_id: int | None = None
+
+
+class WarehouseCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
+    address_id: int | None = None
+
+
+class ZoneRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    warehouse_id: int
+    name: str
+    zone_type: str
+
+
+class ZoneCreate(BaseModel):
+    warehouse_id: int
+    name: str
+    zone_type: str
+
+
+class LocationRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    row_id: int
+    position: int
+    level: int = 1
+    max_weight: float | None = None
+    max_volume: float | None = None
+
+
+# ========== Товары ==========
+
+class ProductRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    depositor_id: int
+    external_id: str
+    sku: str = ""
+    name: str
+    legal_name: str = ""
+    weight: Decimal
+    volume: Decimal
+    price: Decimal | None = None
+    shelf_life_days: int | None = None
+    min_shelf_life_days: int | None = None
+    is_marked: bool = False
+    is_serial_tracked: bool = False
+    is_batch_tracked: bool = False
+    is_expiration_tracked: bool = False
+    temperature_requirements: str = ""
+
+
+class ProductCreate(BaseModel):
+    depositor_id: int
+    external_id: str = Field(min_length=1, max_length=255)
+    name: str = Field(min_length=1, max_length=255)
+    sku: str = ""
+    legal_name: str = ""
+    weight: Decimal = Decimal("0")
+    volume: Decimal = Decimal("0")
+    price: Decimal | None = None
+    shelf_life_days: int | None = None
+    min_shelf_life_days: int | None = None
+    is_marked: bool = False
+    is_serial_tracked: bool = False
+    is_batch_tracked: bool = False
+    is_expiration_tracked: bool = False
+    temperature_requirements: str = ""
+
+
+# ========== Партии ==========
+
+class BatchRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    product_id: int
+    batch_number: str
+    production_date: date | None = None
+    expiration_date: date | None = None
+
+
+class BatchCreate(BaseModel):
+    product_id: int
+    batch_number: str | None = None
+    production_date: date | None = None
+    expiration_date: date | None = None
+
+
+# ========== LPN ==========
+
+class LPNRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    number: str
+    status: str
+
+
+class LPNCreate(BaseModel):
+    status: str = "created"
+
+
+# ========== Остатки ==========
+
+class StockBalanceRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    product_id: int
+    location_id: int
+    lpn_id: int | None = None
+    batch_id: int
+    quantity: Decimal
+    reserved_quantity: Decimal = Decimal("0")
+
+
+class StockAdd(BaseModel):
+    product_id: int
+    location_id: int
+    quantity: Decimal
+    lpn_id: int | None = None
+    batch_id: int | None = None
+    document_id: int | None = None
+
+
+class StockRemove(BaseModel):
+    product_id: int
+    location_id: int
+    quantity: Decimal
+    lpn_id: int | None = None
+    batch_id: int | None = None
+    document_id: int | None = None
+
+
+class StockMove(BaseModel):
+    product_id: int
+    from_location_id: int
+    to_location_id: int
+    quantity: Decimal
+    lpn_id: int | None = None
+    batch_id: int | None = None
+    document_id: int | None = None
+
+
+class StockReserve(BaseModel):
+    product_id: int
+    location_id: int
+    quantity: Decimal
+    lpn_id: int | None = None
+    batch_id: int | None = None
+
+
+# ========== Задания ==========
+
+class TaskRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    task_type: str
+    document_id: int | None = None
+    assignee_id: int | None = None
+    status: str
+
+
+class TaskCreate(BaseModel):
+    task_type: str
+    document_id: int | None = None
+    assignee_id: int | None = None
+
+
+class TaskLineAdd(BaseModel):
+    task_id: int
+    product_id: int
+    plan_qty: int = 0
+    from_location_id: int | None = None
+    to_location_id: int | None = None
+    lpn_id: int | None = None
+    batch_id: int | None = None
+
+
+class TaskComplete(BaseModel):
+    force: bool = False
+
+
+class TaskLineComplete(BaseModel):
+    fact_qty: int
+    location_id: int | None = None
+    to_location_id: int | None = None
+    batch_id: int | None = None
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/core/config.py
+========================================
+"""Конфигурация приложения."""
+
+from functools import lru_cache
+
+from pydantic import Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
+
+    database_url: str = Field(..., description="SQLAlchemy URL для подключения к БД")
+
+    jwt_secret_key: str = Field(..., description="Секрет JWT")
+    jwt_algorithm: str = Field(default="HS256")
+    access_token_expire_minutes: int = Field(default=1440)
+
+    dadata_token: str | None = Field(default=None)
+    dadata_secret: str | None = Field(default=None)
+
+    geosuggest_api_key: str | None = Field(default=None)
+
+    log_level: str = Field(default="INFO")
+    debug_sql: bool = Field(default=False)
+    app_log_file_path: str = Field(default="logs/app.log")
+    error_log_file_path: str = Field(default="logs/error.log")
+    sql_log_file_path: str = Field(default="logs/sql.log")
+
+
+@lru_cache
+def get_settings() -> Settings:
+    return Settings()
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/core/database.py
+========================================
+"""Асинхронное подключение к БД."""
+
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+
+from app.core.config import get_settings
+
+settings = get_settings()
+
+engine = create_async_engine(
+    settings.database_url,
+    echo=settings.debug_sql,
+)
+
+async_session_factory = async_sessionmaker(
+    engine,
+    class_=AsyncSession,
+    expire_on_commit=False,
+    autoflush=False,
+)
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/core/dependencies.py
+========================================
+"""Зависимости FastAPI."""
+
+from __future__ import annotations
+
+from collections.abc import AsyncGenerator
+
+from fastapi import Depends
+from fastapi.security import OAuth2PasswordBearer
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.accounts.repository import UserRepository
+from app.core.database import async_session_factory
+from app.core.security import decode_token_sub_user_id
+from app.infrastructure.uow import UnitOfWork
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/token", auto_error=False)
+
+
+async def get_session() -> AsyncGenerator[AsyncSession, None]:
+    """Сессия с автоматическим commit/rollback."""
+    async with UnitOfWork(async_session_factory) as session:
+        yield session
+
+
+async def get_current_user_id(
+    token: str | None = Depends(oauth2_scheme),
+) -> int | None:
+    if not token:
+        return None
+    try:
+        return decode_token_sub_user_id(token)
+    except ValueError:
+        return None
+
+
+def require_permission(permission: str):
+    """Зависимость — проверка права."""
+    async def checker(
+        session: AsyncSession = Depends(get_session),
+        token: str | None = Depends(oauth2_scheme),
+    ):
+        from fastapi import HTTPException, status
+        
+        if not token:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Не авторизован")
+        
+        try:
+            user_id = decode_token_sub_user_id(token)
+        except ValueError:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Недействительный токен") from None
+        
+        repo = UserRepository(session)
+        user = await repo.get_by_id(user_id)
+        
+        if user is None or not user.is_active:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Пользователь не найден")
+        
+        if not user.has_permission(permission):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f"Нет права: {permission}")
+        
+        return user
+    
+    return checker
+
+
+async def get_current_user(
+    session: AsyncSession = Depends(get_session),
+    token: str | None = Depends(oauth2_scheme),
+):
+    if not token:
+        from fastapi import HTTPException, status
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Не авторизован",
+        )
+    try:
+        user_id = decode_token_sub_user_id(token)
+    except ValueError:
+        from fastapi import HTTPException, status
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Недействительный токен",
+        ) from None
+
+    repo = UserRepository(session)
+    user = await repo.get_by_id(user_id)
+    if user is None or not user.is_active:
+        from fastapi import HTTPException, status
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Пользователь не найден или деактивирован",
+        )
+    return user
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/core/__init__.py
+========================================
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/core/middleware.py
+========================================
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/core/security.py
+========================================
+"""Безопасность: JWT, пароли."""
+
+from __future__ import annotations
+
+from datetime import datetime, timezone, timedelta
+
+import bcrypt
+from jose import JWTError, jwt
+
+from app.core.config import get_settings
+
+
+def hash_password(plain: str) -> str:
+    return bcrypt.hashpw(plain.encode("utf-8"), bcrypt.gensalt()).decode("ascii")
+
+
+def verify_password(plain: str, hashed: str) -> bool:
+    try:
+        return bcrypt.checkpw(plain.encode("utf-8"), hashed.encode("utf-8"))
+    except ValueError:
+        return False
+
+
+def create_access_token(user_id: int, username: str) -> str:
+    settings = get_settings()
+    expire = datetime.now(timezone.utc) + timedelta(minutes=settings.access_token_expire_minutes)
+    payload = {
+        "sub": str(user_id),
+        "username": username,
+        "exp": int(expire.timestamp()),
+    }
+    return jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
+
+
+def decode_token_sub_user_id(token: str) -> int:
+    settings = get_settings()
+    try:
+        payload = jwt.decode(token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm])
+        sub = payload.get("sub")
+        if sub is None:
+            raise ValueError("no sub")
+        return int(sub)
+    except (JWTError, ValueError) as e:
+        raise ValueError(str(e)) from e
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/delivery/__init__.py
+========================================
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/delivery/models/delivery_order.py
+========================================
+"""Заказы на доставку."""
+
+from __future__ import annotations
+
+from datetime import date, time
+
+from sqlalchemy import Date, ForeignKey, String, Text, Time
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.infrastructure.orm_base import Base
+
+
+class DeliveryOrder(Base):
+    __tablename__ = "delivery_order"
+
+    number: Mapped[str] = mapped_column(String(50), nullable=False, comment="Номер")
+    contract_id: Mapped[int] = mapped_column(
+        ForeignKey("parties_contract.id"), nullable=False, comment="Договор"
+    )
+    document_id: Mapped[int | None] = mapped_column(
+        ForeignKey("documents_document.id"), nullable=True, comment="Документ склада"
+    )
+    trade_point_id: Mapped[int] = mapped_column(
+        ForeignKey("parties_trade_point.id"), nullable=False, comment="Торговая точка"
+    )
+    parent_id: Mapped[int | None] = mapped_column(
+        ForeignKey("delivery_order.id"), nullable=True, comment="Родительский заказ"
+    )
+    contact_person: Mapped[str] = mapped_column(String(255), default="", comment="Контактное лицо")
+    phone: Mapped[str] = mapped_column(String(20), default="", comment="Телефон")
+    delivery_date: Mapped[date | None] = mapped_column(Date, nullable=True, comment="Дата доставки")
+    time_from: Mapped[time | None] = mapped_column(Time, nullable=True, comment="Время с")
+    time_to: Mapped[time | None] = mapped_column(Time, nullable=True, comment="Время до")
+    status: Mapped[str] = mapped_column(String(30), default="created", comment="Статус")
+    is_edo: Mapped[bool] = mapped_column(default=False, comment="Признак ЭДО")
+    comment: Mapped[str] = mapped_column(Text, default="", comment="Комментарий")
+
+    contract: Mapped["Contract"] = relationship()
+    document: Mapped["Document | None"] = relationship()
+    trade_point: Mapped["TradePoint"] = relationship()
+    deviations: Mapped[list["DeliveryDeviation"]] = relationship(back_populates="delivery_order")
+
+
+class DeliveryDeviation(Base):
+    __tablename__ = "delivery_deviation"
+
+    delivery_order_id: Mapped[int] = mapped_column(
+        ForeignKey("delivery_order.id"), nullable=False, comment="Заказ на доставку"
+    )
+    deviation_type: Mapped[str] = mapped_column(String(20), nullable=False, comment="Тип отклонения")
+    quantity: Mapped[int] = mapped_column(default=0, comment="Количество мест")
+    description: Mapped[str] = mapped_column(Text, default="", comment="Описание")
+
+    delivery_order: Mapped["DeliveryOrder"] = relationship(back_populates="deviations")
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/delivery/models/driver.py
+========================================
+"""Водители и транспорт."""
+
+from __future__ import annotations
+
+from decimal import Decimal
+
+from sqlalchemy import ForeignKey, Numeric, String
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.infrastructure.orm_base import Base
+
+
+class Driver(Base):
+    __tablename__ = "delivery_driver"
+
+    name: Mapped[str] = mapped_column(String(255), nullable=False, comment="ФИО")
+    phone: Mapped[str] = mapped_column(String(20), default="", comment="Телефон")
+    carrier_id: Mapped[int | None] = mapped_column(
+        ForeignKey("parties_carrier.id"), nullable=True, comment="Перевозчик"
+    )
+
+    carrier: Mapped["Carrier | None"] = relationship()
+    routes: Mapped[list["Route"]] = relationship(back_populates="driver")
+
+
+class Vehicle(Base):
+    __tablename__ = "delivery_vehicle"
+
+    number: Mapped[str] = mapped_column(String(20), nullable=False, comment="Гос. номер")
+    brand: Mapped[str] = mapped_column(String(100), default="", comment="Марка")
+    model: Mapped[str] = mapped_column(String(100), default="", comment="Модель")
+    capacity: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True, comment="Грузоподъёмность")
+    volume: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True, comment="Объём")
+    carrier_id: Mapped[int | None] = mapped_column(
+        ForeignKey("parties_carrier.id"), nullable=True, comment="Перевозчик"
+    )
+
+    carrier: Mapped["Carrier | None"] = relationship()
+    routes: Mapped[list["Route"]] = relationship(back_populates="vehicle")
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/delivery/models/__init__.py
+========================================
+"""Модели модуля delivery."""
+
+from app.delivery.models.delivery_order import DeliveryOrder, DeliveryDeviation
+from app.delivery.models.driver import Driver, Vehicle
+from app.delivery.models.route import Route, RouteLine
+
+__all__ = [
+    "DeliveryOrder",
+    "DeliveryDeviation",
+    "Driver",
+    "Vehicle",
+    "Route",
+    "RouteLine",
+]
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/delivery/models/route.py
+========================================
+"""Маршруты."""
+
+from __future__ import annotations
+
+from datetime import date, time
+
+from sqlalchemy import Date, ForeignKey, Integer, String, Time
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.infrastructure.orm_base import Base
+
+
+class Route(Base):
+    __tablename__ = "delivery_route"
+
+    number: Mapped[str] = mapped_column(String(50), nullable=False, comment="Номер")
+    driver_id: Mapped[int] = mapped_column(
+        ForeignKey("delivery_driver.id"), nullable=False, comment="Водитель"
+    )
+    vehicle_id: Mapped[int] = mapped_column(
+        ForeignKey("delivery_vehicle.id"), nullable=False, comment="Автомобиль"
+    )
+    date: Mapped[date] = mapped_column(Date, nullable=False, comment="Дата")
+    status: Mapped[str] = mapped_column(String(20), default="planned", comment="Статус")
+
+    driver: Mapped["Driver"] = relationship(back_populates="routes")
+    vehicle: Mapped["Vehicle"] = relationship(back_populates="routes")
+    lines: Mapped[list["RouteLine"]] = relationship(back_populates="route")
+
+
+class RouteLine(Base):
+    __tablename__ = "delivery_route_line"
+
+    route_id: Mapped[int] = mapped_column(
+        ForeignKey("delivery_route.id"), nullable=False, comment="Маршрут"
+    )
+    delivery_order_id: Mapped[int] = mapped_column(
+        ForeignKey("delivery_order.id"), nullable=False, comment="Заказ на доставку"
+    )
+    order: Mapped[int] = mapped_column(Integer, nullable=False, comment="Порядок")
+    planned_time: Mapped[time | None] = mapped_column(Time, nullable=True, comment="Плановое время")
+    actual_time: Mapped[time | None] = mapped_column(Time, nullable=True, comment="Фактическое время")
+    status: Mapped[str] = mapped_column(String(20), default="pending", comment="Статус")
+
+    route: Mapped["Route"] = relationship(back_populates="lines")
+    delivery_order: Mapped["DeliveryOrder"] = relationship()
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/delivery/repository.py
+========================================
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/delivery/services/delivery_order_service.py
+========================================
+"""Сервис заказов на доставку."""
+
+from __future__ import annotations
+
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.delivery.models import DeliveryOrder
+
+
+class DeliveryOrderService:
+    def __init__(self, session: AsyncSession) -> None:
+        self._s = session
+
+    async def create(self, *, user_id: int, **kwargs) -> DeliveryOrder:
+        order = DeliveryOrder(
+            created_by_id=user_id,
+            updated_by_id=user_id,
+            **kwargs,
+        )
+        self._s.add(order)
+        await self._s.flush()
+        return order
+
+    async def get_by_id(self, order_id: int) -> DeliveryOrder | None:
+        return await self._s.get(DeliveryOrder, order_id)
+
+    async def set_status(self, *, user_id: int, order_id: int, status: str) -> DeliveryOrder | None:
+        order = await self._s.get(DeliveryOrder, order_id)
+        if order is None:
+            return None
+        order.status = status
+        order.updated_by_id = user_id
+        await self._s.flush()
+        return order
+
+    async def assign(self, *, user_id: int, order_id: int) -> DeliveryOrder | None:
+        return await self.set_status(user_id=user_id, order_id=order_id, status="assigned")
+
+    async def mark_in_transit(self, *, user_id: int, order_id: int) -> DeliveryOrder | None:
+        return await self.set_status(user_id=user_id, order_id=order_id, status="in_transit")
+
+    async def mark_delivered(self, *, user_id: int, order_id: int) -> DeliveryOrder | None:
+        return await self.set_status(user_id=user_id, order_id=order_id, status="delivered")
+
+    async def cancel(self, *, user_id: int, order_id: int) -> DeliveryOrder | None:
+        return await self.set_status(user_id=user_id, order_id=order_id, status="cancelled")
+
+    async def list_all(self) -> list[DeliveryOrder]:
+        stmt = select(DeliveryOrder).where(DeliveryOrder.is_deleted.is_(False))
+        return list(await self._s.scalars(stmt))
+
+    async def list_by_trade_point(self, trade_point_id: int) -> list[DeliveryOrder]:
+        stmt = select(DeliveryOrder).where(
+            DeliveryOrder.trade_point_id == trade_point_id,
+            DeliveryOrder.is_deleted.is_(False),
+        )
+        return list(await self._s.scalars(stmt))
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/delivery/services/__init__.py
+========================================
+"""Сервисы модуля delivery."""
+
+from app.delivery.services.delivery_order_service import DeliveryOrderService
+
+__all__ = ["DeliveryOrderService"]
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/documents/__init__.py
+========================================
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/documents/models/document.py
+========================================
+"""Документы."""
+
+from __future__ import annotations
+
+from datetime import date
+from decimal import Decimal
+
+from sqlalchemy import Boolean, Date, ForeignKey, Numeric, String
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.infrastructure.orm_base import Base
+
+
+class Document(Base):
+    """Складской документ."""
+
+    __tablename__ = "documents_document"
+
+    document_number: Mapped[str] = mapped_column(String(50), nullable=False, comment="Номер документа")
+    document_date: Mapped[date | None] = mapped_column(Date, nullable=True, comment="Дата документа")
+    delivery_date: Mapped[date | None] = mapped_column(Date, nullable=True, comment="Дата доставки")
+    document_type: Mapped[str] = mapped_column(String(20), nullable=False, comment="Тип документа")
+    contract_id: Mapped[int | None] = mapped_column(
+        ForeignKey("parties_contract.id"), nullable=True, comment="Договор"
+    )
+    trade_point_id: Mapped[int | None] = mapped_column(
+        ForeignKey("parties_trade_point.id"), nullable=True, comment="Торговая точка"
+    )
+    warehouse_id: Mapped[int] = mapped_column(
+        ForeignKey("warehouse_warehouse.id"), nullable=False, comment="Склад"
+    )
+    virtual_warehouse_id: Mapped[int | None] = mapped_column(
+        ForeignKey("warehouse_virtual_warehouse.id"), nullable=True, comment="Виртуальный склад"
+    )
+    status: Mapped[str] = mapped_column(String(20), default="draft", comment="Статус")
+    is_delivery: Mapped[bool] = mapped_column(Boolean, default=False, comment="Признак доставки")
+    is_edo: Mapped[bool] = mapped_column(Boolean, default=False, comment="Признак ЭДО")
+
+    lines: Mapped[list["DocumentLine"]] = relationship(back_populates="document")
+
+
+class DocumentLine(Base):
+    """Строка документа."""
+
+    __tablename__ = "documents_document_line"
+
+    document_id: Mapped[int] = mapped_column(
+        ForeignKey("documents_document.id"), nullable=False, comment="Документ"
+    )
+    product_id: Mapped[int] = mapped_column(
+        ForeignKey("warehouse_product.id"), nullable=False, comment="Товар"
+    )
+    batch_id: Mapped[int | None] = mapped_column(
+        ForeignKey("warehouse_batch.id"), nullable=True, comment="Партия"
+    )
+    quantity: Mapped[Decimal] = mapped_column(Numeric(20, 3), nullable=False, comment="Количество")
+    processed_quantity: Mapped[Decimal] = mapped_column(
+        Numeric(20, 3), default=Decimal("0"), comment="Обработано"
+    )
+
+    document: Mapped["Document"] = relationship(back_populates="lines")
+    product: Mapped["Product"] = relationship()
+    batch: Mapped["Batch | None"] = relationship()
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/documents/models/__init__.py
+========================================
+"""Модели модуля documents."""
+
+from app.documents.models.document import Document, DocumentLine
+
+__all__ = [
+    "Document",
+    "DocumentLine",
+]
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/documents/repository.py
+========================================
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/documents/services/document_service.py
+========================================
+"""Сервис документов."""
+
+from __future__ import annotations
+
+from decimal import Decimal
+
+import logging
+
+from sqlalchemy import select
+
+logger = logging.getLogger(__name__)
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.documents.models import Document, DocumentLine
+
+
+class DocumentService:
+    def __init__(self, session: AsyncSession) -> None:
+        self._s = session
+
+    async def create(
+        self,
+        *,
+        user_id: int,
+        document_type: str,
+        warehouse_id: int,
+        document_number: str,
+        document_date=None,
+        delivery_date=None,
+        contract_id: int | None = None,
+        trade_point_id: int | None = None,
+        virtual_warehouse_id: int | None = None,
+        is_delivery: bool = False,
+        is_edo: bool = False,
+    ) -> Document:
+        logger.info("Создание документа: %s", document_number)
+        doc = Document(
+            document_type=document_type,
+            warehouse_id=warehouse_id,
+            document_number=document_number,
+            document_date=document_date,
+            delivery_date=delivery_date,
+            contract_id=contract_id,
+            trade_point_id=trade_point_id,
+            virtual_warehouse_id=virtual_warehouse_id,
+            is_delivery=is_delivery,
+            is_edo=is_edo,
+            created_by_id=user_id,
+            updated_by_id=user_id,
+        )
+        self._s.add(doc)
+        await self._s.flush()
+        logger.info("Документ создан: id=%s", doc.id)
+        return doc
+
+    async def get_by_id(self, document_id: int) -> Document | None:
+        return await self._s.get(Document, document_id)
+
+    async def add_line(
+        self,
+        *,
+        user_id: int,
+        document_id: int,
+        product_id: int,
+        quantity: Decimal,
+        batch_id: int | None = None,
+    ) -> DocumentLine:
+        if quantity <= 0:
+            raise ValueError("Количество должно быть больше 0")
+
+        line = DocumentLine(
+            document_id=document_id,
+            product_id=product_id,
+            batch_id=batch_id,
+            quantity=quantity,
+            created_by_id=user_id,
+            updated_by_id=user_id,
+        )
+        self._s.add(line)
+        await self._s.flush()
+        return line
+
+    async def set_status(self, *, user_id: int, document_id: int, status: str) -> Document | None:
+        doc = await self._s.get(Document, document_id)
+        if doc is None:
+            return None
+        doc.status = status
+        doc.updated_by_id = user_id
+        await self._s.flush()
+        return doc
+
+    async def start(self, *, user_id: int, document_id: int) -> Document | None:
+        return await self.set_status(user_id=user_id, document_id=document_id, status="in_progress")
+
+    async def complete(self, *, user_id: int, document_id: int) -> Document | None:
+        return await self.set_status(user_id=user_id, document_id=document_id, status="completed")
+
+    async def cancel(self, *, user_id: int, document_id: int) -> Document | None:
+        return await self.set_status(user_id=user_id, document_id=document_id, status="cancelled")
+
+    async def list_all(self) -> list[Document]:
+        stmt = select(Document).where(Document.is_deleted.is_(False)).order_by(Document.created_at.desc())
+        return list(await self._s.scalars(stmt))
+
+    async def list_by_type(self, document_type: str) -> list[Document]:
+        stmt = (
+            select(Document)
+            .where(Document.document_type == document_type, Document.is_deleted.is_(False))
+            .order_by(Document.created_at.desc())
+        )
+        return list(await self._s.scalars(stmt))
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/documents/services/__init__.py
+========================================
+"""Сервисы модуля documents."""
+
+from app.documents.services.document_service import DocumentService
+
+__all__ = ["DocumentService"]
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/infrastructure/audit/events.py
+========================================
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/infrastructure/audit/__init__.py
+========================================
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/infrastructure/audit/service.py
+========================================
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/infrastructure/external/dadata.py
+========================================
+"""Клиент DaData для нормализации адресов."""
+
+from __future__ import annotations
+
+from typing import Any
+
+from app.core.config import get_settings
+
+
+class DaDataClient:
+    """Обёртка над API DaData."""
+
+    def __init__(self) -> None:
+        settings = get_settings()
+        self.token = settings.dadata_token
+        self.secret = settings.dadata_secret
+        self._client = None
+
+    def _init_client(self):
+        if self._client is None:
+            from dadata import Dadata
+
+            self._client = Dadata(self.token, self.secret)
+        return self._client
+
+    def clean_address(self, raw_address: str) -> dict[str, Any] | None:
+        """Нормализация адреса через DaData clean."""
+        if not self.token or not self.secret:
+            return None
+
+        try:
+            client = self._init_client()
+            result = client.clean("address", raw_address)
+
+            if not result:
+                return None
+
+            if isinstance(result, list):
+                result = result[0] if result else {}
+
+            return {
+                "full_address": result.get("result", raw_address),
+                "fias_id": result.get("fias_id", ""),
+                "latitude": result.get("geo_lat"),
+                "longitude": result.get("geo_lon"),
+                "postal_code": result.get("postal_code", ""),
+                "region": result.get("region_with_type", ""),
+                "city": result.get("city_with_type") or result.get("settlement_with_type", ""),
+                "street": result.get("street_with_type", ""),
+                "house": result.get("house", ""),
+            }
+        except Exception:
+            return None
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/infrastructure/external/__init__.py
+========================================
+"""Внешние сервисы."""
+
+from app.infrastructure.external.dadata import DaDataClient
+
+__all__ = ["DaDataClient"]
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/infrastructure/files/__init__.py
+========================================
+"""Модуль файлов."""
+
+from app.infrastructure.files.models import File
+
+__all__ = ["File"]
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/infrastructure/files/models.py
+========================================
+"""Модель файла."""
+
+from __future__ import annotations
+
+from sqlalchemy import String
+from sqlalchemy.orm import Mapped, mapped_column
+
+from app.infrastructure.orm_base import Base
+
+
+class File(Base):
+    """Файл: фото, документы, импорт/экспорт."""
+
+    __tablename__ = "files"
+
+    file_path: Mapped[str] = mapped_column(String(500), comment="Путь к файлу")
+    file_type: Mapped[str] = mapped_column(String(30), comment="Тип файла")
+    original_name: Mapped[str] = mapped_column(String(255), comment="Исходное имя")
+    size: Mapped[int] = mapped_column(comment="Размер (байт)")
+    mime_type: Mapped[str] = mapped_column(String(100), default="", comment="MIME тип")
+    uploaded_by_id: Mapped[int | None] = mapped_column(
+        nullable=True, comment="Кем загружен"
+    )
+
+    def __repr__(self) -> str:
+        return f"<File(id={self.id}, name={self.original_name})>"
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/infrastructure/files/repository.py
+========================================
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/infrastructure/files/routes.py
+========================================
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/infrastructure/files/schemas.py
+========================================
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/infrastructure/files/service.py
+========================================
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/infrastructure/__init__.py
+========================================
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/infrastructure/logging/__init__.py
+========================================
+"""Логирование."""
+
+from app.infrastructure.logging.setup import setup_logging
+
+__all__ = ["setup_logging"]
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/infrastructure/logging/setup.py
+========================================
+"""Настройка логирования."""
+
+from __future__ import annotations
+
+import logging
+import logging.config
+from pathlib import Path
+
+from app.core.config import Settings
+
+
+class MaxLevelFilter(logging.Filter):
+    """Фильтр — пропускает только записи до max_level включительно."""
+
+    def __init__(self, max_level: int) -> None:
+        super().__init__()
+        self.max_level = max_level
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        return record.levelno <= self.max_level
+
+
+def setup_logging(settings: Settings) -> None:
+    """Инициализация логирования."""
+    _ensure_log_dirs(
+        settings.app_log_file_path,
+        settings.error_log_file_path,
+        settings.sql_log_file_path,
+    )
+
+    log_level = _normalize_level(settings.log_level)
+    sql_level = "DEBUG" if settings.debug_sql else "ERROR"
+
+    config = {
+        "version": 1,
+        "disable_existing_loggers": False,
+        "filters": {
+            "max_info_warning": {"()": MaxLevelFilter, "max_level": logging.WARNING}
+        },
+        "formatters": {
+            "default": {
+                "format": "%(asctime)s | %(levelname)s | %(name)s | %(message)s",
+            }
+        },
+        "handlers": {
+            "stdout": {
+                "class": "logging.StreamHandler",
+                "formatter": "default",
+                "level": log_level,
+            },
+            "app_file": {
+                "class": "logging.handlers.RotatingFileHandler",
+                "formatter": "default",
+                "filename": settings.app_log_file_path,
+                "maxBytes": 10 * 1024 * 1024,
+                "backupCount": 5,
+                "encoding": "utf-8",
+                "level": log_level,
+                "filters": ["max_info_warning"],
+            },
+            "error_file": {
+                "class": "logging.handlers.RotatingFileHandler",
+                "formatter": "default",
+                "filename": settings.error_log_file_path,
+                "maxBytes": 10 * 1024 * 1024,
+                "backupCount": 5,
+                "encoding": "utf-8",
+                "level": "ERROR",
+            },
+            "sql_file": {
+                "class": "logging.handlers.RotatingFileHandler",
+                "formatter": "default",
+                "filename": settings.sql_log_file_path,
+                "maxBytes": 10 * 1024 * 1024,
+                "backupCount": 5,
+                "encoding": "utf-8",
+                "level": sql_level,
+            },
+        },
+        "root": {
+            "level": log_level,
+            "handlers": ["stdout", "app_file", "error_file"],
+        },
+        "loggers": {
+            "uvicorn": {
+                "handlers": ["stdout", "app_file", "error_file"],
+                "level": log_level,
+            },
+            "uvicorn.error": {
+                "handlers": ["stdout", "app_file", "error_file"],
+                "level": log_level,
+                "propagate": False,
+            },
+            "uvicorn.access": {
+                "handlers": ["stdout", "app_file", "error_file"],
+                "level": log_level,
+                "propagate": False,
+            },
+            "sqlalchemy.engine": {
+                "handlers": ["sql_file"],
+                "level": sql_level,
+                "propagate": False,
+            },
+            "sqlalchemy.pool": {
+                "handlers": ["sql_file"],
+                "level": sql_level,
+                "propagate": False,
+            },
+        },
+    }
+    logging.config.dictConfig(config)
+
+
+def _normalize_level(raw_level: str) -> str:
+    level = (raw_level or "").strip().upper()
+    return level if level in {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"} else "INFO"
+
+
+def _ensure_log_dirs(*file_paths: str) -> None:
+    for path in file_paths:
+        directory = Path(path).expanduser().resolve().parent
+        directory.mkdir(parents=True, exist_ok=True)
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/infrastructure/orm_base.py
+========================================
+"""Базовый класс для всех ORM-моделей."""
+
+from __future__ import annotations
+
+from datetime import datetime, timezone
+
+from sqlalchemy import Boolean, DateTime, ForeignKey, func
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+
+
+class Base(DeclarativeBase):
+    """Базовый класс с audit-полями и soft delete."""
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True, comment="ID записи")
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="true", comment="Активна"
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False, comment="Создана"
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+        comment="Обновлена",
+    )
+    created_by_id: Mapped[int | None] = mapped_column(
+        ForeignKey("accounts_user.id"), nullable=True, comment="Создал (user ID)"
+    )
+    updated_by_id: Mapped[int | None] = mapped_column(
+        ForeignKey("accounts_user.id"), nullable=True, comment="Изменил (user ID)"
+    )
+    is_deleted: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="false", comment="Удалена (soft)"
+    )
+    deleted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, comment="Удалена (когда)"
+    )
+    deleted_by_id: Mapped[int | None] = mapped_column(
+        ForeignKey("accounts_user.id"), nullable=True, comment="Удалил (user ID)"
+    )
+
+    def activate(self, user_id: int | None = None) -> None:
+        self.is_active = True
+        self.updated_by_id = user_id
+
+    def deactivate(self, user_id: int | None = None) -> None:
+        self.is_active = False
+        self.updated_by_id = user_id
+
+    def soft_delete(self, user_id: int | None = None) -> None:
+        self.is_deleted = True
+        self.is_active = False
+        self.deleted_at = datetime.now(timezone.utc)
+        self.deleted_by_id = user_id
+
+    def restore(self, user_id: int | None = None) -> None:
+        self.is_deleted = False
+        self.is_active = True
+        self.deleted_at = None
+        self.deleted_by_id = None
+        self.updated_by_id = user_id
+
+    def __repr__(self) -> str:
+        return f"<{self.__class__.__name__}(id={self.id})>"
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/infrastructure/uow.py
+========================================
+"""Unit of Work — управление транзакцией."""
+
+from __future__ import annotations
+
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
+
+class UnitOfWork:
+    """Управляет транзакцией: открывает сессию, коммитит или откатывает."""
+
+    def __init__(self, session_factory: async_sessionmaker) -> None:
+        self._session_factory = session_factory
+        self._session: AsyncSession | None = None
+
+    async def __aenter__(self) -> AsyncSession:
+        self._session = self._session_factory()
+        return self._session
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
+        if self._session is None:
+            return
+
+        if exc_type is not None:
+            await self._session.rollback()
+        else:
+            await self._session.commit()
+
+        await self._session.close()
+        self._session = None
+
+    @property
+    def session(self) -> AsyncSession:
+        if self._session is None:
+            raise RuntimeError("UnitOfWork не открыт")
+        return self._session
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/__init__.py
+========================================
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/integration/adapters/base.py
+========================================
+"""Базовый адаптер."""
+
+from __future__ import annotations
+
+from abc import ABC, abstractmethod
+from typing import Any
+
+
+class BaseAdapter(ABC):
+    """Базовый класс адаптера для парсинга файлов."""
+
+    @abstractmethod
+    def parse(self, file_path: str) -> tuple[Any | None, list[str]]:
+        """Парсинг файла. Возвращает (данные, ошибки)."""
+        ...
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/integration/adapters/__init__.py
+========================================
+"""Адаптеры интеграций."""
+
+from app.integration.adapters.base import BaseAdapter
+from app.integration.adapters.zln_adapter import ZLNAdapter
+
+__all__ = ["BaseAdapter", "ZLNAdapter"]
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/integration/adapters/zln_adapter.py
+========================================
+"""Адаптер для поклажедателя Зиландия (ZLN)."""
+
+from __future__ import annotations
+
+import xml.etree.ElementTree as ET
+from datetime import datetime
+from decimal import Decimal
+
+from app.integration.adapters.base import BaseAdapter
+
+
+class ZLNAdapter(BaseAdapter):
+    """Парсинг XML-файлов Зиландии."""
+
+    def parse(self, file_path: str):
+        tree = ET.parse(file_path)
+        root = tree.getroot()
+
+        if root.tag == "PORDER":
+            return self._parse_porder(root)
+        elif root.tag == "ORDER":
+            return self._parse_order(root)
+        else:
+            return None, [f"Неизвестный тип документа: {root.tag}"]
+
+    @staticmethod
+    def _get_text(element, tag):
+        child = element.find(tag)
+        return child.text or "" if child is not None else ""
+
+    @staticmethod
+    def _parse_date(text):
+        if not text:
+            return None
+        try:
+            return datetime.strptime(text, "%Y%m%d").date()
+        except ValueError:
+            return None
+
+    @staticmethod
+    def _parse_decimal(text):
+        if not text:
+            return Decimal("0")
+        try:
+            return Decimal(text.replace(",", "."))
+        except Exception:
+            return Decimal("0")
+
+    def _parse_porder(self, root):
+        errors = []
+
+        partner = self._get_text(root, "PARTNER")
+        doc_no = self._get_text(root, "DOC_NO")
+        doc_date = self._parse_date(self._get_text(root, "DOC_DATE"))
+        delivery_date = self._parse_date(self._get_text(root, "DELIV_DATE"))
+        loc = self._get_text(root, "LOC")
+
+        if not partner:
+            errors.append("PARTNER не указан")
+        if not doc_no:
+            errors.append("Номер документа не указан")
+
+        items = []
+        items_el = root.find("ITEMS")
+        if items_el is not None:
+            for item_el in items_el.findall("ITEM"):
+                item_id = self._get_text(item_el, "ID")
+                name = self._get_text(item_el, "NAME")
+                ean = self._get_text(item_el, "EAN")
+                weight = self._parse_decimal(self._get_text(item_el, "NET_MASS"))
+                shelf_life = self._get_text(item_el, "TOTALSHELFLIFE")
+
+                if not item_id:
+                    errors.append(f"{doc_no}: ID товара не указан")
+                    continue
+
+                items.append({
+                    "external_id": item_id,
+                    "name": name,
+                    "ean": ean,
+                    "weight": weight,
+                    "shelf_life_days": int(shelf_life) if shelf_life.isdigit() else None,
+                })
+
+        lines = []
+        for ln_el in root.findall("LN"):
+            item_id = self._get_text(ln_el, "ITEM")
+            quantity = self._get_text(ln_el, "QNT")
+
+            if not item_id:
+                errors.append(f"{doc_no}: Товар не указан в строке")
+                continue
+
+            try:
+                qty = int(quantity)
+            except ValueError:
+                errors.append(f"{doc_no}: Некорректное количество {quantity}")
+                continue
+
+            if qty <= 0:
+                errors.append(f"{doc_no}: Количество должно быть больше 0")
+                continue
+
+            lines.append({
+                "external_id": item_id,
+                "quantity": qty,
+            })
+
+        if errors:
+            return None, errors
+
+        return {
+            "document_type": "porder",
+            "document_number": doc_no,
+            "document_date": doc_date,
+            "delivery_date": delivery_date,
+            "partner_code": partner,
+            "virtual_warehouse_code": loc,
+            "items": items,
+            "lines": lines,
+        }, []
+
+    def _parse_order(self, root):
+        errors = []
+
+        partner = self._get_text(root, "PARTNER")
+        doc_no = self._get_text(root, "DOC_NO")
+        doc_date = self._parse_date(self._get_text(root, "DOC_DATE"))
+        delivery_date = self._parse_date(self._get_text(root, "DELIV_DATE"))
+        loc = self._get_text(root, "LOC")
+        is_delivery = self._get_text(root, "DELIV") == "1"
+        delivery_address = self._get_text(root, "CONSIG_ADDR")
+
+        if not partner:
+            errors.append("PARTNER не указан")
+        if not doc_no:
+            errors.append("Номер документа не указан")
+
+        items = []
+        items_el = root.find("ITEMS")
+        if items_el is not None:
+            for item_el in items_el.findall("ITEM"):
+                item_id = self._get_text(item_el, "ID")
+                name = self._get_text(item_el, "NAME")
+                if not item_id:
+                    errors.append(f"{doc_no}: ID товара не указан")
+                    continue
+                items.append({
+                    "external_id": item_id,
+                    "name": name,
+                })
+
+        lines = []
+        for ln_el in root.findall("LN"):
+            item_id = self._get_text(ln_el, "ITEM")
+            quantity = self._get_text(ln_el, "QNT")
+
+            try:
+                qty = int(quantity)
+            except ValueError:
+                errors.append(f"{doc_no}: Некорректное количество {quantity}")
+                continue
+
+            if qty <= 0:
+                errors.append(f"{doc_no}: Количество должно быть больше 0")
+                continue
+
+            lines.append({
+                "external_id": item_id,
+                "quantity": qty,
+            })
+
+        if errors:
+            return None, errors
+
+        return {
+            "document_type": "order",
+            "document_number": doc_no,
+            "document_date": doc_date,
+            "delivery_date": delivery_date,
+            "partner_code": partner,
+            "virtual_warehouse_code": loc,
+            "is_delivery": is_delivery,
+            "delivery_address": delivery_address,
+            "items": items,
+            "lines": lines,
+        }, []
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/integration/ftp_service.py
+========================================
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/integration/__init__.py
+========================================
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/integration/models/__init__.py
+========================================
+"""Модели модуля integration."""
+
+from app.integration.models.integration_profile import (
+    IntegrationProfile,
+    IntegrationLog,
+    IntegrationError,
+)
+
+__all__ = [
+    "IntegrationProfile",
+    "IntegrationLog",
+    "IntegrationError",
+]
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/integration/models/integration_profile.py
+========================================
+"""Профиль интеграции."""
+
+from __future__ import annotations
+
+from typing import Any
+
+from sqlalchemy import ForeignKey, String
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.infrastructure.orm_base import Base
+
+
+class IntegrationProfile(Base):
+    __tablename__ = "integration_profile"
+
+    depositor_id: Mapped[int] = mapped_column(
+        ForeignKey("parties_depositor.id"), nullable=False, comment="Поклажедатель"
+    )
+    name: Mapped[str] = mapped_column(String(255), nullable=False, comment="Название")
+    source_type: Mapped[str] = mapped_column(String(20), nullable=False, comment="Тип источника")
+    config: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, comment="Настройки")
+
+    depositor: Mapped["Depositor"] = relationship()
+    logs: Mapped[list["IntegrationLog"]] = relationship(back_populates="profile")
+
+
+class IntegrationLog(Base):
+    __tablename__ = "integration_log"
+
+    profile_id: Mapped[int] = mapped_column(
+        ForeignKey("integration_profile.id"), nullable=False, comment="Профиль"
+    )
+    status: Mapped[str] = mapped_column(String(20), default="pending", comment="Статус")
+    total_rows: Mapped[int] = mapped_column(default=0, comment="Всего строк")
+    success_rows: Mapped[int] = mapped_column(default=0, comment="Успешно")
+    error_rows: Mapped[int] = mapped_column(default=0, comment="С ошибками")
+    error_details: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, comment="Детали ошибок")
+    file_id: Mapped[int | None] = mapped_column(
+        ForeignKey("files.id"), nullable=True, comment="Файл"
+    )
+
+    profile: Mapped["IntegrationProfile"] = relationship(back_populates="logs")
+
+
+class IntegrationError(Base):
+    __tablename__ = "integration_error"
+
+    log_id: Mapped[int] = mapped_column(
+        ForeignKey("integration_log.id"), nullable=False, comment="Журнал"
+    )
+    row_number: Mapped[int] = mapped_column(nullable=False, comment="Номер строки")
+    error_message: Mapped[str] = mapped_column(comment="Сообщение об ошибке")
+    raw_data: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, comment="Исходные данные")
+
+    log: Mapped["IntegrationLog"] = relationship()
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/integration/repository.py
+========================================
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/integration/services/ftp_service.py
+========================================
+"""Сервис FTP."""
+
+from __future__ import annotations
+
+import os
+
+
+class FTPService:
+    """Работа с FTP."""
+
+    def __init__(self, host: str, username: str, password: str):
+        self.host = host
+        self.username = username
+        self.password = password
+        self._ftp = None
+
+    def connect(self):
+        from ftplib import FTP
+
+        self._ftp = FTP(self.host)
+        self._ftp.login(self.username, self.password)
+        return self
+
+    def disconnect(self):
+        if self._ftp:
+            self._ftp.quit()
+            self._ftp = None
+
+    def list_files(self, remote_path: str) -> list[str]:
+        self._ftp.cwd(remote_path)
+        files = []
+        self._ftp.retrlines("LIST", files.append)
+        return [f.split()[-1] for f in files if f.startswith("-")]
+
+    def download(self, remote_path: str, local_dir: str) -> str:
+        filename = os.path.basename(remote_path)
+        local_path = os.path.join(local_dir, filename)
+        with open(local_path, "wb") as f:
+            self._ftp.retrbinary(f"RETR {remote_path}", f.write)
+        return local_path
+
+    def delete(self, remote_path: str):
+        self._ftp.delete(remote_path)
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/integration/services/__init__.py
+========================================
+"""Сервисы модуля integration."""
+
+from app.integration.services.ftp_service import FTPService
+from app.integration.services.integration_service import IntegrationService, AdapterService
+
+__all__ = ["FTPService", "IntegrationService", "AdapterService"]
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/integration/services/integration_service.py
+========================================
+"""Сервис импорта заказов."""
+
+from __future__ import annotations
+
+import logging
+
+from sqlalchemy.ext.asyncio import AsyncSession
+
+logger = logging.getLogger(__name__)
+
+from app.documents.models import Document, DocumentLine
+from app.integration.adapters import ZLNAdapter
+from app.parties.services import AddressService, ClientService, TradePointService
+from app.parties.repository import AddressRepository, ClientRepository, TradePointRepository
+from app.warehouse.services import ProductService, BatchService
+
+
+class IntegrationService:
+    """Обработка импортированных документов."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._s = session
+
+    async def process_document(
+        self,
+        universal_doc: dict,
+        depositor_id: int,
+        user_id: int,
+    ) -> tuple[Document | None, list[str]]:
+        errors = []
+
+        logger.info("Начало импорта документа: %s", universal_doc.get("document_number"))
+        try:
+            # 1. Создаём товары
+            product_service = ProductService(self._s)
+            for item in universal_doc.get("items", []):
+                try:
+                    await product_service.get_or_create(
+                        depositor_id=depositor_id,
+                        external_id=item["external_id"],
+                        defaults={
+                            "name": item.get("name", item["external_id"]),
+                            "weight": item.get("weight", 0),
+                            "shelf_life_days": item.get("shelf_life_days"),
+                        },
+                        user_id=user_id,
+                    )
+                except ValueError as e:
+                    errors.append(f"Товар {item['external_id']}: {e}")
+
+            # 2. Создаём документ
+            if errors:
+                return None, errors
+
+            from app.documents.services import DocumentService
+            doc_service = DocumentService(self._s)
+
+            # Определяем склад
+            from app.warehouse.models import VirtualWarehouse
+            from sqlalchemy import select
+
+            vw = None
+            vw_code = universal_doc.get("virtual_warehouse_code")
+            if vw_code:
+                stmt = select(VirtualWarehouse).where(
+                    VirtualWarehouse.depositor_id == depositor_id,
+                    VirtualWarehouse.code == vw_code,
+                )
+                vw = await self._s.scalar(stmt)
+
+            if vw is None:
+                # Берём первый склад
+                from app.warehouse.models import Warehouse
+                stmt = select(Warehouse).limit(1)
+                warehouse = await self._s.scalar(stmt)
+                if warehouse is None:
+                    return None, ["Склад не найден"]
+                warehouse_id = warehouse.id
+            else:
+                warehouse_id = vw.warehouse_id
+
+            document = await doc_service.create(
+                user_id=user_id,
+                document_type=universal_doc["document_type"],
+                warehouse_id=warehouse_id,
+                document_number=universal_doc["document_number"],
+                document_date=universal_doc.get("document_date"),
+                delivery_date=universal_doc.get("delivery_date"),
+                virtual_warehouse_id=vw.id if vw else None,
+                is_delivery=universal_doc.get("is_delivery", False),
+            )
+
+            # 3. Создаём строки
+            for line in universal_doc.get("lines", []):
+                from sqlalchemy import select
+                from app.warehouse.models import Product
+
+                stmt = select(Product).where(
+                    Product.depositor_id == depositor_id,
+                    Product.external_id == line["external_id"],
+                )
+                product = await self._s.scalar(stmt)
+
+                if product is None:
+                    errors.append(f"Товар {line['external_id']} не найден")
+                    continue
+
+                await doc_service.add_line(
+                    user_id=user_id,
+                    document_id=document.id,
+                    product_id=product.id,
+                    quantity=line["quantity"],
+                )
+
+            if errors:
+                return None, errors
+
+            logger.info("Импорт завершён: %s", universal_doc.get("document_number"))
+            return document, []
+
+        except Exception as e:
+            return None, [f"Ошибка: {e}"]
+
+
+class AdapterService:
+    """Выбор адаптера."""
+
+    ADAPTERS = {
+        "ZLN": ZLNAdapter,
+    }
+
+    @classmethod
+    def get_adapter(cls, partner_code: str):
+        adapter = cls.ADAPTERS.get(partner_code)
+        if not adapter:
+            raise ValueError(f"Адаптер для {partner_code} не найден")
+        return adapter()
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/main.py
+========================================
+"""Точка входа FastAPI."""
+
+from fastapi import FastAPI
+
+from app.api.v1.router import api_router
+from app.core.config import get_settings
+from app.infrastructure.logging import setup_logging
+
+settings = get_settings()
+setup_logging(settings)
+
+app = FastAPI(title="LMS FastAPI")
+app.include_router(api_router)
+
+
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+from pathlib import Path
+
+# Раздача фронтенда
+frontend_dist = Path(__file__).parent.parent / "frontend" / "dist"
+
+if frontend_dist.exists():
+    app.mount("/assets", StaticFiles(directory=frontend_dist / "assets"), name="assets")
+
+    @app.get("/{full_path:path}")
+    async def serve_frontend(full_path: str):
+        file_path = frontend_dist / full_path
+        if file_path.exists() and file_path.is_file():
+            return FileResponse(file_path)
+        return FileResponse(frontend_dist / "index.html")
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/notifications/__init__.py
+========================================
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/notifications/models/__init__.py
+========================================
+"""Модели модуля notifications."""
+
+from app.notifications.models.notification import Notification
+
+__all__ = ["Notification"]
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/notifications/models/notification.py
+========================================
+"""Уведомления."""
+
+from __future__ import annotations
+
+from sqlalchemy import ForeignKey, String, Text
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.infrastructure.orm_base import Base
+
+
+class Notification(Base):
+    __tablename__ = "notifications_notification"
+
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("accounts_user.id"), nullable=False, comment="Получатель"
+    )
+    title: Mapped[str] = mapped_column(String(255), nullable=False, comment="Заголовок")
+    text: Mapped[str] = mapped_column(Text, nullable=False, comment="Текст")
+    notification_type: Mapped[str] = mapped_column(
+        String(20), default="system", comment="Тип уведомления"
+    )
+    status: Mapped[str] = mapped_column(String(20), default="pending", comment="Статус")
+    link: Mapped[str] = mapped_column(String(500), default="", comment="Ссылка")
+    sent_at: Mapped[str | None] = mapped_column(String(50), nullable=True, comment="Когда отправлено")
+    read_at: Mapped[str | None] = mapped_column(String(50), nullable=True, comment="Когда прочитано")
+
+    user: Mapped["User"] = relationship(foreign_keys=[user_id])
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/notifications/repository.py
+========================================
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/notifications/services/__init__.py
+========================================
+"""Сервисы модуля notifications."""
+
+from app.notifications.services.notification_service import NotificationService
+
+__all__ = ["NotificationService"]
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/notifications/services/notification_service.py
+========================================
+"""Сервис уведомлений."""
+
+from __future__ import annotations
+
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.notifications.models import Notification
+
+
+class NotificationService:
+    def __init__(self, session: AsyncSession) -> None:
+        self._s = session
+
+    async def create(
+        self,
+        user_id: int,
+        title: str,
+        text: str,
+        notification_type: str = "system",
+        link: str = "",
+    ) -> Notification:
+        notification = Notification(
+            user_id=user_id,
+            title=title,
+            text=text,
+            notification_type=notification_type,
+            link=link,
+        )
+        self._s.add(notification)
+        await self._s.flush()
+        return notification
+
+    async def mark_read(self, notification_id: int) -> Notification | None:
+        notification = await self._s.get(Notification, notification_id)
+        if notification is None:
+            return None
+        from datetime import datetime
+
+        notification.status = "read"
+        notification.read_at = datetime.now().isoformat()
+        await self._s.flush()
+        return notification
+
+    async def mark_all_read(self, user_id: int) -> int:
+        from sqlalchemy import update
+
+        stmt = (
+            update(Notification)
+            .where(
+                Notification.user_id == user_id,
+                Notification.status == "pending",
+            )
+            .values(status="read", read_at=datetime.now().isoformat())
+        )
+        result = await self._s.execute(stmt)
+        return result.rowcount
+
+    async def get_unread(self, user_id: int) -> list[Notification]:
+        stmt = select(Notification).where(
+            Notification.user_id == user_id,
+            Notification.status == "pending",
+            Notification.is_deleted.is_(False),
+        )
+        return list(await self._s.scalars(stmt))
+
+    async def list_by_user(self, user_id: int) -> list[Notification]:
+        stmt = select(Notification).where(
+            Notification.user_id == user_id,
+            Notification.is_deleted.is_(False),
+        )
+        return list(await self._s.scalars(stmt))
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/parties/__init__.py
+========================================
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/parties/models/address.py
+========================================
+"""Адреса и зоны доставки."""
+
+from __future__ import annotations
+
+from decimal import Decimal
+
+from sqlalchemy import ForeignKey, Numeric, String, Text
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.infrastructure.orm_base import Base
+
+
+class DeliveryZone(Base):
+    """Зона доставки."""
+
+    __tablename__ = "parties_delivery_zone"
+
+    name: Mapped[str] = mapped_column(
+        String(255), unique=True, nullable=False, comment="Название"
+    )
+
+    addresses: Mapped[list["Address"]] = relationship(back_populates="delivery_zone")
+
+    def __repr__(self) -> str:
+        return f"<DeliveryZone(id={self.id}, name={self.name})>"
+
+
+class Address(Base):
+    """Нормализованный адрес."""
+
+    __tablename__ = "parties_address"
+
+    full_address: Mapped[str] = mapped_column(Text, nullable=False, comment="Полный адрес")
+    region: Mapped[str] = mapped_column(String(255), default="", comment="Регион")
+    city: Mapped[str] = mapped_column(String(255), default="", comment="Город")
+    street: Mapped[str] = mapped_column(String(255), default="", comment="Улица")
+    house: Mapped[str] = mapped_column(String(64), default="", comment="Дом")
+    building: Mapped[str] = mapped_column(String(32), default="", comment="Корпус")
+    structure: Mapped[str] = mapped_column(String(32), default="", comment="Строение")
+    flat: Mapped[str] = mapped_column(String(32), default="", comment="Квартира")
+    fias_id: Mapped[str] = mapped_column(String(36), default="", comment="FIAS ID")
+    latitude: Mapped[Decimal | None] = mapped_column(Numeric(9, 6), nullable=True, comment="Широта")
+    longitude: Mapped[Decimal | None] = mapped_column(Numeric(9, 6), nullable=True, comment="Долгота")
+    postal_code: Mapped[str] = mapped_column(String(10), default="", comment="Индекс")
+    delivery_zone_id: Mapped[int | None] = mapped_column(
+        ForeignKey("parties_delivery_zone.id"), nullable=True, comment="Зона доставки"
+    )
+
+    delivery_zone: Mapped[DeliveryZone | None] = relationship(back_populates="addresses")
+    raw_addresses: Mapped[list["RawAddress"]] = relationship(back_populates="normalized_address")
+    trade_points: Mapped[list["TradePoint"]] = relationship(back_populates="address")
+    legal_entities_registered: Mapped[list["LegalEntity"]] = relationship(
+        foreign_keys="LegalEntity.legal_address_id", 
+    )
+    legal_entities_actual: Mapped[list["LegalEntity"]] = relationship(
+        foreign_keys="LegalEntity.actual_address_id", 
+    )
+
+    def __repr__(self) -> str:
+        return f"<Address(id={self.id}, full_address={self.full_address[:50]})>"
+
+
+class RawAddress(Base):
+    """Сырой адрес до нормализации."""
+
+    __tablename__ = "parties_raw_address"
+
+    raw_text: Mapped[str] = mapped_column(Text, nullable=False, comment="Сырой адрес")
+    hash: Mapped[str] = mapped_column(String(64), unique=True, comment="SHA256 от нормализованного")
+    normalized_address_id: Mapped[int] = mapped_column(
+        ForeignKey("parties_address.id"), nullable=False, comment="Нормализованный адрес"
+    )
+    source: Mapped[str] = mapped_column(String(50), default="", comment="Источник")
+
+    normalized_address: Mapped[Address] = relationship(back_populates="raw_addresses")
+
+    def __repr__(self) -> str:
+        return f"<RawAddress(id={self.id}, raw_text={self.raw_text[:50]})>"
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/parties/models/client.py
+========================================
+"""Клиент и торговая точка."""
+
+from __future__ import annotations
+
+from sqlalchemy import Boolean, ForeignKey, String, UniqueConstraint
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.infrastructure.orm_base import Base
+
+
+class Client(Base):
+    """Клиент поклажедателя."""
+
+    __tablename__ = "parties_client"
+    __table_args__ = (
+        UniqueConstraint("depositor_id", "external_id", name="uq_client_depositor_external"),
+    )
+
+    depositor_id: Mapped[int] = mapped_column(
+        ForeignKey("parties_depositor.id"), nullable=False, comment="Поклажедатель"
+    )
+    external_id: Mapped[str] = mapped_column(
+        String(50), nullable=False, comment="Внешний код"
+    )
+    name: Mapped[str] = mapped_column(String(255), nullable=False, comment="Наименование")
+    legal_name: Mapped[str] = mapped_column(
+        String(255), default="", comment="Полное наименование"
+    )
+    inn: Mapped[str] = mapped_column(String(12), default="", comment="ИНН")
+    kpp: Mapped[str] = mapped_column(String(9), default="", comment="КПП")
+    legal_address_id: Mapped[int | None] = mapped_column(
+        ForeignKey("parties_address.id"), nullable=True, comment="Юридический адрес"
+    )
+    is_edo: Mapped[bool] = mapped_column(Boolean, default=False, comment="Признак ЭДО")
+
+    depositor: Mapped["Depositor"] = relationship()
+    legal_address: Mapped["Address | None"] = relationship(foreign_keys=[legal_address_id])
+    trade_points: Mapped[list["TradePoint"]] = relationship(back_populates="client")
+
+    def __repr__(self) -> str:
+        return f"<Client(id={self.id}, name={self.name})>"
+
+
+class TradePoint(Base):
+    """Торговая точка клиента."""
+
+    __tablename__ = "parties_trade_point"
+    __table_args__ = (
+        UniqueConstraint("client_id", "address_id", name="uq_trade_point_client_address"),
+    )
+
+    client_id: Mapped[int] = mapped_column(
+        ForeignKey("parties_client.id"), nullable=False, comment="Клиент"
+    )
+    address_id: Mapped[int] = mapped_column(
+        ForeignKey("parties_address.id"), nullable=False, comment="Адрес"
+    )
+    name: Mapped[str] = mapped_column(String(255), default="", comment="Название")
+
+    client: Mapped["Client"] = relationship(back_populates="trade_points")
+    address: Mapped["Address"] = relationship(back_populates="trade_points")
+
+    def __repr__(self) -> str:
+        return f"<TradePoint(id={self.id}, name={self.name})>"
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/parties/models/contract.py
+========================================
+"""Договор."""
+
+from __future__ import annotations
+
+from datetime import date
+from typing import Any
+
+from sqlalchemy import Date, ForeignKey, JSON, String
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.infrastructure.orm_base import Base
+
+
+class Contract(Base):
+    """Договор между юрлицами."""
+
+    __tablename__ = "parties_contract"
+
+    number: Mapped[str] = mapped_column(String(50), nullable=False, comment="Номер договора")
+    customer_id: Mapped[int] = mapped_column(
+        ForeignKey("parties_legal_entity.id"), nullable=False, comment="Заказчик"
+    )
+    executor_id: Mapped[int] = mapped_column(
+        ForeignKey("parties_legal_entity.id"), nullable=False, comment="Исполнитель"
+    )
+    contract_type: Mapped[str] = mapped_column(
+        String(20), nullable=False, comment="Тип договора"
+    )
+    start_date: Mapped[date] = mapped_column(Date, nullable=False, comment="Дата начала")
+    end_date: Mapped[date | None] = mapped_column(Date, nullable=True, comment="Дата окончания")
+    status: Mapped[str] = mapped_column(String(20), default="active", comment="Статус")
+    terms: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, comment="Условия")
+
+    customer: Mapped["LegalEntity"] = relationship(
+        foreign_keys=[customer_id], 
+    )
+    executor: Mapped["LegalEntity"] = relationship(
+        foreign_keys=[executor_id], 
+    )
+    tariff_documents: Mapped[list["TariffDocument"]] = relationship(back_populates="contract")
+
+    def __repr__(self) -> str:
+        return f"<Contract(id={self.id}, number={self.number})>"
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/parties/models/counterparty.py
+========================================
+"""Поклажедатель, хранитель, перевозчик."""
+
+from __future__ import annotations
+
+from sqlalchemy import ForeignKey, String

@@ -70,7 +70,7 @@ col.list-table__col-cb {
 }
 
 .list-table thead tr.list-table__head-row th {
-  background: #2c3e50;
+  background: var(--bg-table-header);
   color: #fff;
   font-weight: 500;
   font-size: 11px;
@@ -134,7 +134,7 @@ col.list-table__col-cb {
 }
 
 .list-table thead tr.list-filter-row th {
-  background: #34495e;
+  background: var(--bg-table-filter);
   color: #fff;
   font-weight: normal;
   vertical-align: middle;
@@ -168,7 +168,7 @@ col.list-table__col-cb {
 .list-table tbody td.list-table__empty {
   text-align: center;
   padding: 28px 16px;
-  color: #64748b;
+  color: var(--text-secondary);
   font-size: 13px;
   line-height: 1.45;
   background: #f8fafc;
@@ -176,7 +176,7 @@ col.list-table__col-cb {
 }
 
 .list-table tbody tr:hover td {
-  background: #e8f4f8;
+  background: var(--bg-hover);
 }
 
 .list-table tbody tr:has(> td.list-table__empty):hover td {
@@ -316,7 +316,7 @@ col.list-table__col-cb {
   border: none;
   border-radius: 2px;
   background: transparent;
-  color: #64748b;
+  color: var(--text-secondary);
   font-size: 12px;
   line-height: 1;
   cursor: pointer;
@@ -331,7 +331,7 @@ col.list-table__col-cb {
 }
 
 .list-table thead tr.list-filter-row .list-filter-cell__clear {
-  color: #94a3b8;
+  color: var(--text-muted);
 }
 
 .list-table thead tr.list-filter-row .list-filter-cell__clear:hover {

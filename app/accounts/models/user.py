@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from sqlalchemy import Boolean, String
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.infrastructure.orm_base import Base
@@ -22,47 +25,111 @@ class User(Base):
     is_superuser: Mapped[bool] = mapped_column(
         Boolean, default=False, comment="Суперпользователь"
     )
+    extra_permissions: Mapped[dict[str, list[str]]] = mapped_column(
+        JSONB,
+        default=dict,
+        comment="Дополнительные права пользователя",
+    )
 
     roles: Mapped[list["Role"]] = relationship(
         secondary="accounts_user_roles",
         back_populates="users",
     )
 
-    def has_permission(self, permission: str) -> bool:
-        """Проверка права. Формат: 'action:entity', например 'create:legal_entities'."""
+    def has_permission(self, action: str, entity: str) -> bool:
+        """
+        Проверка права пользователя.
+
+        Args:
+            action: Действие (view, create, update, delete, approve, execute, complete)
+            entity: Сущность/модуль (products, documents, delivery, users, ...)
+
+        Returns:
+            True, если право есть
+        """
+        # Суперпользователь имеет все права
         if self.is_superuser:
             return True
-        
-        action, entity = permission.split(":", 1)
-        
+
+        # Проверяем личные дополнительные права
+        if self._has_extra_permission(action, entity):
+            return True
+
+        # Проверяем права ролей
         for role in self.roles:
-            permissions = role.permissions or {}
-            
-            # Проверяем общий доступ
-            if permissions.get("all") == True:
+            if self._has_role_permission(role, action, entity):
                 return True
-            
-            # Проверяем действие
-            action_perms = permissions.get(f"can_{action}", [])
-            if entity in action_perms:
-                return True
-        
+
         return False
 
-    def get_permissions(self) -> dict:
-        """Все права пользователя."""
+    def _has_extra_permission(self, action: str, entity: str) -> bool:
+        """Проверка личных прав пользователя."""
+        if not self.extra_permissions:
+            return False
+
+        allowed_actions = self.extra_permissions.get(entity, [])
+        return action in allowed_actions
+
+    def _has_role_permission(self, role: "Role", action: str, entity: str) -> bool:
+        """Проверка прав роли."""
+        permissions = role.permissions or {}
+        allowed_actions = permissions.get(entity, [])
+        return action in allowed_actions
+
+    def get_all_permissions(self) -> dict[str, list[str]]:
+        """
+        Возвращает все права пользователя (объединение ролей и личных).
+
+        Returns:
+            Словарь вида: {"products": ["view", "create"], ...}
+        """
         if self.is_superuser:
-            return {"all": True}
-        
-        result = {"all": False}
+            return {"all": ["all"]}
+
+        result: dict[str, list[str]] = {}
+
+        # Собираем права из ролей
         for role in self.roles:
             permissions = role.permissions or {}
-            for key, value in permissions.items():
-                if key == "all":
-                    continue
-                if key not in result:
-                    result[key] = []
-                if isinstance(value, list):
-                    result[key].extend(value)
-        
+            for entity, actions in permissions.items():
+                if entity not in result:
+                    result[entity] = []
+                for action in actions:
+                    if action not in result[entity]:
+                        result[entity].append(action)
+
+        # Добавляем личные права
+        if self.extra_permissions:
+            for entity, actions in self.extra_permissions.items():
+                if entity not in result:
+                    result[entity] = []
+                for action in actions:
+                    if action not in result[entity]:
+                        result[entity].append(action)
+
         return result
+
+    def has_group_access(self, entity: str) -> bool:
+        """
+        Проверка доступа к группе (модулю).
+
+        Args:
+            entity: Модуль (products, documents, delivery, ...)
+
+        Returns:
+            True, если есть хоть какое-то право на модуль
+        """
+        if self.is_superuser:
+            return True
+
+        # Проверяем личные права
+        if self.extra_permissions and entity in self.extra_permissions:
+            return bool(self.extra_permissions[entity])
+
+        # Проверяем роли
+        for role in self.roles:
+            permissions = role.permissions or {}
+            if entity in permissions and permissions[entity]:
+                return True
+
+        return False

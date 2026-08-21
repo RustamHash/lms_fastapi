@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, Field
+
+from app.api.v1.base_schemas import BaseRead
 
 
-class IntegrationProfileRead(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: int
+class IntegrationProfileRead(BaseRead):
     depositor_id: int
     name: str
     source_type: str
@@ -22,10 +21,7 @@ class IntegrationProfileCreate(BaseModel):
     config: dict = Field(default_factory=dict)
 
 
-class IntegrationLogRead(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: int
+class IntegrationLogRead(BaseRead):
     profile_id: int
     status: str
     total_rows: int = 0
@@ -35,10 +31,7 @@ class IntegrationLogRead(BaseModel):
     file_id: int | None = None
 
 
-class IntegrationErrorRead(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: int
+class IntegrationErrorRead(BaseRead):
     log_id: int
     row_number: int
     error_message: str

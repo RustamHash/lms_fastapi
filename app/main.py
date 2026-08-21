@@ -4,12 +4,14 @@ from fastapi import FastAPI
 
 from app.api.v1.router import api_router
 from app.core.config import get_settings
+from app.core.middleware import setup_middleware
 from app.infrastructure.logging import setup_logging
 
 settings = get_settings()
 setup_logging(settings)
 
 app = FastAPI(title="LMS FastAPI")
+setup_middleware(app, settings)
 app.include_router(api_router)
 
 
@@ -22,7 +24,7 @@ frontend_dist = Path(__file__).parent.parent / "frontend" / "dist"
 
 if frontend_dist.exists():
     app.mount("/assets", StaticFiles(directory=frontend_dist / "assets"), name="assets")
-    
+
     @app.get("/{full_path:path}")
     async def serve_frontend(full_path: str):
         file_path = frontend_dist / full_path

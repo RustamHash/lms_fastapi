@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router-dom'
 import {
+  memo,
   useEffect,
   useRef,
   useState,
@@ -124,9 +125,10 @@ type Props<Row extends { id: number }> = {
   onCommitColumnWidth: (colId: string, widthPx: number) => void | Promise<void>
   plainCellText: (row: Row, colId: string) => string
   toolbarLeft?: ReactNode
+  onRowDoubleClick?: (row: Row) => void
 }
 
-export function ListTableShell<Row extends { id: number }>({
+function ListTableShellInner<Row extends { id: number }>({
   onRefresh,
   createHref,
   canCreate = true,
@@ -172,6 +174,7 @@ export function ListTableShell<Row extends { id: number }>({
   onCommitColumnWidth,
   plainCellText,
   toolbarLeft,
+  onRowDoubleClick,
 }: Props<Row>) {
   const navigate = useNavigate()
 
@@ -180,6 +183,7 @@ export function ListTableShell<Row extends { id: number }>({
 
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
   const [draggingIndex, setDraggingIndex] = useState<number | null>(null)
+  const [refreshing, setRefreshing] = useState(false)
 
   useEffect(() => {
     if (!viewDialogOpen) {
@@ -239,8 +243,13 @@ export function ListTableShell<Row extends { id: number }>({
     onNotify('Фильтры сброшены', 'success')
   }
 
-  function onRefreshClick() {
-    onRefresh()
+  async function onRefreshClick() {
+    setRefreshing(true)
+    try {
+      await onRefresh()
+    } finally {
+      setRefreshing(false)
+    }
   }
 
   function colWidthPx(cid: string): number {
@@ -317,8 +326,19 @@ export function ListTableShell<Row extends { id: number }>({
         <div className="list-toolbar">
           <div className="list-toolbar__left" />
           <div className="list-toolbar__right">
-            <button type="button" className="tb tb--icon tb--refresh" onClick={onRefreshClick} aria-label="Обновить данные" title="Обновить данные">
-              <IconRefresh />
+            <button
+              type="button"
+              className={`tb tb--icon tb--refresh${refreshing ? ' tb--loading' : ''}`}
+              onClick={onRefreshClick}
+              aria-label="Обновить данные"
+              title="Обновить данные"
+              disabled={refreshing}
+            >
+              {refreshing ? (
+                <span className="tb__spinner" aria-hidden />
+              ) : (
+                <IconRefresh />
+              )}
             </button>
             <button type="button" className={`tb tb--icon tb--create${createMuted ? ' tb--muted' : ''}`} onClick={onCreateClick} aria-label="Создать" title="Создать">
               <IconPlus />
@@ -411,7 +431,16 @@ export function ListTableShell<Row extends { id: number }>({
                       <input type="checkbox" checked={isSelected(row.id)} onChange={(e) => onToggleRow(row.id, e.target.checked)} aria-label={`Выбрать строку ${row.id}`} />
                     </td>
                     {visibleColumnIds.map((cid) => (
-                      <td key={cid} onContextMenu={(e) => onCellContextMenu(e, row, cid)}>{renderCell(row, cid)}</td>
+                      <td
+                        key={cid}
+                        onContextMenu={(e) => onCellContextMenu(e, row, cid)}
+                        onDoubleClick={(e) => {
+                          e.preventDefault()
+                          onRowDoubleClick?.(row)
+                        }}
+                      >
+                        {renderCell(row, cid)}
+                      </td>
                     ))}
                   </tr>
                 ))
@@ -422,7 +451,9 @@ export function ListTableShell<Row extends { id: number }>({
       </div>
 
       <div className="list-table-footer" aria-live="polite">
-        <span className="list-table-count">{rows.length}/{totalRowsCount}</span>
+        <span className="list-table-count">
+          Показано {rows.length} из {totalRowsCount}
+        </span>
       </div>
 
       {viewDialogOpen ? (
@@ -466,3 +497,6 @@ export function ListTableShell<Row extends { id: number }>({
     </>
   )
 }
+
+
+export const ListTableShell = memo(ListTableShellInner) as typeof ListTableShellInner

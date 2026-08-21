@@ -1,4 +1,4 @@
-import type { ListPageConfig } from '../entity-list/types'
+import type { ListPageConfig } from '../entity-system/types'
 
 type AddressRow = {
   id: number
@@ -6,15 +6,15 @@ type AddressRow = {
   city: string
   street: string
   house: string
-  building: string | null
-  structure: string | null
-  flat: string | null
-  postal_code: string | null
+  building: string
+  structure: string
+  flat: string
+  postal_code: string
   full_address: string
   delivery_zone_id: number | null
-  fias_id: string | null
-  latitude: number | null
-  longitude: number | null
+  fias_id: string
+  latitude: string | null
+  longitude: string | null
   is_deleted: boolean
   is_active: boolean
 }

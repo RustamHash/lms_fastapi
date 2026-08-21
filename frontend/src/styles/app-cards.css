@@ -33,7 +33,7 @@
 }
 
 .app-card a {
-  color: #2c7be5;
+  color: var(--text-link);
 }
 
 .app-card a:hover {

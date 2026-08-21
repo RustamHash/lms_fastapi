@@ -1,50 +1,67 @@
+import { lazy, Suspense } from 'react'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AuthProvider } from './auth/AuthContext'
 import { Layout } from './components/Layout'
 import { RequireAuth } from './components/RequireAuth'
 import { AppNoticeProvider } from './notifications/AppNoticeContext'
-import { HomePage } from './pages/HomePage'
-import { ReferencesPage } from './pages/ReferencesPage'
-import { LoginPage } from './pages/LoginPage'
-import { AddressDetailPage } from './pages/AddressDetailPage'
-import { AddressInputAliasDetailPage } from './pages/AddressInputAliasDetailPage'
-import { AddressInputAliasesPage } from './pages/AddressInputAliasesPage'
-import { DeliveryZonesPage } from './pages/DeliveryZonesPage'
-import { LegalEntitiesPage } from './pages/LegalEntitiesPage'
-import { DepositorsPage } from './pages/DepositorsPage'
-import { ClientsPage } from './pages/ClientsPage'
-import { TradePointsPage } from './pages/TradePointsPage'
-import { ContractsPage } from './pages/ContractsPage'
-import { TariffsPage } from './pages/TariffsPage'
-import { LegalEntityDetailPage } from './pages/LegalEntityDetailPage'
-import { LegalEntityEditPage } from './pages/LegalEntityEditPage'
-import { DepositorDetailPage } from './pages/DepositorDetailPage'
-import { ClientDetailPage } from './pages/ClientDetailPage'
-import { TradePointDetailPage } from './pages/TradePointDetailPage'
-import { ContractDetailPage } from './pages/ContractDetailPage'
-import { TariffDetailPage } from './pages/TariffDetailPage'
-import { LegalEntityCreatePage } from './pages/LegalEntityCreatePage'
-import { DepositorCreatePage } from './pages/DepositorCreatePage'
-import { ClientCreatePage } from './pages/ClientCreatePage'
-import { TradePointCreatePage } from './pages/TradePointCreatePage'
-import { ContractCreatePage } from './pages/ContractCreatePage'
-import { AddressesPage } from './pages/AddressesPage'
-import { ProductsPage } from './pages/ProductsPage'
-import { BatchesPage } from './pages/BatchesPage'
-import { LpnsPage } from './pages/LpnsPage'
-import { TasksPage } from './pages/TasksPage'
-import { DocumentsPage } from './pages/DocumentsPage'
-import { DeliveryOrdersPage } from './pages/DeliveryOrdersPage'
-import { DriversPage } from './pages/DriversPage'
-import { VehiclesPage } from './pages/VehiclesPage'
-import { RoutesPage } from './pages/RoutesPage'
-import { NotificationsPage } from './pages/NotificationsPage'
-import { UsersPage } from './pages/UsersPage'
-import { RolesPage } from './pages/RolesPage'
-import { IntegrationProfilesPage } from './pages/IntegrationProfilesPage'
-import { IntegrationLogsPage } from './pages/IntegrationLogsPage'
-import { FilesPage } from './pages/FilesPage'
+const HomePage = lazy(() => import('./pages/HomePage').then(m => ({ default: m.HomePage })))
+const ReferencesPage = lazy(() => import('./pages/ReferencesPage').then(m => ({ default: m.ReferencesPage })))
+const LoginPage = lazy(() => import('./pages/LoginPage').then(m => ({ default: m.LoginPage })))
+const AddressDetailPage = lazy(() => import('./pages/AddressDetailPage').then(m => ({ default: m.AddressDetailPage })))
+const AddressInputAliasDetailPage = lazy(() => import('./pages/AddressInputAliasDetailPage').then(m => ({ default: m.AddressInputAliasDetailPage })))
+const AddressInputAliasesPage = lazy(() => import('./pages/AddressInputAliasesPage').then(m => ({ default: m.AddressInputAliasesPage })))
+const DeliveryZonesPage = lazy(() => import('./pages/DeliveryZonesPage').then(m => ({ default: m.DeliveryZonesPage })))
+const LegalEntitiesPage = lazy(() => import('./pages/LegalEntitiesPage').then(m => ({ default: m.LegalEntitiesPage })))
+const DepositorsPage = lazy(() => import('./pages/DepositorsPage').then(m => ({ default: m.DepositorsPage })))
+const ClientsPage = lazy(() => import('./pages/ClientsPage').then(m => ({ default: m.ClientsPage })))
+const TradePointsPage = lazy(() => import('./pages/TradePointsPage').then(m => ({ default: m.TradePointsPage })))
+const ContractsPage = lazy(() => import('./pages/ContractsPage').then(m => ({ default: m.ContractsPage })))
+const TariffsPage = lazy(() => import('./pages/TariffsPage').then(m => ({ default: m.TariffsPage })))
+const LegalEntityDetailPage = lazy(() => import('./pages/LegalEntityDetailPage').then(m => ({ default: m.LegalEntityDetailPage })))
+const LegalEntityEditPage = lazy(() => import('./pages/LegalEntityEditPage').then(m => ({ default: m.LegalEntityEditPage })))
+const DepositorDetailPage = lazy(() => import('./pages/DepositorDetailPage').then(m => ({ default: m.DepositorDetailPage })))
+const ClientDetailPage = lazy(() => import('./pages/ClientDetailPage').then(m => ({ default: m.ClientDetailPage })))
+const TradePointDetailPage = lazy(() => import('./pages/TradePointDetailPage').then(m => ({ default: m.TradePointDetailPage })))
+const ContractDetailPage = lazy(() => import('./pages/ContractDetailPage').then(m => ({ default: m.ContractDetailPage })))
+const TariffDetailPage = lazy(() => import('./pages/TariffDetailPage').then(m => ({ default: m.TariffDetailPage })))
+const LegalEntityCreatePage = lazy(() => import('./pages/LegalEntityCreatePage').then(m => ({ default: m.LegalEntityCreatePage })))
+const DepositorCreatePage = lazy(() => import('./pages/DepositorCreatePage').then(m => ({ default: m.DepositorCreatePage })))
+const ClientCreatePage = lazy(() => import('./pages/ClientCreatePage').then(m => ({ default: m.ClientCreatePage })))
+const TradePointCreatePage = lazy(() => import('./pages/TradePointCreatePage').then(m => ({ default: m.TradePointCreatePage })))
+const ContractCreatePage = lazy(() => import('./pages/ContractCreatePage').then(m => ({ default: m.ContractCreatePage })))
+const AddressesPage = lazy(() => import('./pages/AddressesPage').then(m => ({ default: m.AddressesPage })))
+const ProductsPage = lazy(() => import('./pages/ProductsPage').then(m => ({ default: m.ProductsPage })))
+const BatchesPage = lazy(() => import('./pages/BatchesPage').then(m => ({ default: m.BatchesPage })))
+const LpnsPage = lazy(() => import('./pages/LpnsPage').then(m => ({ default: m.LpnsPage })))
+const TasksPage = lazy(() => import('./pages/TasksPage').then(m => ({ default: m.TasksPage })))
+const DocumentsPage = lazy(() => import('./pages/DocumentsPage').then(m => ({ default: m.DocumentsPage })))
+const DeliveryOrdersPage = lazy(() => import('./pages/DeliveryOrdersPage').then(m => ({ default: m.DeliveryOrdersPage })))
+const DriversPage = lazy(() => import('./pages/DriversPage').then(m => ({ default: m.DriversPage })))
+const VehiclesPage = lazy(() => import('./pages/VehiclesPage').then(m => ({ default: m.VehiclesPage })))
+const RoutesPage = lazy(() => import('./pages/RoutesPage').then(m => ({ default: m.RoutesPage })))
+const NotificationsPage = lazy(() => import('./pages/NotificationsPage').then(m => ({ default: m.NotificationsPage })))
+const UsersPage = lazy(() => import('./pages/UsersPage').then(m => ({ default: m.UsersPage })))
+const RolesPage = lazy(() => import('./pages/RolesPage').then(m => ({ default: m.RolesPage })))
+const IntegrationProfilesPage = lazy(() => import('./pages/IntegrationProfilesPage').then(m => ({ default: m.IntegrationProfilesPage })))
+const IntegrationLogsPage = lazy(() => import('./pages/IntegrationLogsPage').then(m => ({ default: m.IntegrationLogsPage })))
+const FilesPage = lazy(() => import('./pages/FilesPage').then(m => ({ default: m.FilesPage })))
+const AuditPage = lazy(() => import('./pages/AuditPage').then(m => ({ default: m.AuditPage })))
+const NotificationRulesPage = lazy(() => import('./pages/NotificationRulesPage').then(m => ({ default: m.NotificationRulesPage })))
+const TariffDocumentsPage = lazy(() => import('./pages/TariffDocumentsPage').then(m => ({ default: m.TariffDocumentsPage })))
+const NotificationRuleDetailPage = lazy(() => import('./pages/NotificationRuleDetailPage').then(m => ({ default: m.NotificationRuleDetailPage })))
+const TariffDocumentDetailPage = lazy(() => import('./pages/TariffDocumentDetailPage').then(m => ({ default: m.TariffDocumentDetailPage })))
+const CarriersPage = lazy(() => import('./pages/CarriersPage').then(m => ({ default: m.CarriersPage })))
+const KeepersPage = lazy(() => import('./pages/KeepersPage').then(m => ({ default: m.KeepersPage })))
+const DeviationsPage = lazy(() => import('./pages/DeviationsPage').then(m => ({ default: m.DeviationsPage })))
+const RouteLinesPage = lazy(() => import('./pages/RouteLinesPage').then(m => ({ default: m.RouteLinesPage })))
+const StockPage = lazy(() => import('./pages/StockPage').then(m => ({ default: m.StockPage })))
+const TopologyWarehousesPage = lazy(() => import('./pages/TopologyWarehousesPage').then(m => ({ default: m.TopologyWarehousesPage })))
+const TopologyVirtualWarehousesPage = lazy(() => import('./pages/TopologyVirtualWarehousesPage').then(m => ({ default: m.TopologyVirtualWarehousesPage })))
+const TopologyZonesPage = lazy(() => import('./pages/TopologyZonesPage').then(m => ({ default: m.TopologyZonesPage })))
+const TopologyRowsPage = lazy(() => import('./pages/TopologyRowsPage').then(m => ({ default: m.TopologyRowsPage })))
+const TopologyLocationsPage = lazy(() => import('./pages/TopologyLocationsPage').then(m => ({ default: m.TopologyLocationsPage })))
+
 import './App.css'
 
 const queryClient = new QueryClient()
@@ -55,6 +72,7 @@ function App() {
       <AuthProvider>
         <AppNoticeProvider>
           <BrowserRouter>
+            <Suspense fallback={<div className="app-main"><p className="app-card">Загрузка...</p></div>}>
             <Routes>
               <Route path="/login" element={<LoginPage />} />
               <Route element={<RequireAuth />}>
@@ -86,23 +104,28 @@ function App() {
                   <Route path="/reference/contracts/new" element={<ContractCreatePage />} />
                   <Route path="/reference/tariffs" element={<TariffsPage />} />
                   <Route path="/reference/tariffs/:tariffId" element={<TariffDetailPage />} />
+                  <Route path="/reference/tariff-documents" element={<TariffDocumentsPage />} />
+                  <Route path="/reference/tariff-documents/:docId" element={<TariffDocumentDetailPage />} />
                   
                   {/* Склад */}
-                  <Route path="/warehouse/products" element={<ProductsPage />} />
-                  <Route path="/warehouse/batches" element={<BatchesPage />} />
-                  <Route path="/warehouse/lpns" element={<LpnsPage />} />
-                  <Route path="/warehouse/tasks" element={<TasksPage />} />
+                  <Route path="/reference/products" element={<ProductsPage />} />
+                  <Route path="/reference/batches" element={<BatchesPage />} />
+                  <Route path="/reference/lpns" element={<LpnsPage />} />
+                  <Route path="/tasks" element={<TasksPage />} />
                   
                   {/* Документы */}
                   <Route path="/documents" element={<DocumentsPage />} />
                   
                   {/* Доставка */}
                   <Route path="/delivery/orders" element={<DeliveryOrdersPage />} />
-                  <Route path="/delivery/drivers" element={<DriversPage />} />
-                  <Route path="/delivery/vehicles" element={<VehiclesPage />} />
-                  <Route path="/delivery/routes" element={<RoutesPage />} />
+                  <Route path="/reference/drivers" element={<DriversPage />} />
+                  <Route path="/reference/vehicles" element={<VehiclesPage />} />
+                  <Route path="/reference/routes" element={<RoutesPage />} />
                   
                   {/* Система */}
+                  <Route path="/audit" element={<AuditPage />} />
+                  <Route path="/notification-rules" element={<NotificationRulesPage />} />
+                  <Route path="/notification-rules/:ruleId" element={<NotificationRuleDetailPage />} />
                   <Route path="/notifications" element={<NotificationsPage />} />
                   <Route path="/users" element={<UsersPage />} />
                   <Route path="/roles" element={<RolesPage />} />
@@ -111,6 +134,24 @@ function App() {
                   <Route path="/integrations/profiles" element={<IntegrationProfilesPage />} />
                   <Route path="/integrations/logs" element={<IntegrationLogsPage />} />
                   
+                  {/* Перевозчики и хранители */}
+                  <Route path="/carriers" element={<CarriersPage />} />
+                  <Route path="/keepers" element={<KeepersPage />} />
+                  
+                  {/* Доставка */}
+                  <Route path="/deviations" element={<DeviationsPage />} />
+                  <Route path="/route-lines" element={<RouteLinesPage />} />
+                  
+                  {/* Склад */}
+                  <Route path="/stock" element={<StockPage />} />
+                  
+                  {/* Топология */}
+                  <Route path="/topology/warehouses" element={<TopologyWarehousesPage />} />
+                  <Route path="/topology/virtual-warehouses" element={<TopologyVirtualWarehousesPage />} />
+                  <Route path="/topology/zones" element={<TopologyZonesPage />} />
+                  <Route path="/topology/rows" element={<TopologyRowsPage />} />
+                  <Route path="/topology/locations" element={<TopologyLocationsPage />} />
+                  
                   {/* Файлы */}
                   <Route path="/files" element={<FilesPage />} />
                   
@@ -118,6 +159,7 @@ function App() {
                 </Route>
               </Route>
             </Routes>
+            </Suspense>
           </BrowserRouter>
         </AppNoticeProvider>
       </AuthProvider>

@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom'
-import { EntityListPage } from '../features/entity-list/EntityListPage'
+import { EntityListPage } from '../features/entity-system/EntityListPage'
 import { integrationLogsConfig } from '../features/integration-logs/config'
 
 export function IntegrationLogsPage() {
@@ -9,7 +9,7 @@ export function IntegrationLogsPage() {
       config={integrationLogsConfig}
       onBack={() => navigate(-1)}
       breadcrumbs={[
-        { label: 'Интеграции', to: '/' },
+        { label: 'Главная', to: '/' },
         { label: 'Логи' },
       ]}
     />

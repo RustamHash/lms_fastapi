@@ -2,26 +2,22 @@
 
 from __future__ import annotations
 
-from typing import Annotated
-
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, status
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import SessionDep, UserDep, require_permission
 from app.api.v1.delivery import schemas
-from app.core.dependencies import get_current_user_id, get_session
+from app.core.exceptions import NotFoundError
 from app.delivery.models import DeliveryOrder, Driver, Route, Vehicle
 from app.delivery.services import DeliveryOrderService
 
 router = APIRouter(prefix="/delivery", tags=["delivery"])
 
-SessionDep = Annotated[AsyncSession, Depends(get_session)]
-UserDep = Annotated[int | None, Depends(get_current_user_id)]
-
 
 # ========== Заказы на доставку ==========
 
-@router.get("/orders", response_model=list[schemas.DeliveryOrderRead])
+
+@router.get("/orders", response_model=list[schemas.DeliveryOrderRead], dependencies=[Depends(require_permission("view", "delivery"))])
 async def list_orders(
     session: SessionDep,
     trade_point_id: int | None = None,
@@ -34,7 +30,11 @@ async def list_orders(
     return [schemas.DeliveryOrderRead.model_validate(r) for r in rows]
 
 
-@router.post("/orders", response_model=schemas.DeliveryOrderRead, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/orders",
+    response_model=schemas.DeliveryOrderRead,
+    status_code=status.HTTP_201_CREATED,
+)
 async def create_order(
     body: schemas.DeliveryOrderCreate,
     session: SessionDep,
@@ -45,16 +45,29 @@ async def create_order(
     return schemas.DeliveryOrderRead.model_validate(order)
 
 
-@router.get("/orders/{order_id}", response_model=schemas.DeliveryOrderRead)
+@router.get("/orders/{order_id}", response_model=schemas.DeliveryOrderRead, dependencies=[Depends(require_permission("view", "delivery"))])
 async def get_order(order_id: int, session: SessionDep) -> schemas.DeliveryOrderRead:
     service = DeliveryOrderService(session)
     order = await service.get_by_id(order_id)
     if order is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Заказ не найден")
+        raise NotFoundError("Заказ не найден")
     return schemas.DeliveryOrderRead.model_validate(order)
 
 
-@router.patch("/orders/{order_id}/status", response_model=schemas.DeliveryOrderRead)
+@router.delete(
+    "/orders/{order_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_permission("delete", "delivery"))],
+)
+async def delete_order(order_id: int, session: SessionDep, user_id: UserDep) -> None:
+    order = await session.get(DeliveryOrder, order_id)
+    if order is None:
+        raise NotFoundError("Заказ не найден")
+    order.soft_delete(user_id)
+    await session.flush()
+
+
+@router.patch("/orders/{order_id}/status", response_model=schemas.DeliveryOrderRead, dependencies=[Depends(require_permission("update", "delivery"))])
 async def update_order_status(
     order_id: int,
     body: schemas.DeliveryOrderStatusUpdate,
@@ -68,19 +81,24 @@ async def update_order_status(
         status=body.status,
     )
     if order is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Заказ не найден")
+        raise NotFoundError("Заказ не найден")
     return schemas.DeliveryOrderRead.model_validate(order)
 
 
 # ========== Водители ==========
 
-@router.get("/drivers", response_model=list[schemas.DriverRead])
+
+@router.get("/drivers", response_model=list[schemas.DriverRead], dependencies=[Depends(require_permission("view", "drivers"))])
 async def list_drivers(session: SessionDep) -> list[schemas.DriverRead]:
-    rows = list(await session.scalars(select(Driver).where(Driver.is_deleted.is_(False))))
+    rows = list(
+        await session.scalars(select(Driver).where(Driver.is_deleted.is_(False)))
+    )
     return [schemas.DriverRead.model_validate(r) for r in rows]
 
 
-@router.post("/drivers", response_model=schemas.DriverRead, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/drivers", response_model=schemas.DriverRead, status_code=status.HTTP_201_CREATED
+)
 async def create_driver(
     body: schemas.DriverCreate,
     session: SessionDep,
@@ -96,15 +114,15 @@ async def create_driver(
     return schemas.DriverRead.model_validate(driver)
 
 
-@router.get("/drivers/{driver_id}", response_model=schemas.DriverRead)
+@router.get("/drivers/{driver_id}", response_model=schemas.DriverRead, dependencies=[Depends(require_permission("view", "drivers"))])
 async def get_driver(driver_id: int, session: SessionDep) -> schemas.DriverRead:
     driver = await session.get(Driver, driver_id)
     if driver is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Водитель не найден")
+        raise NotFoundError("Водитель не найден")
     return schemas.DriverRead.model_validate(driver)
 
 
-@router.patch("/drivers/{driver_id}", response_model=schemas.DriverRead)
+@router.patch("/drivers/{driver_id}", response_model=schemas.DriverRead, dependencies=[Depends(require_permission("update", "drivers"))])
 async def update_driver(
     driver_id: int,
     body: schemas.DriverCreate,
@@ -113,7 +131,7 @@ async def update_driver(
 ) -> schemas.DriverRead:
     driver = await session.get(Driver, driver_id)
     if driver is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Водитель не найден")
+        raise NotFoundError("Водитель не найден")
     for field, value in body.model_dump(exclude_unset=True).items():
         setattr(driver, field, value)
     driver.updated_by_id = user_id
@@ -121,24 +139,29 @@ async def update_driver(
     return schemas.DriverRead.model_validate(driver)
 
 
-@router.delete("/drivers/{driver_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/drivers/{driver_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_permission("delete", "drivers"))])
 async def delete_driver(driver_id: int, session: SessionDep, user_id: UserDep) -> None:
     driver = await session.get(Driver, driver_id)
     if driver is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Водитель не найден")
+        raise NotFoundError("Водитель не найден")
     driver.soft_delete(user_id)
     await session.flush()
 
 
 # ========== Автомобили ==========
 
-@router.get("/vehicles", response_model=list[schemas.VehicleRead])
+
+@router.get("/vehicles", response_model=list[schemas.VehicleRead], dependencies=[Depends(require_permission("view", "vehicles"))])
 async def list_vehicles(session: SessionDep) -> list[schemas.VehicleRead]:
-    rows = list(await session.scalars(select(Vehicle).where(Vehicle.is_deleted.is_(False))))
+    rows = list(
+        await session.scalars(select(Vehicle).where(Vehicle.is_deleted.is_(False)))
+    )
     return [schemas.VehicleRead.model_validate(r) for r in rows]
 
 
-@router.post("/vehicles", response_model=schemas.VehicleRead, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/vehicles", response_model=schemas.VehicleRead, status_code=status.HTTP_201_CREATED
+)
 async def create_vehicle(
     body: schemas.VehicleCreate,
     session: SessionDep,
@@ -154,15 +177,15 @@ async def create_vehicle(
     return schemas.VehicleRead.model_validate(vehicle)
 
 
-@router.get("/vehicles/{vehicle_id}", response_model=schemas.VehicleRead)
+@router.get("/vehicles/{vehicle_id}", response_model=schemas.VehicleRead, dependencies=[Depends(require_permission("view", "vehicles"))])
 async def get_vehicle(vehicle_id: int, session: SessionDep) -> schemas.VehicleRead:
     vehicle = await session.get(Vehicle, vehicle_id)
     if vehicle is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Автомобиль не найден")
+        raise NotFoundError("Автомобиль не найден")
     return schemas.VehicleRead.model_validate(vehicle)
 
 
-@router.patch("/vehicles/{vehicle_id}", response_model=schemas.VehicleRead)
+@router.patch("/vehicles/{vehicle_id}", response_model=schemas.VehicleRead, dependencies=[Depends(require_permission("update", "vehicles"))])
 async def update_vehicle(
     vehicle_id: int,
     body: schemas.VehicleCreate,
@@ -171,7 +194,7 @@ async def update_vehicle(
 ) -> schemas.VehicleRead:
     vehicle = await session.get(Vehicle, vehicle_id)
     if vehicle is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Автомобиль не найден")
+        raise NotFoundError("Автомобиль не найден")
     for field, value in body.model_dump(exclude_unset=True).items():
         setattr(vehicle, field, value)
     vehicle.updated_by_id = user_id
@@ -179,24 +202,29 @@ async def update_vehicle(
     return schemas.VehicleRead.model_validate(vehicle)
 
 
-@router.delete("/vehicles/{vehicle_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_vehicle(vehicle_id: int, session: SessionDep, user_id: UserDep) -> None:
+@router.delete("/vehicles/{vehicle_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_permission("delete", "vehicles"))])
+async def delete_vehicle(
+    vehicle_id: int, session: SessionDep, user_id: UserDep
+) -> None:
     vehicle = await session.get(Vehicle, vehicle_id)
     if vehicle is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Автомобиль не найден")
+        raise NotFoundError("Автомобиль не найден")
     vehicle.soft_delete(user_id)
     await session.flush()
 
 
 # ========== Маршруты ==========
 
-@router.get("/routes", response_model=list[schemas.RouteRead])
+
+@router.get("/routes", response_model=list[schemas.RouteRead], dependencies=[Depends(require_permission("view", "routes"))])
 async def list_routes(session: SessionDep) -> list[schemas.RouteRead]:
     rows = list(await session.scalars(select(Route).where(Route.is_deleted.is_(False))))
     return [schemas.RouteRead.model_validate(r) for r in rows]
 
 
-@router.post("/routes", response_model=schemas.RouteRead, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/routes", response_model=schemas.RouteRead, status_code=status.HTTP_201_CREATED
+)
 async def create_route(
     body: schemas.RouteCreate,
     session: SessionDep,
@@ -212,15 +240,15 @@ async def create_route(
     return schemas.RouteRead.model_validate(route)
 
 
-@router.get("/routes/{route_id}", response_model=schemas.RouteRead)
+@router.get("/routes/{route_id}", response_model=schemas.RouteRead, dependencies=[Depends(require_permission("view", "routes"))])
 async def get_route(route_id: int, session: SessionDep) -> schemas.RouteRead:
     route = await session.get(Route, route_id)
     if route is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Маршрут не найден")
+        raise NotFoundError("Маршрут не найден")
     return schemas.RouteRead.model_validate(route)
 
 
-@router.patch("/routes/{route_id}", response_model=schemas.RouteRead)
+@router.patch("/routes/{route_id}", response_model=schemas.RouteRead, dependencies=[Depends(require_permission("update", "routes"))])
 async def update_route(
     route_id: int,
     body: schemas.RouteCreate,
@@ -229,7 +257,7 @@ async def update_route(
 ) -> schemas.RouteRead:
     route = await session.get(Route, route_id)
     if route is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Маршрут не найден")
+        raise NotFoundError("Маршрут не найден")
     for field, value in body.model_dump(exclude_unset=True).items():
         setattr(route, field, value)
     route.updated_by_id = user_id
@@ -237,10 +265,10 @@ async def update_route(
     return schemas.RouteRead.model_validate(route)
 
 
-@router.delete("/routes/{route_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/routes/{route_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_permission("delete", "routes"))])
 async def delete_route(route_id: int, session: SessionDep, user_id: UserDep) -> None:
     route = await session.get(Route, route_id)
     if route is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Маршрут не найден")
+        raise NotFoundError("Маршрут не найден")
     route.soft_delete(user_id)
     await session.flush()

@@ -1,9 +1,12 @@
 import { useCallback, useMemo, useState } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { ListTableShell } from '../../components/ListTableShell'
 import { TableCellContextMenu } from '../../components/TableCellContextMenu'
 import { useAppNotice } from '../../notifications/AppNoticeContext'
 import { GroupActionsBar } from './GroupActionsBar'
+import { ActiveFiltersBar } from '../../components/ActiveFiltersBar'
+import { ListSettingsDialog } from '../../components/ListSettingsDialog'
+import { SavePresetDialog } from '../../components/SavePresetDialog'
 import { useEntityList } from './hooks/useEntityList'
 import type { GroupActionContext, ListPageConfig, RowAction } from './types'
 
@@ -24,17 +27,27 @@ function clampMenuPosition(x: number, y: number) {
   }
 }
 
-type Props<Row extends { id: number }> = {
-  config: ListPageConfig<Row>
+type Breadcrumb = {
+  label: string
+  to?: string
 }
 
-export function EntityListPage<Row extends { id: number }>({ config }: Props<Row>) {
+type Props<Row extends { id: number }> = {
+  config: ListPageConfig<Row>
+  canCreate?: boolean
+  onBack?: () => void
+  breadcrumbs?: Breadcrumb[]
+}
+
+export function EntityListPage<Row extends { id: number }>({ config, onBack, breadcrumbs, canCreate = true }: Props<Row>) {
   const navigate = useNavigate()
   const location = useLocation()
   const { notify } = useAppNotice()
   const entity = useEntityList(config)
   
   const [ctxMenu, setCtxMenu] = useState<ContextMenuState<Row> | null>(null)
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [savePresetOpen, setSavePresetOpen] = useState(false)
   
   const groupActionContext: GroupActionContext<Row> = useMemo(() => ({
     selectedRows: entity.rows.filter((r) => entity.selected.has(r.id)),
@@ -81,6 +94,32 @@ export function EntityListPage<Row extends { id: number }>({ config }: Props<Row
   
   return (
     <section className="app-card app-card--wide list-page-shell">
+      <div className="detail-nav">
+        {onBack ? (
+          <button type="button" className="detail-nav__back" onClick={onBack}>
+            ← Назад
+          </button>
+        ) : null}
+        {breadcrumbs && breadcrumbs.length > 0 ? (
+          <nav className="breadcrumbs" aria-label="Хлебные крошки">
+            {breadcrumbs.map((crumb, index) => (
+              <span key={index} className="breadcrumbs__item">
+                {crumb.to ? (
+                  <Link to={crumb.to} className="breadcrumbs__link">
+                    {crumb.label}
+                  </Link>
+                ) : (
+                  <span className="breadcrumbs__current">{crumb.label}</span>
+                )}
+                {index < breadcrumbs.length - 1 ? (
+                  <span className="breadcrumbs__sep">/</span>
+                ) : null}
+              </span>
+            ))}
+          </nav>
+        ) : null}
+      </div>
+
       <div className="list-page-header">
         <div className="list-page-header__info">
           <h1 className="page-title list-page-header__title">{config.title}</h1>
@@ -98,10 +137,39 @@ export function EntityListPage<Row extends { id: number }>({ config }: Props<Row
         />
       ) : null}
       
+      <ActiveFiltersBar
+        prefs={{
+          order: entity.prefs.order,
+          hidden: entity.prefs.hidden,
+          widths: entity.prefs.widths,
+          filters: entity.filters,
+          exclude_filters: entity.excludeFilters,
+          sort: entity.sortCol ? { column: entity.sortCol, direction: entity.sortDir } : null,
+          quick_filters: entity.quickFilters,
+        }}
+        columnLabel={(cid) => config.columns.find((c) => c.id === cid)?.label ?? cid}
+        onRemoveFilter={(cid) => {
+          entity.setFilters((prev) => {
+            const next = { ...prev }
+            delete next[cid]
+            return next
+          })
+        }}
+        onRemoveExclude={(cid, value) => {
+          entity.setExcludeFilters((prev) => {
+            const cur = prev[cid] ?? []
+            return { ...prev, [cid]: cur.filter(v => v !== value) }
+          })
+        }}
+        onResetAll={entity.resetFilters}
+        onSavePreset={() => setSavePresetOpen(true)}
+        onOpenSettings={() => setSettingsOpen(true)}
+      />
+
       <ListTableShell<Row>
         onRefresh={entity.reload}
         createHref={config.toolbar?.createHref}
-        canCreate={config.toolbar?.canCreate ?? true}
+        canCreate={canCreate}
         onExportCsv={() => {
           const cols = entity.prefs.visibleOrderedIds
           const chosen = entity.rows.filter((r) => entity.selected.has(r.id))
@@ -185,8 +253,75 @@ export function EntityListPage<Row extends { id: number }>({ config }: Props<Row
           })
         }}
         plainCellText={entity.cellText}
+        onRowDoubleClick={(row) => {
+          // Ищем колонку с href
+          const linkColumn = config.columns.find(col => config.columnOverrides?.[col.id]?.href)
+          if (linkColumn) {
+            const href = config.columnOverrides?.[linkColumn.id]?.href
+            if (href) {
+              navigate(href(row), { state: location.state })
+              return
+            }
+          }
+          
+          // Если href нет - показываем уведомление
+          notify('Нет детальной страницы для этой записи', 'info')
+        }}
       />
       
+      {settingsOpen ? (
+        <ListSettingsDialog
+          entityKey={config.entityKey}
+          prefs={{
+            order: entity.prefs.order,
+            hidden: entity.prefs.hidden,
+            widths: entity.prefs.widths,
+            filters: entity.filters,
+            exclude_filters: entity.excludeFilters,
+            sort: entity.sortCol ? { column: entity.sortCol, direction: entity.sortDir } : null,
+            quick_filters: entity.quickFilters,
+          }}
+          presets={entity.listPresets.presets}
+          columnLabels={Object.fromEntries(config.columns.map(c => [c.id, c.label]))}
+          allColumns={config.columns.map(c => c.id)}
+          onApplyPrefs={(prefs) => {
+            entity.setFilters(prefs.filters)
+            entity.setExcludeFilters(prefs.exclude_filters)
+            entity.setQuickFilters(prefs.quick_filters)
+          }}
+          onApplyPreset={async (presetId) => {
+            const prefs = await entity.listPresets.applyPreset(presetId)
+            entity.setFilters(prefs.filters)
+            entity.setExcludeFilters(prefs.exclude_filters)
+            entity.setQuickFilters(prefs.quick_filters)
+          }}
+          onDeletePreset={entity.listPresets.deletePreset}
+          onSetDefaultPreset={entity.listPresets.setDefaultPreset}
+          onResetToDefaults={entity.resetToDefaults}
+          onClose={() => setSettingsOpen(false)}
+        />
+      ) : null}
+
+      {savePresetOpen ? (
+        <SavePresetDialog
+          entityKey={config.entityKey}
+          currentPrefs={{
+            order: entity.prefs.order,
+            hidden: entity.prefs.hidden,
+            widths: entity.prefs.widths,
+            filters: entity.filters,
+            exclude_filters: entity.excludeFilters,
+            sort: entity.sortCol ? { column: entity.sortCol, direction: entity.sortDir } : null,
+            quick_filters: entity.quickFilters,
+          }}
+          onSave={async (name, config, isDefault) => {
+            await entity.listPresets.createPreset(name, config, isDefault)
+            notify('Пресет сохранён', 'success')
+          }}
+          onClose={() => setSavePresetOpen(false)}
+        />
+      ) : null}
+
       {ctxMenu ? (
         <TableCellContextMenu
           x={ctxMenu.x}

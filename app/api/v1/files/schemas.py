@@ -2,13 +2,10 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict
+from app.api.v1.base_schemas import BaseRead
 
 
-class FileRead(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: int
+class FileRead(BaseRead):
     file_path: str
     file_type: str
     original_name: str
