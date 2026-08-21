@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from '../../../lib/http'
 import { useColumnPrefs } from '../../../hooks/useColumnPrefs'
@@ -180,7 +181,7 @@ export function useEntityList<Row extends { id: number }>(config: ListPageConfig
         return override.render(row)
       }
       if (override?.href) {
-        return <a href={override.href(row)}>{cellText(row, colId)}</a>
+        return <Link to={override.href(row)}>{cellText(row, colId)}</Link>
       }
       return cellText(row, colId)
     },

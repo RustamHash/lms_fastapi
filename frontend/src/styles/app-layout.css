@@ -249,3 +249,94 @@
 .app-notice-strip__text--info {
   color: var(--color-primary-hover);
 }
+
+/* Группированное меню */
+.app-menu__group {
+  position: relative;
+}
+
+.app-menu__trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  background: transparent;
+  border: none;
+  color: #fff;
+  font-size: 13px;
+  line-height: 1.2;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.app-menu__trigger:hover {
+  background: #2e4358;
+}
+
+.app-menu__arrow {
+  font-size: 10px;
+  opacity: 0.85;
+}
+
+.app-menu__dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 200px;
+  max-height: 400px;
+  overflow-y: auto;
+  background: #2e4358;
+  border-radius: 6px;
+  padding: 4px;
+  list-style: none;
+  margin: 0;
+  z-index: 101;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+}
+
+.app-menu__dropdown a {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 6px 10px;
+  color: #fff;
+  text-decoration: none;
+  font-size: 13px;
+  line-height: 1.2;
+  border-radius: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.app-menu__dropdown a:hover {
+  background: #3d566e;
+}
+
+.app-menu__dropdown a.active {
+  background: #1d4ed8;
+  color: #fff;
+}
+
+/* Первая строка — ссылка на весь раздел */
+.app-menu__dropdown-all {
+  border-bottom: 1px solid rgba(148, 163, 184, 0.6);
+}
+
+.app-menu__dropdown-all a {
+  font-weight: 600;
+  color: #93c5fd !important;
+  padding: 8px 10px;
+}
+
+.app-menu__dropdown-all a:hover {
+  background: #3d566e;
+  color: #bfdbfe !important;
+}
+
+/* Разделитель */
+.app-menu__divider {
+  margin: 4px 0;
+  border: 0;
+  border-top: 1px solid rgba(148, 163, 184, 0.6);
+}
