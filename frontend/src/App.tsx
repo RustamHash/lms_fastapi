@@ -66,6 +66,36 @@ const TopologyZonesPage = lazy(() => import('./pages/TopologyZonesPage').then(m 
 const TopologyRowsPage = lazy(() => import('./pages/TopologyRowsPage').then(m => ({ default: m.TopologyRowsPage })))
 const TopologyLocationsPage = lazy(() => import('./pages/TopologyLocationsPage').then(m => ({ default: m.TopologyLocationsPage })))
 
+const BatchDetailPage = lazy(() => import('./pages/BatchDetailPage').then(m => ({ default: m.BatchDetailPage })))
+const CarrierDetailPage = lazy(() => import('./pages/CarrierDetailPage').then(m => ({ default: m.CarrierDetailPage })))
+const DeliveryOrderDetailPage = lazy(() => import('./pages/DeliveryOrderDetailPage').then(m => ({ default: m.DeliveryOrderDetailPage })))
+const DeliveryZoneDetailPage = lazy(() => import('./pages/DeliveryZoneDetailPage').then(m => ({ default: m.DeliveryZoneDetailPage })))
+const DeviationDetailPage = lazy(() => import('./pages/DeviationDetailPage').then(m => ({ default: m.DeviationDetailPage })))
+const DocumentDetailPage = lazy(() => import('./pages/DocumentDetailPage').then(m => ({ default: m.DocumentDetailPage })))
+const DriverDetailPage = lazy(() => import('./pages/DriverDetailPage').then(m => ({ default: m.DriverDetailPage })))
+const FileDetailPage = lazy(() => import('./pages/FileDetailPage').then(m => ({ default: m.FileDetailPage })))
+const InboundOrderDetailPage = lazy(() => import('./pages/InboundOrderDetailPage').then(m => ({ default: m.InboundOrderDetailPage })))
+const IntegrationLogDetailPage = lazy(() => import('./pages/IntegrationLogDetailPage').then(m => ({ default: m.IntegrationLogDetailPage })))
+const IntegrationProfileDetailPage = lazy(() => import('./pages/IntegrationProfileDetailPage').then(m => ({ default: m.IntegrationProfileDetailPage })))
+const KeeperDetailPage = lazy(() => import('./pages/KeeperDetailPage').then(m => ({ default: m.KeeperDetailPage })))
+const LpnDetailPage = lazy(() => import('./pages/LpnDetailPage').then(m => ({ default: m.LpnDetailPage })))
+const OutboundOrderDetailPage = lazy(() => import('./pages/OutboundOrderDetailPage').then(m => ({ default: m.OutboundOrderDetailPage })))
+const ProductDetailPage = lazy(() => import('./pages/ProductDetailPage').then(m => ({ default: m.ProductDetailPage })))
+const ReturnOrderDetailPage = lazy(() => import('./pages/ReturnOrderDetailPage').then(m => ({ default: m.ReturnOrderDetailPage })))
+const RoleDetailPage = lazy(() => import('./pages/RoleDetailPage').then(m => ({ default: m.RoleDetailPage })))
+const RouteLineDetailPage = lazy(() => import('./pages/RouteLineDetailPage').then(m => ({ default: m.RouteLineDetailPage })))
+const RouteDetailPage = lazy(() => import('./pages/RouteDetailPage').then(m => ({ default: m.RouteDetailPage })))
+const StockDetailPage = lazy(() => import('./pages/StockDetailPage').then(m => ({ default: m.StockDetailPage })))
+const TaskDetailPage = lazy(() => import('./pages/TaskDetailPage').then(m => ({ default: m.TaskDetailPage })))
+const TopologyLocationDetailPage = lazy(() => import('./pages/TopologyLocationDetailPage').then(m => ({ default: m.TopologyLocationDetailPage })))
+const TopologyRowDetailPage = lazy(() => import('./pages/TopologyRowDetailPage').then(m => ({ default: m.TopologyRowDetailPage })))
+const TopologyVirtualWarehouseDetailPage = lazy(() => import('./pages/TopologyVirtualWarehouseDetailPage').then(m => ({ default: m.TopologyVirtualWarehouseDetailPage })))
+const TopologyWarehouseDetailPage = lazy(() => import('./pages/TopologyWarehouseDetailPage').then(m => ({ default: m.TopologyWarehouseDetailPage })))
+const TopologyZoneDetailPage = lazy(() => import('./pages/TopologyZoneDetailPage').then(m => ({ default: m.TopologyZoneDetailPage })))
+const UserDetailPage = lazy(() => import('./pages/UserDetailPage').then(m => ({ default: m.UserDetailPage })))
+const VehicleDetailPage = lazy(() => import('./pages/VehicleDetailPage').then(m => ({ default: m.VehicleDetailPage })))
+
+
 import './App.css'
 
 const queryClient = new QueryClient()
@@ -162,6 +192,64 @@ function App() {
                   
                   {/* Файлы */}
                   <Route path="/files" element={<FilesPage />} />
+                  
+                                    <Route path="/reference/batches/:id" element={<BatchDetailPage />} />
+                  <Route path="/carriers/:id" element={<CarrierDetailPage />} />
+                  <Route path="/delivery/orders/:id" element={<DeliveryOrderDetailPage />} />
+                  <Route path="/reference/delivery-zones/:id" element={<DeliveryZoneDetailPage />} />
+                  <Route path="/deviations/:id" element={<DeviationDetailPage />} />
+                  <Route path="/documents/:id" element={<DocumentDetailPage />} />
+                  <Route path="/reference/drivers/:id" element={<DriverDetailPage />} />
+                  <Route path="/files/:id" element={<FileDetailPage />} />
+                  <Route path="/orders/inbound/:id" element={<InboundOrderDetailPage />} />
+                  <Route path="/integrations/logs/:id" element={<IntegrationLogDetailPage />} />
+                  <Route path="/integrations/profiles/:id" element={<IntegrationProfileDetailPage />} />
+                  <Route path="/keepers/:id" element={<KeeperDetailPage />} />
+                  <Route path="/reference/lpns/:id" element={<LpnDetailPage />} />
+                  <Route path="/orders/outbound/:id" element={<OutboundOrderDetailPage />} />
+                  <Route path="/reference/products/:id" element={<ProductDetailPage />} />
+                  <Route path="/orders/return/:id" element={<ReturnOrderDetailPage />} />
+                  <Route path="/roles/:id" element={<RoleDetailPage />} />
+                  <Route path="/route-lines/:id" element={<RouteLineDetailPage />} />
+                  <Route path="/reference/routes/:id" element={<RouteDetailPage />} />
+                  <Route path="/stock/:id" element={<StockDetailPage />} />
+                  <Route path="/tasks/:id" element={<TaskDetailPage />} />
+                  <Route path="/topology/locations/:id" element={<TopologyLocationDetailPage />} />
+                  <Route path="/topology/rows/:id" element={<TopologyRowDetailPage />} />
+                  <Route path="/topology/virtual-warehouses/:id" element={<TopologyVirtualWarehouseDetailPage />} />
+                  <Route path="/topology/warehouses/:id" element={<TopologyWarehouseDetailPage />} />
+                  <Route path="/topology/zones/:id" element={<TopologyZoneDetailPage />} />
+                  <Route path="/users/:id" element={<UserDetailPage />} />
+                  <Route path="/reference/vehicles/:id" element={<VehicleDetailPage />} />
+                  
+                                    <Route path="/reference/batches/:id" element={<BatchDetailPage />} />
+                  <Route path="/carriers/:id" element={<CarrierDetailPage />} />
+                  <Route path="/delivery/orders/:id" element={<DeliveryOrderDetailPage />} />
+                  <Route path="/reference/delivery-zones/:id" element={<DeliveryZoneDetailPage />} />
+                  <Route path="/deviations/:id" element={<DeviationDetailPage />} />
+                  <Route path="/documents/:id" element={<DocumentDetailPage />} />
+                  <Route path="/reference/drivers/:id" element={<DriverDetailPage />} />
+                  <Route path="/files/:id" element={<FileDetailPage />} />
+                  <Route path="/orders/inbound/:id" element={<InboundOrderDetailPage />} />
+                  <Route path="/integrations/logs/:id" element={<IntegrationLogDetailPage />} />
+                  <Route path="/integrations/profiles/:id" element={<IntegrationProfileDetailPage />} />
+                  <Route path="/keepers/:id" element={<KeeperDetailPage />} />
+                  <Route path="/reference/lpns/:id" element={<LpnDetailPage />} />
+                  <Route path="/orders/outbound/:id" element={<OutboundOrderDetailPage />} />
+                  <Route path="/reference/products/:id" element={<ProductDetailPage />} />
+                  <Route path="/orders/return/:id" element={<ReturnOrderDetailPage />} />
+                  <Route path="/roles/:id" element={<RoleDetailPage />} />
+                  <Route path="/route-lines/:id" element={<RouteLineDetailPage />} />
+                  <Route path="/reference/routes/:id" element={<RouteDetailPage />} />
+                  <Route path="/stock/:id" element={<StockDetailPage />} />
+                  <Route path="/tasks/:id" element={<TaskDetailPage />} />
+                  <Route path="/topology/locations/:id" element={<TopologyLocationDetailPage />} />
+                  <Route path="/topology/rows/:id" element={<TopologyRowDetailPage />} />
+                  <Route path="/topology/virtual-warehouses/:id" element={<TopologyVirtualWarehouseDetailPage />} />
+                  <Route path="/topology/warehouses/:id" element={<TopologyWarehouseDetailPage />} />
+                  <Route path="/topology/zones/:id" element={<TopologyZoneDetailPage />} />
+                  <Route path="/users/:id" element={<UserDetailPage />} />
+                  <Route path="/reference/vehicles/:id" element={<VehicleDetailPage />} />
                   
                   <Route path="*" element={<Navigate to="/" replace />} />
                 </Route>

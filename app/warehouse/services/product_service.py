@@ -42,7 +42,6 @@ class ProductService:
         stmt = select(Product).where(
             Product.depositor_id == depositor_id,
             Product.external_id == external_id,
-            Product.is_deleted.is_(False),
         )
         existing = await self._s.scalar(stmt)
         if existing:
@@ -94,7 +93,6 @@ class ProductService:
         stmt = select(Product).where(
             Product.depositor_id == depositor_id,
             Product.external_id == external_id,
-            Product.is_deleted.is_(False),
         )
         return await self._s.scalar(stmt)
 
@@ -133,7 +131,6 @@ class ProductService:
     async def list_by_depositor(self, depositor_id: int) -> list[Product]:
         stmt = select(Product).where(
             Product.depositor_id == depositor_id,
-            Product.is_deleted.is_(False),
         )
         return list(await self._s.scalars(stmt))
 

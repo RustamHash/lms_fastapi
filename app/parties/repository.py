@@ -33,12 +33,12 @@ class AddressRepository:
         stmt = (
             select(Address)
             .join(RawAddress, RawAddress.normalized_address_id == Address.id)
-            .where(RawAddress.hash == address_hash, RawAddress.is_deleted.is_(False))
+            .where(RawAddress.hash == address_hash)
         )
         return await self.session.scalar(stmt)
 
     async def list_addresses(self) -> list[Address]:
-        stmt = select(Address).where(Address.is_deleted.is_(False))
+        stmt = select(Address).where()
         return list(await self.session.scalars(stmt))
 
     async def insert_address(self, **kwargs) -> Address:
@@ -50,7 +50,6 @@ class AddressRepository:
     async def find_raw_by_text(self, raw_text: str) -> RawAddress | None:
         stmt = select(RawAddress).where(
             RawAddress.raw_text == raw_text,
-            RawAddress.is_deleted.is_(False),
         )
         return await self.session.scalar(stmt)
 
@@ -59,7 +58,6 @@ class AddressRepository:
             return None
         stmt = select(Address).where(
             Address.fias_id == fias_id,
-            Address.is_deleted.is_(False),
         )
         return await self.session.scalar(stmt)
 
@@ -68,7 +66,6 @@ class AddressRepository:
             return None
         stmt = select(Address).where(
             Address.full_address == full_address,
-            Address.is_deleted.is_(False),
         )
         return await self.session.scalar(stmt)
 
@@ -90,12 +87,11 @@ class LegalEntityRepository:
         if not inn:
             return None
         stmt = select(LegalEntity).where(
-            LegalEntity.inn == inn, LegalEntity.is_deleted.is_(False)
-        )
+            LegalEntity.inn == inn)
         return await self.session.scalar(stmt)
 
     async def list_all(self) -> list[LegalEntity]:
-        stmt = select(LegalEntity).where(LegalEntity.is_deleted.is_(False))
+        stmt = select(LegalEntity).where()
         return list(await self.session.scalars(stmt))
 
     async def insert(self, **kwargs) -> LegalEntity:
@@ -127,19 +123,17 @@ class ClientRepository:
         stmt = select(Client).where(
             Client.depositor_id == depositor_id,
             Client.code == code,
-            Client.is_deleted.is_(False),
         )
         return await self.session.scalar(stmt)
 
     async def list_by_depositor(self, depositor_id: int) -> list[Client]:
         stmt = select(Client).where(
             Client.depositor_id == depositor_id,
-            Client.is_deleted.is_(False),
         )
         return list(await self.session.scalars(stmt))
 
     async def list_all(self) -> list[Client]:
-        stmt = select(Client).where(Client.is_deleted.is_(False))
+        stmt = select(Client).where()
         return list(await self.session.scalars(stmt))
 
     async def insert(self, **kwargs) -> Client:
@@ -169,12 +163,11 @@ class ContractRepository:
     async def list_active(self) -> list[Contract]:
         stmt = select(Contract).where(
             Contract.status == "active",
-            Contract.is_deleted.is_(False),
         )
         return list(await self.session.scalars(stmt))
 
     async def list_all(self) -> list[Contract]:
-        stmt = select(Contract).where(Contract.is_deleted.is_(False))
+        stmt = select(Contract).where()
         return list(await self.session.scalars(stmt))
 
     async def insert(self, **kwargs) -> Contract:
@@ -215,7 +208,6 @@ class TariffRepository:
     async def list_tariffs_by_document(self, document_id: int) -> list[Tariff]:
         stmt = select(Tariff).where(
             Tariff.document_id == document_id,
-            Tariff.is_deleted.is_(False),
         )
         return list(await self.session.scalars(stmt))
 
@@ -231,12 +223,11 @@ class DepositorRepository:
         if not code:
             return None
         stmt = select(Depositor).where(
-            Depositor.code == code, Depositor.is_deleted.is_(False)
-        )
+            Depositor.code == code)
         return await self.session.scalar(stmt)
 
     async def list_all(self) -> list[Depositor]:
-        stmt = select(Depositor).where(Depositor.is_deleted.is_(False))
+        stmt = select(Depositor).where()
         return list(await self.session.scalars(stmt))
 
     async def insert(self, **kwargs) -> Depositor:

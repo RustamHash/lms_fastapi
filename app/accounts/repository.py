@@ -29,7 +29,7 @@ class UserRepository:
         return user
 
     async def list_all(self) -> list[User]:
-        stmt = select(User).where(User.is_deleted.is_(False))
+        stmt = select(User).where()
         return list(await self._s.scalars(stmt))
 
     async def update(self, user_id: int, **kwargs) -> User | None:
@@ -60,7 +60,7 @@ class RoleRepository:
         return role
 
     async def list_all(self) -> list[Role]:
-        stmt = select(Role).where(Role.is_deleted.is_(False))
+        stmt = select(Role).where()
         return list(await self._s.scalars(stmt))
 
     async def update(self, role_id: int, **kwargs) -> Role | None:

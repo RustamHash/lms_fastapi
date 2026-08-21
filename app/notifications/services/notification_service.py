@@ -60,13 +60,11 @@ class NotificationService:
         stmt = select(Notification).where(
             Notification.user_id == user_id,
             Notification.status == "pending",
-            Notification.is_deleted.is_(False),
         )
         return list(await self._s.scalars(stmt))
 
     async def list_by_user(self, user_id: int) -> list[Notification]:
         stmt = select(Notification).where(
             Notification.user_id == user_id,
-            Notification.is_deleted.is_(False),
         )
         return list(await self._s.scalars(stmt))

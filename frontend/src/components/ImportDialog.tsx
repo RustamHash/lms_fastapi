@@ -52,6 +52,32 @@ export function ImportDialog({ documentType, title, onClose }: Props) {
     }
   }, [allMessages, allErrors])
 
+  async function downloadErrorsExcel() {
+    if (!status?.task_id) return
+    
+    try {
+      const token = sessionStorage.getItem('sslogistics_access_token')
+      const res = await fetch(`/api/v1/integrations/import/${status.task_id}/errors/excel`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        },
+      })
+      
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `import_errors_${status.task_id}.xlsx`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch (e) {
+      console.error('Ошибка скачивания Excel:', e)
+    }
+  }
+
   async function handleImport() {
     setError(null)
     setStatus(null)
@@ -126,15 +152,7 @@ export function ImportDialog({ documentType, title, onClose }: Props) {
       <div className="dialog dialog--wide" role="dialog" aria-modal="true" aria-labelledby="import-title">
         <h3 id="import-title" className="dialog__title">{title}</h3>
 
-        <div className="dialog__text">
-          {documentType === 'porder' ? (
-            <p className="dialog__hint">Импорт приходных заказов (porder).</p>
-          ) : documentType === 'order' ? (
-            <p className="dialog__hint">Импорт расходных заказов (order).</p>
-          ) : (
-            <p className="dialog__hint">Импорт всех типов заказов.</p>
-          )}
-        </div>
+
 
 
 
@@ -161,16 +179,31 @@ export function ImportDialog({ documentType, title, onClose }: Props) {
               </div>
             ) : null}
 
-            {/* Статистика */}
+            {/* Статистика — крупная, на всю ширину */}
             <div className="import-progress__stats">
-              <span>Всего: {status.total_rows}</span>
-              <span>Обработано: {status.processed_rows}</span>
-              <span className="import-progress__success">Успешно: {status.success_rows}</span>
+              <div className="import-stat">
+                <span className="import-stat__label">Всего</span>
+                <span className="import-stat__value">{status.total_rows}</span>
+              </div>
+              <div className="import-stat">
+                <span className="import-stat__label">Обработано</span>
+                <span className="import-stat__value">{status.processed_rows}</span>
+              </div>
+              <div className="import-stat import-stat--success">
+                <span className="import-stat__label">Успешно</span>
+                <span className="import-stat__value">{status.success_rows}</span>
+              </div>
               {status.error_rows > 0 ? (
-                <span className="import-progress__error">Ошибок: {status.error_rows}</span>
+                <div className="import-stat import-stat--error">
+                  <span className="import-stat__label">Ошибок</span>
+                  <span className="import-stat__value">{status.error_rows}</span>
+                </div>
               ) : null}
               {status.order_number ? (
-                <span>Заказ: {status.order_number}</span>
+                <div className="import-stat import-stat--order">
+                  <span className="import-stat__label">Заказ</span>
+                  <span className="import-stat__value">{status.order_number}</span>
+                </div>
               ) : null}
             </div>
 
@@ -192,27 +225,36 @@ export function ImportDialog({ documentType, title, onClose }: Props) {
 
         {/* Кнопки в конце */}
         {isDone ? (
-          <div className="dialog__actions">
+          <div className="import-dialog-footer">
             <p className="import-progress__done">✅ Импорт завершён успешно</p>
-            <button type="button" className="tb tb--reset" onClick={onClose} data-close="true">
+            <button type="button" className="import-dialog-btn import-dialog-btn--primary" onClick={onClose} data-close="true">
               Закрыть
             </button>
           </div>
         ) : null}
 
-        {isFailed ? (
-          <div className="dialog__actions">
+        {isFailed || (isDone && status && status.error_rows > 0) ? (
+          <div className="import-dialog-footer">
             <p className="import-progress__failed">❌ Импорт завершён с ошибками</p>
-            <button type="button" className="tb tb--reset" onClick={onClose} data-close="true">
-              Закрыть
-            </button>
+            <div className="import-dialog-footer__buttons">
+              <button
+                type="button"
+                className="import-dialog-btn import-dialog-btn--error"
+                onClick={() => void downloadErrorsExcel()}
+              >
+                Скачать Excel с ошибками
+              </button>
+              <button type="button" className="import-dialog-btn import-dialog-btn--primary" onClick={onClose} data-close="true">
+                Закрыть
+              </button>
+            </div>
           </div>
         ) : null}
 
         {isRunning ? (
-          <div className="dialog__actions">
+          <div className="import-dialog-footer">
             <p className="import-progress__running">⏳ Импорт выполняется...</p>
-            <button type="button" className="tb tb--reset" onClick={stopPolling}>
+            <button type="button" className="import-dialog-btn import-dialog-btn--secondary" onClick={stopPolling}>
               Остановить опрос
             </button>
           </div>

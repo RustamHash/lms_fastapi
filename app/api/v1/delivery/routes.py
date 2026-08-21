@@ -9,6 +9,8 @@ from app.api.deps import SessionDep, UserDep, require_permission
 from app.api.v1.delivery import schemas
 from app.core.exceptions import NotFoundError
 from app.delivery.models import DeliveryOrder, Driver, Route, Vehicle
+from app.infrastructure.events import event_bus
+from app.infrastructure.events.event_types import EventTypes
 from app.delivery.services import DeliveryOrderService
 
 router = APIRouter(prefix="/delivery", tags=["delivery"])
@@ -87,7 +89,7 @@ async def update_order_status(
 @router.get("/drivers", response_model=list[schemas.DriverRead], dependencies=[Depends(require_permission("view", "drivers"))])
 async def list_drivers(session: SessionDep) -> list[schemas.DriverRead]:
     rows = list(
-        await session.scalars(select(Driver).where(Driver.is_deleted.is_(False)))
+        await session.scalars(select(Driver).where())
     )
     return [schemas.DriverRead.model_validate(r) for r in rows]
 
@@ -150,7 +152,7 @@ async def delete_driver(driver_id: int, session: SessionDep, user_id: UserDep) -
 @router.get("/vehicles", response_model=list[schemas.VehicleRead], dependencies=[Depends(require_permission("view", "vehicles"))])
 async def list_vehicles(session: SessionDep) -> list[schemas.VehicleRead]:
     rows = list(
-        await session.scalars(select(Vehicle).where(Vehicle.is_deleted.is_(False)))
+        await session.scalars(select(Vehicle).where())
     )
     return [schemas.VehicleRead.model_validate(r) for r in rows]
 
@@ -214,7 +216,7 @@ async def delete_vehicle(
 
 @router.get("/routes", response_model=list[schemas.RouteRead], dependencies=[Depends(require_permission("view", "routes"))])
 async def list_routes(session: SessionDep) -> list[schemas.RouteRead]:
-    rows = list(await session.scalars(select(Route).where(Route.is_deleted.is_(False))))
+    rows = list(await session.scalars(select(Route).where()))
     return [schemas.RouteRead.model_validate(r) for r in rows]
 
 

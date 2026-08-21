@@ -22,7 +22,7 @@ router = APIRouter(prefix="/integrations", tags=["integrations"])
 @router.get("/profiles", response_model=list[schemas.IntegrationProfileRead], dependencies=[Depends(require_permission("view", "integrations"))])
 async def list_profiles(session: SessionDep) -> list[schemas.IntegrationProfileRead]:
     rows = list(await session.scalars(
-        select(IntegrationProfile).where(IntegrationProfile.is_deleted.is_(False))
+        select(IntegrationProfile).where()
     ))
     return [schemas.IntegrationProfileRead.model_validate(r) for r in rows]
 
@@ -84,7 +84,7 @@ async def list_logs(
     session: SessionDep,
     profile_id: int | None = None,
 ) -> list[schemas.IntegrationLogRead]:
-    stmt = select(IntegrationLog).where(IntegrationLog.is_deleted.is_(False))
+    stmt = select(IntegrationLog).where()
     if profile_id:
         stmt = stmt.where(IntegrationLog.profile_id == profile_id)
     rows = list(await session.scalars(stmt))

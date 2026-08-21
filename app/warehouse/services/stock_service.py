@@ -30,7 +30,6 @@ class StockService:
             StockBalance.location_id == location_id,
             StockBalance.lpn_id == lpn_id,
             StockBalance.batch_id == batch_id,
-            StockBalance.is_deleted.is_(False),
         )
         return await self._s.scalar(stmt)
 
@@ -43,7 +42,6 @@ class StockService:
     ) -> Decimal:
         stmt = select(StockBalance).where(
             StockBalance.product_id == product_id,
-            StockBalance.is_deleted.is_(False),
         )
         if location_id:
             stmt = stmt.where(StockBalance.location_id == location_id)

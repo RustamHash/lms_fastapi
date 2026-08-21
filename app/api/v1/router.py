@@ -7,7 +7,7 @@ from app.api.v1.accounts.routes_list import router as list_settings_router
 from app.api.v1.delivery.routes import router as delivery_router
 from app.api.v1.delivery.routes_deviations_lines import router as deviations_lines_router
 from app.api.v1.documents.routes import router as documents_router
-from app.api.v1.files.routes import router as files_router
+from app.files.routes import router as files_router
 from app.api.v1.integration.routes import router as integration_router
 from app.api.v1.integration.routes_import import router as import_router
 from app.api.v1.notifications.routes import router as notifications_router
@@ -20,6 +20,7 @@ from app.api.v1.parties.routes_delivery_zones import router as delivery_zones_ro
 from app.api.v1.parties.routes_carriers_keepers import router as carriers_keepers_router
 from app.api.v1.warehouse.routes import router as warehouse_router
 from app.api.v1.warehouse.routes_topology import router as warehouse_topology_router
+from app.api.v1.warehouse.routes_references import router as warehouse_references_router
 
 api_router = APIRouter(prefix="/api/v1")
 
@@ -30,6 +31,7 @@ api_router.include_router(delivery_zones_router)
 api_router.include_router(carriers_keepers_router)
 api_router.include_router(warehouse_router)
 api_router.include_router(warehouse_topology_router)
+api_router.include_router(warehouse_references_router)
 api_router.include_router(documents_router)
 api_router.include_router(delivery_router)
 api_router.include_router(deviations_lines_router)

@@ -10,9 +10,9 @@ from fastapi.responses import FileResponse
 from sqlalchemy import select
 
 from app.api.deps import SessionDep, UserDep, require_permission
-from app.api.v1.files import schemas
+from app.files import schemas
 from app.core.exceptions import NotFoundError
-from app.infrastructure.files.models import File as FileModel
+from app.files.models import File as FileModel
 
 router = APIRouter(prefix="/files", tags=["files"])
 
@@ -52,7 +52,7 @@ async def upload_file(
 @router.get("", response_model=list[schemas.FileRead], dependencies=[Depends(require_permission("view", "files"))])
 async def list_files(session: SessionDep) -> list[schemas.FileRead]:
     rows = list(await session.scalars(
-        select(FileModel).where(FileModel.is_deleted.is_(False))
+        select(FileModel).where()
     ))
     return [schemas.FileRead.model_validate(r) for r in rows]
 

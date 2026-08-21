@@ -103,7 +103,7 @@ async def list_aliases(
 ) -> list[schemas.RawAddressRead]:
     stmt = (
         select(RawAddress)
-        .where(RawAddress.is_deleted.is_(False))
+        .where()
         .order_by(RawAddress.id.desc())
         .limit(limit)
         .offset(offset)
@@ -115,6 +115,14 @@ async def list_aliases(
         result.append(
             schemas.RawAddressRead(
                 id=r.id,
+                is_active=r.is_active,
+                is_deleted=r.is_deleted,
+                created_at=r.created_at,
+                updated_at=r.updated_at,
+                created_by_id=r.created_by_id,
+                updated_by_id=r.updated_by_id,
+                deleted_at=r.deleted_at,
+                deleted_by_id=r.deleted_by_id,
                 raw_text=r.raw_text,
                 hash=r.hash,
                 normalized_address_id=r.normalized_address_id,
@@ -145,6 +153,14 @@ async def create_alias(
 
     return schemas.RawAddressRead(
         id=raw.id,
+        is_active=raw.is_active,
+        is_deleted=raw.is_deleted,
+        created_at=raw.created_at,
+        updated_at=raw.updated_at,
+        created_by_id=raw.created_by_id,
+        updated_by_id=raw.updated_by_id,
+        deleted_at=raw.deleted_at,
+        deleted_by_id=raw.deleted_by_id,
         raw_text=raw.raw_text,
         hash=raw.hash,
         normalized_address_id=raw.normalized_address_id,
@@ -160,6 +176,14 @@ async def get_alias(alias_id: int, session: SessionDep) -> schemas.RawAddressRea
         raise NotFoundError("Вариант ввода не найден")
     return schemas.RawAddressRead(
         id=raw.id,
+        is_active=raw.is_active,
+        is_deleted=raw.is_deleted,
+        created_at=raw.created_at,
+        updated_at=raw.updated_at,
+        created_by_id=raw.created_by_id,
+        updated_by_id=raw.updated_by_id,
+        deleted_at=raw.deleted_at,
+        deleted_by_id=raw.deleted_by_id,
         raw_text=raw.raw_text,
         hash=raw.hash,
         normalized_address_id=raw.normalized_address_id,
@@ -455,7 +479,7 @@ async def delete_contract(contract_id: int, session: SessionDep, user_id: UserDe
 
 @router.get("/tariff-documents", response_model=list[schemas.TariffDocumentRead], dependencies=[Depends(require_permission("view", "tariffs"))])
 async def list_tariff_documents(session: SessionDep) -> list[schemas.TariffDocumentRead]:
-    rows = list(await session.scalars(select(TariffDocument).where(TariffDocument.is_deleted.is_(False))))
+    rows = list(await session.scalars(select(TariffDocument).where()))
     return [schemas.TariffDocumentRead.model_validate(r) for r in rows]
 
 
@@ -510,7 +534,7 @@ async def create_tariff_document(
 
 @router.get("/tariffs", response_model=list[schemas.TariffRead], dependencies=[Depends(require_permission("view", "tariffs"))])
 async def list_tariffs(session: SessionDep, document_id: int | None = None) -> list[schemas.TariffRead]:
-    stmt = select(Tariff).where(Tariff.is_deleted.is_(False))
+    stmt = select(Tariff).where()
     if document_id:
         stmt = stmt.where(Tariff.document_id == document_id)
     rows = list(await session.scalars(stmt))

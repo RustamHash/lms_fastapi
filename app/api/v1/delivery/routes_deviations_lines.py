@@ -8,6 +8,8 @@ from sqlalchemy import select
 from app.api.deps import SessionDep, UserDep, require_permission
 from app.core.exceptions import NotFoundError
 from app.delivery.models import DeliveryDeviation, RouteLine
+from app.infrastructure.events import event_bus
+from app.infrastructure.events.event_types import EventTypes
 
 router = APIRouter(tags=["delivery-deviations-lines"])
 
@@ -196,6 +198,15 @@ async def create_route_line(
     )
     session.add(rl)
     await session.flush()
+
+    # Отправить событие о назначении маршрута
+    await event_bus.emit(EventTypes.ROUTE_ASSIGNED, {
+        "_event_type": EventTypes.ROUTE_ASSIGNED,
+        "route_id": rl.route_id,
+        "route_number": rl.route_id,
+        "delivery_order_id": rl.delivery_order_id,
+    })
+
     return {"id": rl.id}
 
 

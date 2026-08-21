@@ -6,6 +6,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.delivery.models import DeliveryOrder
+from app.infrastructure.events import event_bus
+from app.infrastructure.events.event_types import EventTypes
 
 
 class DeliveryOrderService:
@@ -20,6 +22,14 @@ class DeliveryOrderService:
         )
         self._s.add(order)
         await self._s.flush()
+
+        # Отправить событие
+        await event_bus.emit(EventTypes.DELIVERY_ORDER_CREATED, {
+            "_event_type": EventTypes.DELIVERY_ORDER_CREATED,
+            "order_id": order.id,
+            "order_number": order.number,
+        })
+
         return order
 
     async def get_by_id(self, order_id: int) -> DeliveryOrder | None:
@@ -47,5 +57,5 @@ class DeliveryOrderService:
         return await self.set_status(user_id=user_id, order_id=order_id, status="cancelled")
 
     async def list_all(self) -> list[DeliveryOrder]:
-        stmt = select(DeliveryOrder).where(DeliveryOrder.is_deleted.is_(False))
+        stmt = select(DeliveryOrder).where()
         return list(await self._s.scalars(stmt))

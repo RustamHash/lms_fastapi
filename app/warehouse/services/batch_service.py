@@ -29,7 +29,6 @@ class BatchService:
         stmt = select(Batch).where(
             Batch.product_id == product_id,
             Batch.batch_number == batch_number,
-            Batch.is_deleted.is_(False),
         )
         existing = await self._s.scalar(stmt)
         if existing:
@@ -59,7 +58,6 @@ class BatchService:
         stmt = select(Batch).where(
             Batch.product_id == product_id,
             Batch.batch_number == batch_number,
-            Batch.is_deleted.is_(False),
         )
         batch = await self._s.scalar(stmt)
         if batch:
@@ -78,6 +76,5 @@ class BatchService:
     async def list_by_product(self, product_id: int) -> list[Batch]:
         stmt = select(Batch).where(
             Batch.product_id == product_id,
-            Batch.is_deleted.is_(False),
         )
         return list(await self._s.scalars(stmt))

@@ -97,13 +97,13 @@ class DocumentService:
         return await self.set_status(user_id=user_id, document_id=document_id, status="cancelled")
 
     async def list_all(self) -> list[Document]:
-        stmt = select(Document).where(Document.is_deleted.is_(False)).order_by(Document.created_at.desc())
+        stmt = select(Document).where().order_by(Document.created_at.desc())
         return list(await self._s.scalars(stmt))
 
     async def list_by_type(self, document_type: str) -> list[Document]:
         stmt = (
             select(Document)
-            .where(Document.document_type == document_type, Document.is_deleted.is_(False))
+            .where(Document.document_type == document_type)
             .order_by(Document.created_at.desc())
         )
         return list(await self._s.scalars(stmt))

@@ -5,7 +5,6 @@ from __future__ import annotations
 import logging
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.accounts.models import Role, User
 from app.infrastructure.events import event_bus
@@ -19,31 +18,39 @@ logger = logging.getLogger(__name__)
 class NotificationDispatcher:
     """При событии читает правила и отправляет уведомления."""
 
-    def __init__(self, session: AsyncSession) -> None:
+    def __init__(self, session) -> None:
         self._s = session
         self._app_adapter = AppAdapter(session)
         self._email_adapter = EmailAdapter()
 
     async def handle_event(self, data: dict) -> None:
         """Обработать событие — найти правила и отправить."""
+        from app.core.database import async_session_factory
+
         event_type = data.get("_event_type", "")
 
-        # Найти активные правила для события
-        stmt = select(NotificationRule).where(
-            NotificationRule.event_type == event_type,
-            NotificationRule.is_active.is_(True),
-        )
-        rules = list(await self._s.scalars(stmt))
+        async with async_session_factory() as session:
+            self._s = session
+            self._app_adapter = AppAdapter(session)
 
-        for rule in rules:
-            recipients = await self._get_recipients(rule)
-            notification = self._build_notification(event_type, data)
+            # Найти активные правила для события
+            stmt = select(NotificationRule).where(
+                NotificationRule.event_type == event_type,
+                NotificationRule.is_active.is_(True),
+            )
+            rules = list(await session.scalars(stmt))
 
-            for recipient in recipients:
-                if rule.channel == "app":
-                    await self._app_adapter.send(recipient, notification)
-                elif rule.channel == "email":
-                    await self._email_adapter.send(recipient, notification)
+            for rule in rules:
+                recipients = await self._get_recipients(rule)
+                notification = self._build_notification(event_type, data)
+
+                for recipient in recipients:
+                    if rule.channel == "app":
+                        await self._app_adapter.send(recipient, notification)
+                    elif rule.channel == "email":
+                        await self._email_adapter.send(recipient, notification)
+
+            await session.commit()
 
     async def _get_recipients(self, rule: NotificationRule) -> list[dict]:
         """Получить получателей по правилу."""
@@ -68,8 +75,13 @@ class NotificationDispatcher:
         templates = {
             EventTypes.IMPORT_COMPLETED: {
                 "title": "Импорт завершен",
-                "text": f"Импорт завершен. Создано документов: {data.get('documents_created', 0)}",
+                "text": f"Импорт завершен. Успешно: {data.get('success_rows', 0)}, ошибок: {data.get('error_rows', 0)}",
                 "notification_type": "info",
+            },
+            EventTypes.IMPORT_FAILED: {
+                "title": "Ошибка импорта",
+                "text": f"Импорт завершился с ошибкой: {data.get('error', '')}",
+                "notification_type": "error",
             },
             EventTypes.DELIVERY_ORDER_CREATED: {
                 "title": "Новая заявка на доставку",
@@ -82,6 +94,11 @@ class NotificationDispatcher:
                 "notification_type": "info",
                 "link": f"/routes/{data.get('route_id', '')}",
             },
+            EventTypes.TASK_COMPLETED: {
+                "title": "Задание выполнено",
+                "text": f"Задание №{data.get('task_id', '')} выполнено",
+                "notification_type": "info",
+            },
         }
         return templates.get(
             event_type,
@@ -93,10 +110,14 @@ class NotificationDispatcher:
         )
 
 
-def setup_notification_dispatcher(session: AsyncSession) -> None:
+def setup_notification_dispatcher(session=None) -> None:
     """Подписать диспетчер на все события."""
     dispatcher = NotificationDispatcher(session)
 
     event_bus.subscribe(EventTypes.IMPORT_COMPLETED, dispatcher.handle_event)
+    event_bus.subscribe(EventTypes.IMPORT_FAILED, dispatcher.handle_event)
     event_bus.subscribe(EventTypes.DELIVERY_ORDER_CREATED, dispatcher.handle_event)
     event_bus.subscribe(EventTypes.ROUTE_ASSIGNED, dispatcher.handle_event)
+    event_bus.subscribe(EventTypes.TASK_COMPLETED, dispatcher.handle_event)
+
+    logger.info("Диспетчер уведомлений подписан на события")

@@ -10,7 +10,7 @@ from app.core.config import get_settings
 from app.infrastructure.orm_base import Base
 import app.accounts.models  # noqa: F401
 import app.parties.models  # noqa: F401
-import app.infrastructure.files  # noqa: F401
+import app.files  # noqa: F401
 import app.warehouse.models  # noqa: F401
 import app.documents.models  # noqa: F401
 import app.delivery.models  # noqa: F401

@@ -10,6 +10,8 @@ logger = logging.getLogger(__name__)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.warehouse.models import Task, TaskLine
+from app.infrastructure.events import event_bus
+from app.infrastructure.events.event_types import EventTypes
 from app.warehouse.services.stock_service import StockService
 
 
@@ -167,6 +169,14 @@ class TaskService:
 
         task.updated_by_id = user_id
         await self._s.flush()
+
+        # Отправить событие
+        await event_bus.emit(EventTypes.TASK_COMPLETED, {
+            "_event_type": EventTypes.TASK_COMPLETED,
+            "task_id": task.id,
+            "task_type": task.task_type,
+        })
+
         return task
 
     async def cancel(self, *, user_id: int, task_id: int) -> Task:

@@ -34,7 +34,7 @@ async def list_products(
     if depositor_id:
         rows = await service.list_by_depositor(depositor_id)
     else:
-        rows = list(await session.scalars(select(Product).where(Product.is_deleted.is_(False))))
+        rows = list(await session.scalars(select(Product).where()))
     return [schemas.ProductRead.model_validate(r) for r in rows]
 
 
@@ -108,7 +108,7 @@ async def list_batches(session: SessionDep, product_id: int | None = None) -> li
     if product_id:
         rows = await service.list_by_product(product_id)
     else:
-        rows = list(await session.scalars(select(Batch).where(Batch.is_deleted.is_(False))))
+        rows = list(await session.scalars(select(Batch).where()))
     return [schemas.BatchRead.model_validate(r) for r in rows]
 
 
@@ -166,7 +166,7 @@ async def create_lpn(
 
 @router.get("/lpns", response_model=list[schemas.LPNRead], dependencies=[Depends(require_permission("view", "lpns"))])
 async def list_lpns(session: SessionDep) -> list[schemas.LPNRead]:
-    rows = list(await session.scalars(select(LPN).where(LPN.is_deleted.is_(False))))
+    rows = list(await session.scalars(select(LPN).where()))
     return [schemas.LPNRead.model_validate(r) for r in rows]
 
 
@@ -328,7 +328,7 @@ async def start_task(
 
 @router.get("/tasks", response_model=list[schemas.TaskRead], dependencies=[Depends(require_permission("view", "tasks"))])
 async def list_tasks(session: SessionDep) -> list[schemas.TaskRead]:
-    rows = list(await session.scalars(select(Task).where(Task.is_deleted.is_(False))))
+    rows = list(await session.scalars(select(Task).where()))
     return [schemas.TaskRead.model_validate(r) for r in rows]
 
 

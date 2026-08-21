@@ -6,8 +6,10 @@ import asyncio
 import logging
 import tempfile
 import time
+import io
 
 from fastapi import APIRouter, Depends
+from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 
 from app.api.deps import SessionDep, UserDep, require_permission
@@ -16,6 +18,8 @@ from app.integration.adapters import ZLNAdapter
 from app.integration.models import IntegrationLog, IntegrationProfile
 from app.integration.services.ftp_service import FTPService
 from app.integration.services.integration_service import IntegrationService
+from app.infrastructure.events import event_bus
+from app.infrastructure.events.event_types import EventTypes
 
 logger = logging.getLogger(__name__)
 
@@ -70,7 +74,6 @@ async def _run_import_background(task_id: str, user_id: int, document_type: str 
             profiles = list(await session.scalars(
                 select(IntegrationProfile).where(
                     IntegrationProfile.is_active.is_(True),
-                    IntegrationProfile.is_deleted.is_(False),
                 )
             ))
 
@@ -216,11 +219,20 @@ async def _run_import_background(task_id: str, user_id: int, document_type: str 
 
                     log.status = "completed"
                     log.current_step = "Импорт завершен"
+                    await event_bus.emit(EventTypes.IMPORT_COMPLETED, {
+                        "_event_type": EventTypes.IMPORT_COMPLETED,
+                        "success_rows": log.success_rows,
+                        "error_rows": log.error_rows,
+                    })
                     await _log_message(session, log, f"Импорт по профилю {profile.name} завершен. Успешно: {log.success_rows}, ошибок: {log.error_rows}", "Завершено")
 
                 except Exception as e:
                     log.status = "failed"
                     await _log_error(session, log, f"Критическая ошибка: {e}")
+                    await event_bus.emit(EventTypes.IMPORT_FAILED, {
+                        "_event_type": EventTypes.IMPORT_FAILED,
+                        "error": str(e),
+                    })
                 finally:
                     ftp.disconnect()
 
@@ -311,6 +323,72 @@ async def get_import_history(session: SessionDep) -> list[dict]:
         }
         for log in logs
     ]
+
+
+@router.get(
+    "/import/{task_id}/errors/excel",
+    dependencies=[Depends(require_permission("view", "integrations"))],
+)
+async def download_import_errors_excel(task_id: str, session: SessionDep):
+    """Скачать Excel файл с ошибками импорта."""
+    from openpyxl import Workbook
+
+    # Найти все логи по task_id
+    logs = list(await session.scalars(
+        select(IntegrationLog).where(IntegrationLog.task_id == task_id)
+    ))
+
+    if not logs:
+        raise NotFoundError("Задача импорта не найдена")
+
+    # Создать Excel
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Ошибки импорта"
+
+    # Заголовки
+    headers = ["Файл", "Ошибка", "Профиль", "Дата"]
+    ws.append(headers)
+
+    # Строки с ошибками
+    for log in logs:
+        profile_name = log.profile.name if log.profile else "Все профили"
+        for error in log.errors or []:
+            # Разбиваем ошибку: "Файл xxx.xml: Ошибка" → файл + текст
+            file_name = log.order_number or ""
+            error_text = error
+            
+            # Если ошибка содержит "Файл ...: ", разделяем
+            if error.startswith("Файл "):
+                parts = error.split(": ", 1)
+                if len(parts) == 2:
+                    file_name = parts[0].replace("Файл ", "")
+                    error_text = parts[1]
+            
+            ws.append([
+                file_name,
+                error_text,
+                profile_name,
+                log.created_at.strftime("%Y-%m-%d %H:%M:%S") if log.created_at else "",
+            ])
+
+    # Если ошибок нет — добавить строку "Ошибок нет"
+    total_errors = sum(len(log.errors or []) for log in logs)
+    if total_errors == 0:
+        ws.append(["", "Ошибок нет", "", ""])
+
+    # Сохранить в BytesIO
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+
+    filename = f"import_errors_{task_id[:8]}.xlsx"
+
+    return StreamingResponse(
+        output,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
 
 
 def _format_log(log: IntegrationLog) -> dict:

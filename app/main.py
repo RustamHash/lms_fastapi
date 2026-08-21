@@ -6,9 +6,12 @@ from app.api.v1.router import api_router
 from app.core.config import get_settings
 from app.core.middleware import setup_middleware
 from app.infrastructure.logging import setup_logging
+from app.notifications.services.dispatcher import setup_notification_dispatcher
 
 settings = get_settings()
 setup_logging(settings)
+# Подписка на события (диспетчер уведомлений)
+setup_notification_dispatcher(None)
 
 app = FastAPI(title="LMS FastAPI")
 setup_middleware(app, settings)

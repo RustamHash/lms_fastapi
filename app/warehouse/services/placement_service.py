@@ -35,8 +35,6 @@ class PlacementService:
             .join(Location, ProductLocation.location_id == Location.id)
             .where(
                 ProductLocation.product_id == product_id,
-                ProductLocation.is_deleted.is_(False),
-                Location.is_deleted.is_(False),
             )
             .order_by(Location.id)
         )
@@ -68,7 +66,6 @@ class PlacementService:
         stmt = select(StockBalance).where(
             StockBalance.product_id == product_id,
             StockBalance.location_id == location_id,
-            StockBalance.is_deleted.is_(False),
         )
         balances = list(await self._s.scalars(stmt))
 
@@ -114,7 +111,6 @@ class PlacementService:
             .where(
                 Location.row.zone.warehouse_id == warehouse_id,
                 Location.row.zone.zone_type == "storage",
-                Location.is_deleted.is_(False),
             )
             .order_by(Location.id)
         )
@@ -123,7 +119,6 @@ class PlacementService:
         for location in locations:
             balance_stmt = select(StockBalance).where(
                 StockBalance.location_id == location.id,
-                StockBalance.is_deleted.is_(False),
             )
             has_stock = await self._s.scalar(balance_stmt.limit(1))
             if not has_stock:
