@@ -14,11 +14,14 @@ class DeliveryOrder(Base):
     __tablename__ = "delivery_order"
 
     number: Mapped[str] = mapped_column(String(50), nullable=False, comment="Номер")
-    contract_id: Mapped[int] = mapped_column(
-        ForeignKey("parties_contract.id"), nullable=False, comment="Договор"
+    contract_id: Mapped[int | None] = mapped_column(
+        ForeignKey("parties_contract.id"), nullable=True, comment="Договор перевозки"
     )
     document_id: Mapped[int | None] = mapped_column(
         ForeignKey("documents_document.id"), nullable=True, comment="Документ склада"
+    )
+    outbound_order_id: Mapped[int | None] = mapped_column(
+        ForeignKey("orders_outbound.id"), nullable=True, comment="Исходящий заказ"
     )
     parent_id: Mapped[int | None] = mapped_column(
         ForeignKey("delivery_order.id"), nullable=True, comment="Родительский заказ"
@@ -32,8 +35,9 @@ class DeliveryOrder(Base):
     is_edo: Mapped[bool] = mapped_column(default=False, comment="Признак ЭДО")
     comment: Mapped[str] = mapped_column(Text, default="", comment="Комментарий")
 
-    contract: Mapped["Contract"] = relationship()
+    contract: Mapped["Contract | None"] = relationship()
     document: Mapped["Document | None"] = relationship()
+    outbound_order: Mapped["OutboundOrder | None"] = relationship()
     deviations: Mapped[list["DeliveryDeviation"]] = relationship(back_populates="delivery_order")
 
 

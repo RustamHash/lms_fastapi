@@ -9,6 +9,7 @@ from app.api.deps import SessionDep, UserDep, require_permission
 from app.api.v1.parties.schemas import DeliveryZoneCreate, DeliveryZoneRead
 from app.core.exceptions import ConflictError, NotFoundError
 from app.parties.models import DeliveryZone
+from app.parties.repository import DeliveryZoneRepository
 
 router = APIRouter(prefix="/delivery-zones", tags=["delivery-zones"])
 
@@ -20,7 +21,7 @@ router = APIRouter(prefix="/delivery-zones", tags=["delivery-zones"])
 )
 async def list_delivery_zones(session: SessionDep) -> list[DeliveryZoneRead]:
     """Список зон доставки."""
-    zones = list(await session.scalars(select(DeliveryZone)))
+    zones = await DeliveryZoneRepository(session).list_all()
     return [DeliveryZoneRead.model_validate(z) for z in zones]
 
 
@@ -36,16 +37,12 @@ async def create_delivery_zone(
     user_id: UserDep,
 ) -> DeliveryZoneRead:
     """Создать зону доставки."""
-    existing = await session.scalar(
-        select(DeliveryZone).where(DeliveryZone.name == body.name)
-    )
+    existing = await DeliveryZoneRepository(session).get_by_name(body.name)
     if existing:
         raise ConflictError(f"Зона с названием {body.name} уже существует")
 
     zone = DeliveryZone(
         name=body.name,
-        created_by_id=user_id,
-        updated_by_id=user_id,
     )
     session.add(zone)
     await session.flush()
@@ -59,7 +56,7 @@ async def create_delivery_zone(
 )
 async def get_delivery_zone(zone_id: int, session: SessionDep) -> DeliveryZoneRead:
     """Получить зону доставки."""
-    zone = await session.get(DeliveryZone, zone_id)
+    zone = await DeliveryZoneRepository(session).get_by_id(zone_id)
     if zone is None:
         raise NotFoundError("Зона доставки не найдена")
     return DeliveryZoneRead.model_validate(zone)
@@ -77,7 +74,7 @@ async def update_delivery_zone(
     user_id: UserDep,
 ) -> DeliveryZoneRead:
     """Обновить зону доставки."""
-    zone = await session.get(DeliveryZone, zone_id)
+    zone = await DeliveryZoneRepository(session).get_by_id(zone_id)
     if zone is None:
         raise NotFoundError("Зона доставки не найдена")
     zone.name = body.name
@@ -93,7 +90,7 @@ async def update_delivery_zone(
 )
 async def delete_delivery_zone(zone_id: int, session: SessionDep, user_id: UserDep) -> None:
     """Удалить зону доставки."""
-    zone = await session.get(DeliveryZone, zone_id)
+    zone = await DeliveryZoneRepository(session).get_by_id(zone_id)
     if zone is None:
         raise NotFoundError("Зона доставки не найдена")
     zone.soft_delete(user_id)

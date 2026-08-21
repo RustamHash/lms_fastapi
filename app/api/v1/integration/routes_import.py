@@ -87,8 +87,6 @@ async def _run_import_background(task_id: str, user_id: int, document_type: str 
                     status="failed",
                     document_type=document_type,
                     errors=["Нет активных профилей интеграции"],
-                    created_by_id=user_id,
-                    updated_by_id=user_id,
                 )
                 session.add(log)
                 await session.commit()
@@ -104,8 +102,6 @@ async def _run_import_background(task_id: str, user_id: int, document_type: str 
                     profile_id=profile.id,
                     status="processing",
                     document_type=document_type,
-                    created_by_id=user_id,
-                    updated_by_id=user_id,
                 )
                 session.add(log)
                 await session.flush()
@@ -246,8 +242,6 @@ async def _run_import_background(task_id: str, user_id: int, document_type: str 
                 status="failed",
                 document_type=document_type,
                 errors=[str(e)],
-                created_by_id=user_id,
-                updated_by_id=user_id,
             )
             session.add(log)
             await session.commit()

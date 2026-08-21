@@ -13,6 +13,12 @@ from app.warehouse.models import (
     ProductLocation,
     StockMovement,
 )
+from app.warehouse.repository import (
+    PackageRepository,
+    ProductGroupRepository,
+    ProductLocationRepository,
+    StockRepository,
+)
 
 router = APIRouter(prefix="/warehouse", tags=["warehouse-references"])
 
@@ -21,7 +27,7 @@ router = APIRouter(prefix="/warehouse", tags=["warehouse-references"])
 
 @router.get("/product-groups", dependencies=[Depends(require_permission("view", "products"))])
 async def list_product_groups(session: SessionDep):
-    rows = list(await session.scalars(select(ProductGroup)))
+    rows = await ProductGroupRepository(session).list_all()
     return [
         {
             "id": g.id,
@@ -37,16 +43,12 @@ async def list_product_groups(session: SessionDep):
 
 @router.post("/product-groups", status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_permission("create", "products"))])
 async def create_product_group(body: dict, session: SessionDep, user_id: UserDep):
-    existing = await session.scalar(
-        select(ProductGroup).where(ProductGroup.name == body["name"])
-    )
+    existing = await ProductGroupRepository(session).get_by_name(body["name"])
     if existing:
         raise ConflictError(f"Группа {body['name']} уже существует")
 
     group = ProductGroup(
         name=body["name"],
-        created_by_id=user_id,
-        updated_by_id=user_id,
     )
     session.add(group)
     await session.flush()
@@ -55,7 +57,7 @@ async def create_product_group(body: dict, session: SessionDep, user_id: UserDep
 
 @router.get("/product-groups/{group_id}", dependencies=[Depends(require_permission("view", "products"))])
 async def get_product_group(group_id: int, session: SessionDep):
-    group = await session.get(ProductGroup, group_id)
+    group = await ProductGroupRepository(session).get_by_id(group_id)
     if group is None:
         raise NotFoundError("Группа не найдена")
     return {
@@ -70,7 +72,7 @@ async def get_product_group(group_id: int, session: SessionDep):
 
 @router.patch("/product-groups/{group_id}", dependencies=[Depends(require_permission("update", "products"))])
 async def update_product_group(group_id: int, body: dict, session: SessionDep, user_id: UserDep):
-    group = await session.get(ProductGroup, group_id)
+    group = await ProductGroupRepository(session).get_by_id(group_id)
     if group is None:
         raise NotFoundError("Группа не найдена")
     group.name = body.get("name", group.name)
@@ -81,7 +83,7 @@ async def update_product_group(group_id: int, body: dict, session: SessionDep, u
 
 @router.delete("/product-groups/{group_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_permission("delete", "products"))])
 async def delete_product_group(group_id: int, session: SessionDep, user_id: UserDep):
-    group = await session.get(ProductGroup, group_id)
+    group = await ProductGroupRepository(session).get_by_id(group_id)
     if group is None:
         raise NotFoundError("Группа не найдена")
     group.soft_delete(user_id)
@@ -92,10 +94,7 @@ async def delete_product_group(group_id: int, session: SessionDep, user_id: User
 
 @router.get("/packages", dependencies=[Depends(require_permission("view", "products"))])
 async def list_packages(session: SessionDep, product_id: int | None = None):
-    stmt = select(Package)
-    if product_id:
-        stmt = stmt.where(Package.product_id == product_id)
-    rows = list(await session.scalars(stmt))
+    rows = await PackageRepository(session).list_all()
     return [
         {
             "id": p.id,
@@ -129,8 +128,6 @@ async def create_package(body: dict, session: SessionDep, user_id: UserDep):
         height=body.get("height"),
         depth=body.get("depth"),
         is_base_unit=body.get("is_base_unit", False),
-        created_by_id=user_id,
-        updated_by_id=user_id,
     )
     session.add(package)
     await session.flush()
@@ -139,7 +136,7 @@ async def create_package(body: dict, session: SessionDep, user_id: UserDep):
 
 @router.get("/packages/{package_id}", dependencies=[Depends(require_permission("view", "products"))])
 async def get_package(package_id: int, session: SessionDep):
-    p = await session.get(Package, package_id)
+    p = await PackageRepository(session).get_by_id(package_id)
     if p is None:
         raise NotFoundError("Упаковка не найдена")
     return {
@@ -162,7 +159,7 @@ async def get_package(package_id: int, session: SessionDep):
 
 @router.patch("/packages/{package_id}", dependencies=[Depends(require_permission("update", "products"))])
 async def update_package(package_id: int, body: dict, session: SessionDep, user_id: UserDep):
-    p = await session.get(Package, package_id)
+    p = await PackageRepository(session).get_by_id(package_id)
     if p is None:
         raise NotFoundError("Упаковка не найдена")
     for field in ["name", "quantity", "barcode", "weight", "width", "height", "depth", "is_base_unit"]:
@@ -175,7 +172,7 @@ async def update_package(package_id: int, body: dict, session: SessionDep, user_
 
 @router.delete("/packages/{package_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_permission("delete", "products"))])
 async def delete_package(package_id: int, session: SessionDep, user_id: UserDep):
-    p = await session.get(Package, package_id)
+    p = await PackageRepository(session).get_by_id(package_id)
     if p is None:
         raise NotFoundError("Упаковка не найдена")
     p.soft_delete(user_id)
@@ -186,7 +183,7 @@ async def delete_package(package_id: int, session: SessionDep, user_id: UserDep)
 
 @router.get("/product-locations", dependencies=[Depends(require_permission("view", "products"))])
 async def list_product_locations(session: SessionDep):
-    rows = list(await session.scalars(select(ProductLocation)))
+    rows = await ProductLocationRepository(session).list_all()
     return [
         {
             "id": pl.id,
@@ -206,8 +203,6 @@ async def create_product_location(body: dict, session: SessionDep, user_id: User
     pl = ProductLocation(
         product_id=body["product_id"],
         location_id=body["location_id"],
-        created_by_id=user_id,
-        updated_by_id=user_id,
     )
     session.add(pl)
     await session.flush()
@@ -216,7 +211,7 @@ async def create_product_location(body: dict, session: SessionDep, user_id: User
 
 @router.get("/product-locations/{pl_id}", dependencies=[Depends(require_permission("view", "products"))])
 async def get_product_location(pl_id: int, session: SessionDep):
-    pl = await session.get(ProductLocation, pl_id)
+    pl = await ProductLocationRepository(session).get_by_id(pl_id)
     if pl is None:
         raise NotFoundError("Связь не найдена")
     return {
@@ -232,7 +227,7 @@ async def get_product_location(pl_id: int, session: SessionDep):
 
 @router.patch("/product-locations/{pl_id}", dependencies=[Depends(require_permission("update", "products"))])
 async def update_product_location(pl_id: int, body: dict, session: SessionDep, user_id: UserDep):
-    pl = await session.get(ProductLocation, pl_id)
+    pl = await ProductLocationRepository(session).get_by_id(pl_id)
     if pl is None:
         raise NotFoundError("Связь не найдена")
     for field in ["product_id", "location_id"]:
@@ -245,7 +240,7 @@ async def update_product_location(pl_id: int, body: dict, session: SessionDep, u
 
 @router.delete("/product-locations/{pl_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_permission("delete", "products"))])
 async def delete_product_location(pl_id: int, session: SessionDep, user_id: UserDep):
-    pl = await session.get(ProductLocation, pl_id)
+    pl = await ProductLocationRepository(session).get_by_id(pl_id)
     if pl is None:
         raise NotFoundError("Связь не найдена")
     pl.soft_delete(user_id)
@@ -256,10 +251,7 @@ async def delete_product_location(pl_id: int, session: SessionDep, user_id: User
 
 @router.get("/stock-movements", dependencies=[Depends(require_permission("view", "stock"))])
 async def list_stock_movements(session: SessionDep, product_id: int | None = None):
-    stmt = select(StockMovement)
-    if product_id:
-        stmt = stmt.where(StockMovement.product_id == product_id)
-    rows = list(await session.scalars(stmt))
+    rows = await StockRepository(session).list_movements()
     return [
         {
             "id": sm.id,
@@ -289,8 +281,6 @@ async def create_stock_movement(body: dict, session: SessionDep, user_id: UserDe
         batch_id=body["batch_id"],
         direction=body["direction"],
         quantity=body["quantity"],
-        created_by_id=user_id,
-        updated_by_id=user_id,
     )
     session.add(sm)
     await session.flush()
@@ -299,7 +289,7 @@ async def create_stock_movement(body: dict, session: SessionDep, user_id: UserDe
 
 @router.get("/stock-movements/{sm_id}", dependencies=[Depends(require_permission("view", "stock"))])
 async def get_stock_movement(sm_id: int, session: SessionDep):
-    sm = await session.get(StockMovement, sm_id)
+    sm = await StockRepository(session).get_movement_by_id(sm_id)
     if sm is None:
         raise NotFoundError("Движение не найдено")
     return {
@@ -320,7 +310,7 @@ async def get_stock_movement(sm_id: int, session: SessionDep):
 
 @router.patch("/stock-movements/{sm_id}", dependencies=[Depends(require_permission("update", "stock"))])
 async def update_stock_movement(sm_id: int, body: dict, session: SessionDep, user_id: UserDep):
-    sm = await session.get(StockMovement, sm_id)
+    sm = await StockRepository(session).get_movement_by_id(sm_id)
     if sm is None:
         raise NotFoundError("Движение не найдено")
     for field in ["quantity", "direction"]:
@@ -333,7 +323,7 @@ async def update_stock_movement(sm_id: int, body: dict, session: SessionDep, use
 
 @router.delete("/stock-movements/{sm_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_permission("delete", "stock"))])
 async def delete_stock_movement(sm_id: int, session: SessionDep, user_id: UserDep):
-    sm = await session.get(StockMovement, sm_id)
+    sm = await StockRepository(session).get_movement_by_id(sm_id)
     if sm is None:
         raise NotFoundError("Движение не найдено")
     sm.soft_delete(user_id)

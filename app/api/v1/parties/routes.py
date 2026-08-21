@@ -101,26 +101,18 @@ async def list_aliases(
     limit: int = 1000,
     offset: int = 0,
 ) -> list[schemas.RawAddressRead]:
-    stmt = (
-        select(RawAddress)
-        .where()
-        .order_by(RawAddress.id.desc())
-        .limit(limit)
-        .offset(offset)
-    )
-    rows = list(await session.scalars(stmt))
+    address_repo = AddressRepository(session)
+    rows = await address_repo.list_raw(limit, offset)
     result = []
     for r in rows:
-        address = await session.get(Address, r.normalized_address_id)
+        address = await address_repo.get_address_by_id(r.normalized_address_id)
         result.append(
             schemas.RawAddressRead(
                 id=r.id,
                 is_active=r.is_active,
                 is_deleted=r.is_deleted,
                 created_at=r.created_at,
-                updated_at=r.updated_at,
-                created_by_id=r.created_by_id,
-                updated_by_id=r.updated_by_id,
+                updated_at=r.updated_at.created_by_id.updated_by_id,
                 deleted_at=r.deleted_at,
                 deleted_by_id=r.deleted_by_id,
                 raw_text=r.raw_text,
@@ -147,18 +139,14 @@ async def create_alias(
     service = AddressService(AddressRepository(session))
     address = await service.get_or_create(body.raw_text, body.source, user_id)
 
-    raw = await session.scalar(
-        select(RawAddress).where(RawAddress.raw_text == body.raw_text)
-    )
+    raw = await AddressRepository(session).find_raw_by_text(body.raw_text)
 
     return schemas.RawAddressRead(
         id=raw.id,
         is_active=raw.is_active,
         is_deleted=raw.is_deleted,
         created_at=raw.created_at,
-        updated_at=raw.updated_at,
-        created_by_id=raw.created_by_id,
-        updated_by_id=raw.updated_by_id,
+        updated_at=raw.updated_at.created_by_id.updated_by_id,
         deleted_at=raw.deleted_at,
         deleted_by_id=raw.deleted_by_id,
         raw_text=raw.raw_text,
@@ -171,7 +159,7 @@ async def create_alias(
 
 @router.get("/aliases/{alias_id}", response_model=schemas.RawAddressRead, dependencies=[Depends(require_permission("view", "addresses"))])
 async def get_alias(alias_id: int, session: SessionDep) -> schemas.RawAddressRead:
-    raw = await session.get(RawAddress, alias_id)
+    raw = await AddressRepository(session).get_raw_by_id(alias_id)
     if raw is None or raw.is_deleted:
         raise NotFoundError("Вариант ввода не найден")
     return schemas.RawAddressRead(
@@ -179,9 +167,7 @@ async def get_alias(alias_id: int, session: SessionDep) -> schemas.RawAddressRea
         is_active=raw.is_active,
         is_deleted=raw.is_deleted,
         created_at=raw.created_at,
-        updated_at=raw.updated_at,
-        created_by_id=raw.created_by_id,
-        updated_by_id=raw.updated_by_id,
+        updated_at=raw.updated_at.created_by_id.updated_by_id,
         deleted_at=raw.deleted_at,
         deleted_by_id=raw.deleted_by_id,
         raw_text=raw.raw_text,
@@ -202,7 +188,7 @@ async def update_alias(
     session: SessionDep,
     user_id: UserDep,
 ) -> schemas.RawAddressRead:
-    raw = await session.get(RawAddress, alias_id)
+    raw = await AddressRepository(session).get_raw_by_id(alias_id)
     if raw is None or raw.is_deleted:
         raise NotFoundError("Вариант ввода не найден")
 
@@ -218,7 +204,7 @@ async def update_alias(
     raw.updated_by_id = user_id
     await session.flush()
 
-    address = await session.get(Address, raw.normalized_address_id)
+    address = await AddressRepository(session).get_address_by_id(raw.normalized_address_id)
     return schemas.RawAddressRead(
         id=raw.id,
         raw_text=raw.raw_text,
@@ -231,7 +217,7 @@ async def update_alias(
 
 @router.delete("/aliases/{alias_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_permission("delete", "addresses"))])
 async def delete_alias(alias_id: int, session: SessionDep, user_id: UserDep) -> None:
-    raw = await session.get(RawAddress, alias_id)
+    raw = await AddressRepository(session).get_raw_by_id(alias_id)
     if raw is None or raw.is_deleted:
         raise NotFoundError("Вариант ввода не найден")
     raw.soft_delete(user_id)
@@ -300,7 +286,7 @@ async def list_depositors(session: SessionDep) -> list[schemas.DepositorRead]:
     rows = await service.list_all()
     result = []
     for r in rows:
-        le = await session.get(LegalEntity, r.legal_entity_id)
+        le = await LegalEntityRepository(session).get_by_id(r.legal_entity_id)
         result.append(
             schemas.DepositorRead(
                 id=r.id,
@@ -342,7 +328,7 @@ async def update_depositor(
     session: SessionDep,
     user_id: UserDep,
 ) -> schemas.DepositorRead:
-    row = await session.get(Depositor, depositor_id)
+    row = await DepositorRepository(session).get_by_id(depositor_id)
     if row is None:
         raise NotFoundError("Поклажедатель не найден")
     for field, value in body.model_dump(exclude_unset=True).items():
@@ -354,7 +340,7 @@ async def update_depositor(
 
 @router.delete("/depositors/{depositor_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_permission("delete", "depositors"))])
 async def delete_depositor(depositor_id: int, session: SessionDep, user_id: UserDep) -> None:
-    row = await session.get(Depositor, depositor_id)
+    row = await DepositorRepository(session).get_by_id(depositor_id)
     if row is None:
         raise NotFoundError("Поклажедатель не найден")
     row.soft_delete(user_id)
@@ -479,7 +465,7 @@ async def delete_contract(contract_id: int, session: SessionDep, user_id: UserDe
 
 @router.get("/tariff-documents", response_model=list[schemas.TariffDocumentRead], dependencies=[Depends(require_permission("view", "tariffs"))])
 async def list_tariff_documents(session: SessionDep) -> list[schemas.TariffDocumentRead]:
-    rows = list(await session.scalars(select(TariffDocument).where()))
+    rows = await TariffRepository(session).list_documents()
     return [schemas.TariffDocumentRead.model_validate(r) for r in rows]
 
 
@@ -499,7 +485,7 @@ async def update_tariff_document(
     session: SessionDep,
     user_id: UserDep,
 ) -> schemas.TariffDocumentRead:
-    doc = await session.get(TariffDocument, doc_id)
+    doc = await TariffRepository(session).get_document_by_id(doc_id)
     if doc is None:
         raise NotFoundError("Тарифный документ не найден")
     for field, value in body.model_dump(exclude_unset=True).items():
@@ -511,7 +497,7 @@ async def update_tariff_document(
 
 @router.delete("/tariff-documents/{doc_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_permission("delete", "tariffs"))])
 async def delete_tariff_document(doc_id: int, session: SessionDep, user_id: UserDep) -> None:
-    doc = await session.get(TariffDocument, doc_id)
+    doc = await TariffRepository(session).get_document_by_id(doc_id)
     if doc is None:
         raise NotFoundError("Тарифный документ не найден")
     doc.soft_delete(user_id)
@@ -534,16 +520,13 @@ async def create_tariff_document(
 
 @router.get("/tariffs", response_model=list[schemas.TariffRead], dependencies=[Depends(require_permission("view", "tariffs"))])
 async def list_tariffs(session: SessionDep, document_id: int | None = None) -> list[schemas.TariffRead]:
-    stmt = select(Tariff).where()
-    if document_id:
-        stmt = stmt.where(Tariff.document_id == document_id)
-    rows = list(await session.scalars(stmt))
+    rows = await TariffRepository(session).list_tariffs_by_document(document_id) if document_id else await TariffRepository(session).list_all_tariffs()
     return [schemas.TariffRead.model_validate(r) for r in rows]
 
 
 @router.get("/tariffs/{tariff_id}", response_model=schemas.TariffRead, dependencies=[Depends(require_permission("view", "tariffs"))])
 async def get_tariff(tariff_id: int, session: SessionDep) -> schemas.TariffRead:
-    tariff = await session.get(Tariff, tariff_id)
+    tariff = await TariffRepository(session).get_tariff_by_id(tariff_id)
     if tariff is None:
         raise NotFoundError("Тариф не найден")
     return schemas.TariffRead.model_validate(tariff)
@@ -556,7 +539,7 @@ async def update_tariff(
     session: SessionDep,
     user_id: UserDep,
 ) -> schemas.TariffRead:
-    tariff = await session.get(Tariff, tariff_id)
+    tariff = await TariffRepository(session).get_tariff_by_id(tariff_id)
     if tariff is None:
         raise NotFoundError("Тариф не найден")
     for field, value in body.model_dump(exclude_unset=True).items():
@@ -568,7 +551,7 @@ async def update_tariff(
 
 @router.delete("/tariffs/{tariff_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_permission("delete", "tariffs"))])
 async def delete_tariff(tariff_id: int, session: SessionDep, user_id: UserDep) -> None:
-    tariff = await session.get(Tariff, tariff_id)
+    tariff = await TariffRepository(session).get_tariff_by_id(tariff_id)
     if tariff is None:
         raise NotFoundError("Тариф не найден")
     tariff.soft_delete(user_id)

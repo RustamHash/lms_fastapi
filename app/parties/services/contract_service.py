@@ -22,8 +22,6 @@ class ContractService:
 
         return await self._repo.insert(
             status="active",
-            created_by_id=user_id,
-            updated_by_id=user_id,
             **kwargs,
         )
 
@@ -34,7 +32,7 @@ class ContractService:
         return await self._repo.list_active()
 
     async def update(self, contract_id: int, user_id: int | None, **fields) -> Contract | None:
-        return await self._repo.update(contract_id, updated_by_id=user_id, **fields)
+        return await self._repo.update(contract_id, **fields)
 
     async def soft_delete(self, contract_id: int, user_id: int | None = None) -> bool:
         contract = await self._repo.get_by_id(contract_id)

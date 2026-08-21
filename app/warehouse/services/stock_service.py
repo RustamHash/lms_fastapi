@@ -6,67 +6,34 @@ from decimal import Decimal
 
 import logging
 
-from sqlalchemy import select
+from app.warehouse.repository import StockRepository
 
 logger = logging.getLogger(__name__)
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from app.warehouse.models import StockBalance, StockMovement
 
 
 class StockService:
-    def __init__(self, session: AsyncSession) -> None:
-        self._s = session
+    def __init__(self, repo: StockRepository) -> None:
+        self._repo = repo
 
-    async def get_balance(
-        self,
-        product_id: int,
-        location_id: int,
-        lpn_id: int | None = None,
-        batch_id: int | None = None,
-    ) -> StockBalance | None:
-        stmt = select(StockBalance).where(
-            StockBalance.product_id == product_id,
-            StockBalance.location_id == location_id,
-            StockBalance.lpn_id == lpn_id,
-            StockBalance.batch_id == batch_id,
-        )
-        return await self._s.scalar(stmt)
+    async def get_balance(self, product_id: int, location_id: int, lpn_id: int | None = None, batch_id: int | None = None):
+        return await self._repo.get_balance(product_id, location_id, lpn_id, batch_id)
 
-    async def get_available_quantity(
-        self,
-        product_id: int,
-        location_id: int | None = None,
-        lpn_id: int | None = None,
-        batch_id: int | None = None,
-    ) -> Decimal:
-        stmt = select(StockBalance).where(
-            StockBalance.product_id == product_id,
-        )
-        if location_id:
-            stmt = stmt.where(StockBalance.location_id == location_id)
-        if lpn_id:
-            stmt = stmt.where(StockBalance.lpn_id == lpn_id)
-        if batch_id:
-            stmt = stmt.where(StockBalance.batch_id == batch_id)
-
-        balances = await self._s.scalars(stmt)
+    async def get_available_quantity(self, product_id: int, location_id: int | None = None, lpn_id: int | None = None, batch_id: int | None = None) -> Decimal:
+        balances = await self._repo.list_balances()
         total = Decimal("0")
         for b in balances:
+            if b.product_id != product_id:
+                continue
+            if location_id and b.location_id != location_id:
+                continue
+            if lpn_id and b.lpn_id != lpn_id:
+                continue
+            if batch_id and b.batch_id != batch_id:
+                continue
             total += b.quantity - b.reserved_quantity
         return total
 
-    async def add_stock(
-        self,
-        *,
-        user_id: int,
-        product_id: int,
-        location_id: int,
-        quantity: Decimal,
-        lpn_id: int | None = None,
-        batch_id: int | None = None,
-        document_id: int | None = None,
-    ) -> StockBalance:
+    async def add_stock(self, *, user_id: int, product_id: int, location_id: int, quantity: Decimal, lpn_id: int | None = None, batch_id: int | None = None, document_id: int | None = None):
         if quantity <= 0:
             raise ValueError("Количество должно быть больше 0")
 
@@ -75,23 +42,20 @@ class StockService:
         if balance:
             balance.quantity += quantity
             balance.updated_by_id = user_id
+            await self._repo._s.flush()
         else:
-            balance = StockBalance(
+            balance = await self._repo.create_balance(
                 product_id=product_id,
                 location_id=location_id,
                 lpn_id=lpn_id,
                 batch_id=batch_id,
                 quantity=quantity,
                 reserved_quantity=Decimal("0"),
-                created_by_id=user_id,
-                updated_by_id=user_id,
             )
-            self._s.add(balance)
-
-        await self._s.flush()
 
         logger.info("Приход: product=%s, qty=%s, location=%s", product_id, quantity, location_id)
-        movement = StockMovement(
+
+        await self._repo.create_movement(
             product_id=product_id,
             document_id=document_id,
             location_id=location_id,
@@ -99,25 +63,11 @@ class StockService:
             batch_id=batch_id,
             direction="in",
             quantity=quantity,
-            created_by_id=user_id,
-            updated_by_id=user_id,
         )
-        self._s.add(movement)
-        await self._s.flush()
 
         return balance
 
-    async def remove_stock(
-        self,
-        *,
-        user_id: int,
-        product_id: int,
-        location_id: int,
-        quantity: Decimal,
-        lpn_id: int | None = None,
-        batch_id: int | None = None,
-        document_id: int | None = None,
-    ) -> StockBalance:
+    async def remove_stock(self, *, user_id: int, product_id: int, location_id: int, quantity: Decimal, lpn_id: int | None = None, batch_id: int | None = None, document_id: int | None = None):
         if quantity <= 0:
             raise ValueError("Количество должно быть больше 0")
 
@@ -131,11 +81,11 @@ class StockService:
 
         balance.quantity -= quantity
         balance.updated_by_id = user_id
-        await self._s.flush()
+        await self._repo._s.flush()
 
-        logger.info("Приход: product=%s, qty=%s, location=%s", product_id, quantity, location_id)
         logger.info("Расход: product=%s, qty=%s, location=%s", product_id, quantity, location_id)
-        movement = StockMovement(
+
+        await self._repo.create_movement(
             product_id=product_id,
             document_id=document_id,
             location_id=location_id,
@@ -143,26 +93,11 @@ class StockService:
             batch_id=batch_id,
             direction="out",
             quantity=quantity,
-            created_by_id=user_id,
-            updated_by_id=user_id,
         )
-        self._s.add(movement)
-        await self._s.flush()
 
         return balance
 
-    async def move_stock(
-        self,
-        *,
-        user_id: int,
-        product_id: int,
-        from_location_id: int,
-        to_location_id: int,
-        quantity: Decimal,
-        lpn_id: int | None = None,
-        batch_id: int | None = None,
-        document_id: int | None = None,
-    ) -> StockBalance:
+    async def move_stock(self, *, user_id: int, product_id: int, from_location_id: int, to_location_id: int, quantity: Decimal, lpn_id: int | None = None, batch_id: int | None = None, document_id: int | None = None):
         await self.remove_stock(
             user_id=user_id,
             product_id=product_id,
@@ -183,16 +118,7 @@ class StockService:
             document_id=document_id,
         )
 
-    async def reserve(
-        self,
-        *,
-        user_id: int,
-        product_id: int,
-        location_id: int,
-        quantity: Decimal,
-        lpn_id: int | None = None,
-        batch_id: int | None = None,
-    ) -> StockBalance:
+    async def reserve(self, *, user_id: int, product_id: int, location_id: int, quantity: Decimal, lpn_id: int | None = None, batch_id: int | None = None):
         balance = await self.get_balance(product_id, location_id, lpn_id, batch_id)
 
         if not balance:
@@ -204,19 +130,10 @@ class StockService:
 
         balance.reserved_quantity += quantity
         balance.updated_by_id = user_id
-        await self._s.flush()
+        await self._repo._s.flush()
         return balance
 
-    async def unreserve(
-        self,
-        *,
-        user_id: int,
-        product_id: int,
-        location_id: int,
-        quantity: Decimal,
-        lpn_id: int | None = None,
-        batch_id: int | None = None,
-    ) -> StockBalance:
+    async def unreserve(self, *, user_id: int, product_id: int, location_id: int, quantity: Decimal, lpn_id: int | None = None, batch_id: int | None = None):
         balance = await self.get_balance(product_id, location_id, lpn_id, batch_id)
 
         if not balance:
@@ -227,5 +144,5 @@ class StockService:
 
         balance.reserved_quantity -= quantity
         balance.updated_by_id = user_id
-        await self._s.flush()
+        await self._repo._s.flush()
         return balance

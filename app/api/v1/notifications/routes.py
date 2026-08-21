@@ -8,6 +8,7 @@ from app.api.deps import SessionDep, UserDep, require_permission
 from app.api.v1.notifications import schemas
 from app.core.exceptions import NotFoundError, UnauthorizedError
 from app.notifications.services import NotificationService
+from app.notifications.repository import NotificationRepository
 
 router = APIRouter(prefix="/notifications", tags=["notifications"])
 
@@ -19,7 +20,7 @@ async def list_notifications(
 ) -> list[schemas.NotificationRead]:
     if user_id is None:
         raise UnauthorizedError("Не авторизован")
-    service = NotificationService(session)
+    service = NotificationService(NotificationRepository(session))
     rows = await service.list_by_user(user_id)
     return [schemas.NotificationRead.model_validate(r) for r in rows]
 
@@ -31,7 +32,7 @@ async def unread_notifications(
 ) -> list[schemas.NotificationRead]:
     if user_id is None:
         raise UnauthorizedError("Не авторизован")
-    service = NotificationService(session)
+    service = NotificationService(NotificationRepository(session))
     rows = await service.get_unread(user_id)
     return [schemas.NotificationRead.model_validate(r) for r in rows]
 
@@ -41,7 +42,7 @@ async def create_notification(
     body: schemas.NotificationCreate,
     session: SessionDep,
 ) -> schemas.NotificationRead:
-    service = NotificationService(session)
+    service = NotificationService(NotificationRepository(session))
     notification = await service.create(
         user_id=body.user_id,
         title=body.title,
@@ -61,8 +62,7 @@ async def get_notification(
     notification_id: int,
     session: SessionDep,
 ) -> schemas.NotificationRead:
-    from app.notifications.models import Notification
-    notification = await session.get(Notification, notification_id)
+    notification = await NotificationRepository(session).get_by_id(notification_id)
     if notification is None:
         raise NotFoundError("Уведомление не найдено")
     return schemas.NotificationRead.model_validate(notification)
@@ -78,8 +78,7 @@ async def delete_notification(
     session: SessionDep,
     user_id: UserDep,
 ) -> None:
-    from app.notifications.models import Notification
-    notification = await session.get(Notification, notification_id)
+    notification = await NotificationRepository(session).get_by_id(notification_id)
     if notification is None:
         raise NotFoundError("Уведомление не найдено")
     notification.soft_delete(user_id)
@@ -91,7 +90,7 @@ async def mark_read(
     notification_id: int,
     session: SessionDep,
 ) -> schemas.NotificationRead:
-    service = NotificationService(session)
+    service = NotificationService(NotificationRepository(session))
     notification = await service.mark_read(notification_id)
     if notification is None:
         raise NotFoundError("Уведомление не найдено")
@@ -105,6 +104,6 @@ async def mark_all_read(
 ) -> dict:
     if user_id is None:
         raise UnauthorizedError("Не авторизован")
-    service = NotificationService(session)
+    service = NotificationService(NotificationRepository(session))
     count = await service.mark_all_read(user_id)
     return {"marked": count}

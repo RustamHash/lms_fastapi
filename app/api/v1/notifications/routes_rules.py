@@ -24,7 +24,7 @@ router = APIRouter(prefix="/notification-rules", tags=["notification-rules"])
 )
 async def list_rules(session: SessionDep) -> list[NotificationRuleRead]:
     """Список правил."""
-    rules = list(await session.scalars(select(NotificationRule)))
+    rules = await NotificationRuleRepository(session).list_all()
     return [NotificationRuleRead.model_validate(r) for r in rules]
 
 
@@ -51,7 +51,7 @@ async def create_rule(
     dependencies=[Depends(require_permission("view", "notifications"))],
 )
 async def get_rule(rule_id: int, session: SessionDep) -> NotificationRuleRead:
-    rule = await session.get(NotificationRule, rule_id)
+    rule = await NotificationRuleRepository(session).get_by_id(rule_id)
     if rule is None:
         raise NotFoundError("Правило не найдено")
     return NotificationRuleRead.model_validate(rule)
@@ -68,7 +68,7 @@ async def update_rule(
     session: SessionDep,
 ) -> NotificationRuleRead:
     """Обновить правило."""
-    rule = await session.get(NotificationRule, rule_id)
+    rule = await NotificationRuleRepository(session).get_by_id(rule_id)
     if rule is None:
         raise NotFoundError("Правило не найдено")
     for field, value in body.model_dump(exclude_unset=True).items():
@@ -84,7 +84,7 @@ async def update_rule(
 )
 async def delete_rule(rule_id: int, session: SessionDep) -> None:
     """Удалить правило."""
-    rule = await session.get(NotificationRule, rule_id)
+    rule = await NotificationRuleRepository(session).get_by_id(rule_id)
     if rule is None:
         raise NotFoundError("Правило не найдено")
     await session.delete(rule)

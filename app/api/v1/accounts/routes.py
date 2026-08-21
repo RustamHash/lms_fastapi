@@ -176,8 +176,8 @@ async def create_role(
     dependencies=[Depends(require_permission("delete", "roles"))],
 )
 async def delete_role(role_id: int, session: SessionDep, current_user: CurrentUser) -> None:
-    from app.accounts.models import Role
-    role = await session.get(Role, role_id)
+    role_repo = RoleRepository(session)
+    role = await role_repo.get_by_id(role_id)
     if role is None:
         raise NotFoundError("Роль не найдена")
     role.soft_delete(current_user.id)
@@ -217,11 +217,7 @@ async def list_audit(
     if user_id:
         rows = await service.list_by_user(user_id)
     else:
-        from app.accounts.models import Audit
-        from sqlalchemy import select as sa_select
-        rows = list(await session.scalars(
-            sa_select(Audit).order_by(Audit.created_at.desc()).limit(100)
-        ))
+        rows = await service.list_all()
     return [schemas.AuditRead.model_validate(r) for r in rows]
 
 
@@ -258,8 +254,8 @@ async def update_audit(
     session: SessionDep,
     user_id: UserDep,
 ) -> schemas.AuditRead:
-    from app.accounts.models import Audit
-    audit = await session.get(Audit, audit_id)
+    audit_repo = AuditRepository(session)
+    audit = await audit_repo.get_by_id(audit_id)
     if audit is None:
         raise NotFoundError("Запись аудита не найдена")
     for field, value in body.model_dump(exclude_unset=True).items():
@@ -279,8 +275,8 @@ async def delete_audit(
     session: SessionDep,
     user_id: UserDep,
 ) -> None:
-    from app.accounts.models import Audit
-    audit = await session.get(Audit, audit_id)
+    audit_repo = AuditRepository(session)
+    audit = await audit_repo.get_by_id(audit_id)
     if audit is None:
         raise NotFoundError("Запись аудита не найдена")
     audit.soft_delete(user_id)
@@ -296,9 +292,8 @@ async def get_audit(
     audit_id: int,
     session: SessionDep,
 ) -> schemas.AuditRead:
-    from app.accounts.models import Audit
-
-    audit = await session.get(Audit, audit_id)
+    audit_repo = AuditRepository(session)
+    audit = await audit_repo.get_by_id(audit_id)
     if audit is None:
         raise NotFoundError("Запись аудита не найдена")
     return schemas.AuditRead.model_validate(audit)

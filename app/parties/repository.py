@@ -38,7 +38,7 @@ class AddressRepository:
         return await self.session.scalar(stmt)
 
     async def list_addresses(self) -> list[Address]:
-        stmt = select(Address).where()
+        stmt = select(Address)
         return list(await self.session.scalars(stmt))
 
     async def insert_address(self, **kwargs) -> Address:
@@ -46,6 +46,10 @@ class AddressRepository:
         self.session.add(row)
         await self.session.flush()
         return row
+
+    async def list_raw(self, limit: int = 1000, offset: int = 0) -> list[RawAddress]:
+        stmt = select(RawAddress).order_by(RawAddress.id.desc()).limit(limit).offset(offset)
+        return list(await self.session.scalars(stmt))
 
     async def find_raw_by_text(self, raw_text: str) -> RawAddress | None:
         stmt = select(RawAddress).where(
@@ -69,6 +73,9 @@ class AddressRepository:
         )
         return await self.session.scalar(stmt)
 
+    async def get_raw_by_id(self, raw_id: int) -> RawAddress | None:
+        return await self.session.get(RawAddress, raw_id)
+
     async def insert_raw(self, **kwargs) -> RawAddress:
         row = RawAddress(**kwargs)
         self.session.add(row)
@@ -91,7 +98,7 @@ class LegalEntityRepository:
         return await self.session.scalar(stmt)
 
     async def list_all(self) -> list[LegalEntity]:
-        stmt = select(LegalEntity).where()
+        stmt = select(LegalEntity)
         return list(await self.session.scalars(stmt))
 
     async def insert(self, **kwargs) -> LegalEntity:
@@ -133,7 +140,7 @@ class ClientRepository:
         return list(await self.session.scalars(stmt))
 
     async def list_all(self) -> list[Client]:
-        stmt = select(Client).where()
+        stmt = select(Client)
         return list(await self.session.scalars(stmt))
 
     async def insert(self, **kwargs) -> Client:
@@ -167,7 +174,7 @@ class ContractRepository:
         return list(await self.session.scalars(stmt))
 
     async def list_all(self) -> list[Contract]:
-        stmt = select(Contract).where()
+        stmt = select(Contract)
         return list(await self.session.scalars(stmt))
 
     async def insert(self, **kwargs) -> Contract:
@@ -205,6 +212,15 @@ class TariffRepository:
         await self.session.flush()
         return row
 
+    async def get_tariff_by_id(self, tariff_id: int) -> Tariff | None:
+        return await self.session.get(Tariff, tariff_id)
+
+    async def list_documents(self) -> list[TariffDocument]:
+        return list(await self.session.scalars(select(TariffDocument)))
+
+    async def list_all_tariffs(self) -> list[Tariff]:
+        return list(await self.session.scalars(select(Tariff)))
+
     async def list_tariffs_by_document(self, document_id: int) -> list[Tariff]:
         stmt = select(Tariff).where(
             Tariff.document_id == document_id,
@@ -227,7 +243,7 @@ class DepositorRepository:
         return await self.session.scalar(stmt)
 
     async def list_all(self) -> list[Depositor]:
-        stmt = select(Depositor).where()
+        stmt = select(Depositor)
         return list(await self.session.scalars(stmt))
 
     async def insert(self, **kwargs) -> Depositor:
@@ -235,3 +251,117 @@ class DepositorRepository:
         self.session.add(row)
         await self.session.flush()
         return row
+
+
+class CarrierRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self.session = session
+
+    async def get_by_id(self, carrier_id: int) -> Carrier | None:
+        return await self.session.get(Carrier, carrier_id)
+
+    async def get_by_legal_entity(self, legal_entity_id: int) -> Carrier | None:
+        stmt = select(Carrier).where(Carrier.legal_entity_id == legal_entity_id)
+        return await self.session.scalar(stmt)
+
+    async def list_all(self) -> list[Carrier]:
+        return list(await self.session.scalars(select(Carrier)))
+
+    async def create(self, **kwargs) -> Carrier:
+        row = Carrier(**kwargs)
+        self.session.add(row)
+        await self.session.flush()
+        return row
+
+    async def update(self, carrier_id: int, **kwargs) -> Carrier | None:
+        row = await self.get_by_id(carrier_id)
+        if row is None:
+            return None
+        for field, value in kwargs.items():
+            setattr(row, field, value)
+        await self.session.flush()
+        return row
+
+    async def delete(self, carrier_id: int) -> bool:
+        row = await self.get_by_id(carrier_id)
+        if row is None:
+            return False
+        await self.session.delete(row)
+        await self.session.flush()
+        return True
+
+
+class KeeperRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self.session = session
+
+    async def get_by_id(self, keeper_id: int) -> Keeper | None:
+        return await self.session.get(Keeper, keeper_id)
+
+    async def get_by_legal_entity(self, legal_entity_id: int) -> Keeper | None:
+        stmt = select(Keeper).where(Keeper.legal_entity_id == legal_entity_id)
+        return await self.session.scalar(stmt)
+
+    async def list_all(self) -> list[Keeper]:
+        return list(await self.session.scalars(select(Keeper)))
+
+    async def create(self, **kwargs) -> Keeper:
+        row = Keeper(**kwargs)
+        self.session.add(row)
+        await self.session.flush()
+        return row
+
+    async def update(self, keeper_id: int, **kwargs) -> Keeper | None:
+        row = await self.get_by_id(keeper_id)
+        if row is None:
+            return None
+        for field, value in kwargs.items():
+            setattr(row, field, value)
+        await self.session.flush()
+        return row
+
+    async def delete(self, keeper_id: int) -> bool:
+        row = await self.get_by_id(keeper_id)
+        if row is None:
+            return False
+        await self.session.delete(row)
+        await self.session.flush()
+        return True
+
+
+class DeliveryZoneRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self.session = session
+
+    async def get_by_id(self, zone_id: int) -> DeliveryZone | None:
+        return await self.session.get(DeliveryZone, zone_id)
+
+    async def get_by_name(self, name: str) -> DeliveryZone | None:
+        stmt = select(DeliveryZone).where(DeliveryZone.name == name)
+        return await self.session.scalar(stmt)
+
+    async def list_all(self) -> list[DeliveryZone]:
+        return list(await self.session.scalars(select(DeliveryZone)))
+
+    async def create(self, **kwargs) -> DeliveryZone:
+        row = DeliveryZone(**kwargs)
+        self.session.add(row)
+        await self.session.flush()
+        return row
+
+    async def update(self, zone_id: int, **kwargs) -> DeliveryZone | None:
+        row = await self.get_by_id(zone_id)
+        if row is None:
+            return None
+        for field, value in kwargs.items():
+            setattr(row, field, value)
+        await self.session.flush()
+        return row
+
+    async def delete(self, zone_id: int) -> bool:
+        row = await self.get_by_id(zone_id)
+        if row is None:
+            return False
+        await self.session.delete(row)
+        await self.session.flush()
+        return True

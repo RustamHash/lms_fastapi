@@ -1,0 +1,3500 @@
+current_user_id: ContextVar[int | None] = ContextVar("current_user_id", default=None)
+
+
+def set_current_user_id(user_id: int | None) -> None:
+    """Установить текущего пользователя."""
+    current_user_id.set(user_id)
+
+
+def get_current_user_id_context() -> int | None:
+    """Получить текущего пользователя."""
+    return current_user_id.get()
+
+
+
+========================================
+FILE: app/core/database.py
+========================================
+"""Асинхронное подключение к БД."""
+
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+
+from app.core.config import get_settings
+
+settings = get_settings()
+
+engine = create_async_engine(
+    settings.database_url,
+)
+
+async_session_factory = async_sessionmaker(
+    engine,
+    class_=AsyncSession,
+    expire_on_commit=False,
+    autoflush=False,
+)
+
+
+
+========================================
+FILE: app/core/dependencies.py
+========================================
+"""Зависимости FastAPI."""
+
+from __future__ import annotations
+
+from collections.abc import AsyncGenerator
+
+from fastapi import Depends
+from fastapi.security import OAuth2PasswordBearer
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.accounts.repository import UserRepository
+from app.core.database import async_session_factory
+from app.core.security import decode_token_sub_user_id
+from app.infrastructure.uow import UnitOfWork
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/token", auto_error=False)
+
+
+async def get_session() -> AsyncGenerator[AsyncSession, None]:
+    """Сессия с автоматическим commit/rollback."""
+    async with UnitOfWork(async_session_factory) as session:
+        yield session
+
+
+async def get_current_user_id(
+    token: str | None = Depends(oauth2_scheme),
+) -> int | None:
+    if not token:
+        return None
+    try:
+        return decode_token_sub_user_id(token)
+    except ValueError:
+        return None
+
+
+def require_permission(permission: str):
+    """Зависимость — проверка права."""
+    async def checker(
+        session: AsyncSession = Depends(get_session),
+        token: str | None = Depends(oauth2_scheme),
+    ):
+        from fastapi import HTTPException, status
+        
+        if not token:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Не авторизован")
+        
+        try:
+            user_id = decode_token_sub_user_id(token)
+        except ValueError:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Недействительный токен") from None
+        
+        repo = UserRepository(session)
+        user = await repo.get_by_id(user_id)
+        
+        if user is None or not user.is_active:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Пользователь не найден")
+        
+        if not user.has_permission(permission):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f"Нет права: {permission}")
+        
+        return user
+    
+    return checker
+
+
+async def get_current_user(
+    session: AsyncSession = Depends(get_session),
+    token: str | None = Depends(oauth2_scheme),
+):
+    if not token:
+        from fastapi import HTTPException, status
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Не авторизован",
+        )
+    try:
+        user_id = decode_token_sub_user_id(token)
+    except ValueError:
+        from fastapi import HTTPException, status
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Недействительный токен",
+        ) from None
+
+    repo = UserRepository(session)
+    user = await repo.get_by_id(user_id)
+    if user is None or not user.is_active:
+        from fastapi import HTTPException, status
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Пользователь не найден или деактивирован",
+        )
+    return user
+
+
+
+========================================
+FILE: app/core/exceptions.py
+========================================
+"""Кастомные исключения API."""
+
+from __future__ import annotations
+
+from fastapi import HTTPException, status
+
+
+class APIError(HTTPException):
+    """Базовая ошибка API."""
+
+    status_code: int = status.HTTP_500_INTERNAL_SERVER_ERROR
+
+    def __init__(self, message: str = "Внутренняя ошибка сервера") -> None:
+        super().__init__(status_code=self.status_code, detail=message)
+
+
+class BadRequestError(APIError):
+    """Некорректный запрос."""
+
+    status_code: int = status.HTTP_400_BAD_REQUEST
+
+    def __init__(self, message: str = "Некорректный запрос") -> None:
+        super().__init__(message)
+
+
+class UnauthorizedError(APIError):
+    """Не авторизован."""
+
+    status_code: int = status.HTTP_401_UNAUTHORIZED
+
+    def __init__(self, message: str = "Не авторизован") -> None:
+        super().__init__(message)
+
+
+class ForbiddenError(APIError):
+    """Доступ запрещен."""
+
+    status_code: int = status.HTTP_403_FORBIDDEN
+
+    def __init__(self, message: str = "Доступ запрещен") -> None:
+        super().__init__(message)
+
+
+class NotFoundError(APIError):
+    """Ресурс не найден."""
+
+    status_code: int = status.HTTP_404_NOT_FOUND
+
+    def __init__(self, message: str = "Ресурс не найден") -> None:
+        super().__init__(message)
+
+
+class ConflictError(APIError):
+    """Конфликт данных."""
+
+    status_code: int = status.HTTP_409_CONFLICT
+
+    def __init__(self, message: str = "Конфликт данных") -> None:
+        super().__init__(message)
+
+
+
+========================================
+FILE: app/core/init_db.py
+========================================
+"""Инициализация БД: создание системного пользователя и суперпользователя."""
+
+from __future__ import annotations
+
+import logging
+
+from sqlalchemy import select
+
+from app.accounts.models import User
+from app.core.security import hash_password
+
+logger = logging.getLogger(__name__)
+
+
+async def init_db(session) -> None:
+    """Создать базовых пользователей, если их нет."""
+    
+    # 1. Системный пользователь для фоновых задач
+    system_user = await session.scalar(
+        select(User).where(User.username == "system_bot")
+    )
+    if system_user is None:
+        system_user = User(
+            username="system_bot",
+            password_hash=hash_password("system_bot_secret"),
+            email="system@local",
+            is_superuser=False,
+            is_active=True,
+        )
+        session.add(system_user)
+        await session.flush()
+        logger.info("Создан системный пользователь: system_bot (id=%s)", system_user.id)
+    else:
+        logger.info("Системный пользователь уже существует (id=%s)", system_user.id)
+
+    # 2. Суперпользователь
+    admin_user = await session.scalar(
+        select(User).where(User.username == "admin")
+    )
+    if admin_user is None:
+        admin_user = User(
+            username="admin",
+            password_hash=hash_password("admin"),
+            email="admin@local",
+            is_superuser=True,
+            is_active=True,
+        )
+        session.add(admin_user)
+        await session.flush()
+        logger.info("Создан суперпользователь: admin (id=%s)", admin_user.id)
+    else:
+        logger.info("Суперпользователь уже существует (id=%s)", admin_user.id)
+
+    await session.commit()
+
+
+
+========================================
+FILE: app/core/__init__.py
+========================================
+
+
+
+========================================
+FILE: app/core/list_defaults.py
+========================================
+"""Заводские конфигурации списков."""
+
+from __future__ import annotations
+
+DEFAULT_PREFS: dict[str, dict] = {
+    "clients": {
+        "order": ["id", "name", "inn", "is_active"],
+        "hidden": [],
+        "widths": {},
+        "filters": {},
+        "exclude_filters": {},
+        "sort": None,
+        "quick_filters": ["name"],
+    },
+    "products": {
+        "order": ["id", "name", "sku", "price"],
+        "hidden": [],
+        "widths": {},
+        "filters": {},
+        "exclude_filters": {},
+        "sort": None,
+        "quick_filters": ["name"],
+    },
+    "documents": {
+        "order": ["id", "document_number", "document_date", "status"],
+        "hidden": [],
+        "widths": {},
+        "filters": {},
+        "exclude_filters": {},
+        "sort": {"column": "document_date", "direction": "desc"},
+        "quick_filters": ["status"],
+    },
+    "delivery_orders": {
+        "order": ["id", "number", "delivery_date", "status"],
+        "hidden": [],
+        "widths": {},
+        "filters": {},
+        "exclude_filters": {},
+        "sort": {"column": "delivery_date", "direction": "desc"},
+        "quick_filters": ["status"],
+    },
+    "tasks": {
+        "order": ["id", "task_type", "status", "assignee_id"],
+        "hidden": [],
+        "widths": {},
+        "filters": {},
+        "exclude_filters": {},
+        "sort": None,
+        "quick_filters": ["status"],
+    },
+}
+
+
+def get_default_prefs(entity_key: str) -> dict:
+    """Возвращает заводские настройки для сущности."""
+    defaults = DEFAULT_PREFS.get(entity_key)
+    if defaults is None:
+        return {
+            "order": [],
+            "hidden": [],
+            "widths": {},
+            "filters": {},
+            "exclude_filters": {},
+            "sort": None,
+            "quick_filters": [],
+        }
+    return defaults
+
+
+def merge_with_defaults(prefs: dict, entity_key: str) -> dict:
+    """Дополняет prefs недостающими полями из заводских."""
+    defaults = get_default_prefs(entity_key)
+    merged = {**defaults, **prefs}
+    for key, value in defaults.items():
+        if key not in merged or merged[key] is None:
+            merged[key] = value
+    return merged
+
+
+
+========================================
+FILE: app/core/middleware.py
+========================================
+"""Middleware для приложения."""
+
+from __future__ import annotations
+
+import json
+import logging
+
+from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import Response
+
+from app.core.config import Settings
+from app.core.context import set_current_user_id
+from app.core.security import decode_token_sub_user_id
+
+logger = logging.getLogger(__name__)
+
+# Методы, которые логируем
+AUDIT_METHODS = {"POST", "PATCH", "PUT", "DELETE"}
+
+
+class AuditMiddleware(BaseHTTPMiddleware):
+    """Автоматический аудит действий пользователей."""
+
+    async def dispatch(self, request: Request, call_next):
+        # Пропускаем не-аудитируемые методы
+        if request.method not in AUDIT_METHODS:
+            return await call_next(request)
+
+        # Извлекаем user_id из токена
+        user_id = None
+        auth_header = request.headers.get("authorization", "")
+        if auth_header.startswith("Bearer "):
+            token = auth_header[7:]
+            try:
+                user_id = decode_token_sub_user_id(token)
+            except Exception:
+                user_id = None
+
+        # Устанавливаем текущего пользователя в контекст
+        set_current_user_id(user_id)
+
+        # Копируем тело запроса (чтобы не потерять)
+        body = None
+        if request.method in ("POST", "PATCH", "PUT"):
+            try:
+                raw_body = await request.body()
+                if raw_body:
+                    body = json.loads(raw_body.decode("utf-8"))
+            except Exception:
+                body = None
+
+        # Выполняем запрос
+        response = await call_next(request)
+
+        # Логируем только успешные (2xx) запросы
+        if user_id and 200 <= response.status_code < 300:
+            try:
+                await self._log_audit(request, response, user_id, body)
+            except Exception as e:
+                logger.error("Ошибка записи аудита: %s", e)
+
+        return response
+
+    async def _log_audit(self, request: Request, response: Response, user_id: int, body: dict | None) -> None:
+        """Записать в аудит."""
+        from app.accounts.models import Audit
+        from app.core.database import async_session_factory
+
+        # Определяем action по методу
+        action_map = {
+            "POST": "create",
+            "PATCH": "update",
+            "PUT": "update",
+            "DELETE": "delete",
+        }
+        action = action_map.get(request.method, "unknown")
+
+        # Определяем entity_type из пути
+        # /api/v1/products/5 → products
+        path_parts = [p for p in request.url.path.split("/") if p]
+        entity_type = path_parts[-1] if path_parts else "unknown"
+        if entity_type.isdigit() and len(path_parts) > 1:
+            entity_type = path_parts[-2]
+
+        # Определяем entity_id из пути
+        entity_id = None
+        if len(path_parts) >= 2 and path_parts[-1].isdigit():
+            entity_id = path_parts[-1]
+
+        # Записываем
+        async with async_session_factory() as session:
+            audit = Audit(
+                user_id=user_id,
+                action=action,
+                entity_type=entity_type,
+                entity_id=entity_id,
+                changes=body or {},
+                ip_address=request.client.host if request.client else "",
+                user_agent=request.headers.get("user-agent", ""),
+            )
+            session.add(audit)
+            await session.commit()
+
+
+def setup_middleware(app: FastAPI, settings: Settings) -> None:
+    """Настройка middleware для приложения."""
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.cors_origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+    app.add_middleware(AuditMiddleware)
+
+
+
+========================================
+FILE: app/core/security.py
+========================================
+"""Безопасность: JWT, пароли."""
+
+from __future__ import annotations
+
+from datetime import datetime, timezone, timedelta
+
+import bcrypt
+from jose import JWTError, jwt
+
+from app.core.config import get_settings
+
+
+def hash_password(plain: str) -> str:
+    return bcrypt.hashpw(plain.encode("utf-8"), bcrypt.gensalt()).decode("ascii")
+
+
+def verify_password(plain: str, hashed: str) -> bool:
+    try:
+        return bcrypt.checkpw(plain.encode("utf-8"), hashed.encode("utf-8"))
+    except ValueError:
+        return False
+
+
+def create_access_token(user_id: int, username: str) -> str:
+    settings = get_settings()
+    expire = datetime.now(timezone.utc) + timedelta(minutes=settings.access_token_expire_minutes)
+    payload = {
+        "sub": str(user_id),
+        "username": username,
+        "exp": int(expire.timestamp()),
+    }
+    return jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
+
+
+def decode_token_sub_user_id(token: str) -> int:
+    settings = get_settings()
+    try:
+        payload = jwt.decode(token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm])
+        sub = payload.get("sub")
+        if sub is None:
+            raise ValueError("no sub")
+        return int(sub)
+    except (JWTError, ValueError) as e:
+        raise ValueError(str(e)) from e
+
+
+
+========================================
+FILE: app/delivery/__init__.py
+========================================
+
+
+
+========================================
+FILE: app/delivery/models/delivery_order.py
+========================================
+"""Заказы на доставку."""
+
+from __future__ import annotations
+
+from datetime import date, time
+
+from sqlalchemy import Date, ForeignKey, String, Text, Time
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.infrastructure.orm_base import Base
+
+
+class DeliveryOrder(Base):
+    __tablename__ = "delivery_order"
+
+    number: Mapped[str] = mapped_column(String(50), nullable=False, comment="Номер")
+    contract_id: Mapped[int] = mapped_column(
+        ForeignKey("parties_contract.id"), nullable=False, comment="Договор"
+    )
+    document_id: Mapped[int | None] = mapped_column(
+        ForeignKey("documents_document.id"), nullable=True, comment="Документ склада"
+    )
+    parent_id: Mapped[int | None] = mapped_column(
+        ForeignKey("delivery_order.id"), nullable=True, comment="Родительский заказ"
+    )
+    contact_person: Mapped[str] = mapped_column(String(255), default="", comment="Контактное лицо")
+    phone: Mapped[str] = mapped_column(String(20), default="", comment="Телефон")
+    delivery_date: Mapped[date | None] = mapped_column(Date, nullable=True, comment="Дата доставки")
+    time_from: Mapped[time | None] = mapped_column(Time, nullable=True, comment="Время с")
+    time_to: Mapped[time | None] = mapped_column(Time, nullable=True, comment="Время до")
+    status: Mapped[str] = mapped_column(String(30), default="created", comment="Статус")
+    is_edo: Mapped[bool] = mapped_column(default=False, comment="Признак ЭДО")
+    comment: Mapped[str] = mapped_column(Text, default="", comment="Комментарий")
+
+    contract: Mapped["Contract"] = relationship()
+    document: Mapped["Document | None"] = relationship()
+    deviations: Mapped[list["DeliveryDeviation"]] = relationship(back_populates="delivery_order")
+
+
+class DeliveryDeviation(Base):
+    __tablename__ = "delivery_deviation"
+
+    delivery_order_id: Mapped[int] = mapped_column(
+        ForeignKey("delivery_order.id"), nullable=False, comment="Заказ на доставку"
+    )
+    deviation_type: Mapped[str] = mapped_column(String(20), nullable=False, comment="Тип отклонения")
+    quantity: Mapped[int] = mapped_column(default=0, comment="Количество мест")
+    description: Mapped[str] = mapped_column(Text, default="", comment="Описание")
+
+    delivery_order: Mapped["DeliveryOrder"] = relationship(back_populates="deviations")
+
+
+
+========================================
+FILE: app/delivery/models/driver.py
+========================================
+"""Водители и транспорт."""
+
+from __future__ import annotations
+
+from decimal import Decimal
+
+from sqlalchemy import ForeignKey, Numeric, String
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.infrastructure.orm_base import Base
+
+
+class Driver(Base):
+    __tablename__ = "delivery_driver"
+
+    name: Mapped[str] = mapped_column(String(255), nullable=False, comment="ФИО")
+    phone: Mapped[str] = mapped_column(String(20), default="", comment="Телефон")
+    carrier_id: Mapped[int | None] = mapped_column(
+        ForeignKey("parties_carrier.id"), nullable=True, comment="Перевозчик"
+    )
+
+    carrier: Mapped["Carrier | None"] = relationship()
+    routes: Mapped[list["Route"]] = relationship(back_populates="driver")
+
+
+class Vehicle(Base):
+    __tablename__ = "delivery_vehicle"
+
+    number: Mapped[str] = mapped_column(String(20), nullable=False, comment="Гос. номер")
+    brand: Mapped[str] = mapped_column(String(100), default="", comment="Марка")
+    model: Mapped[str] = mapped_column(String(100), default="", comment="Модель")
+    capacity: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True, comment="Грузоподъёмность")
+    volume: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True, comment="Объём")
+    carrier_id: Mapped[int | None] = mapped_column(
+        ForeignKey("parties_carrier.id"), nullable=True, comment="Перевозчик"
+    )
+
+    carrier: Mapped["Carrier | None"] = relationship()
+    routes: Mapped[list["Route"]] = relationship(back_populates="vehicle")
+
+
+
+========================================
+FILE: app/delivery/models/__init__.py
+========================================
+"""Модели модуля delivery."""
+
+from app.delivery.models.delivery_order import DeliveryOrder, DeliveryDeviation
+from app.delivery.models.driver import Driver, Vehicle
+from app.delivery.models.route import Route, RouteLine
+
+__all__ = [
+    "DeliveryOrder",
+    "DeliveryDeviation",
+    "Driver",
+    "Vehicle",
+    "Route",
+    "RouteLine",
+]
+
+
+
+========================================
+FILE: app/delivery/models/route.py
+========================================
+"""Маршруты."""
+
+from __future__ import annotations
+
+from datetime import date, time
+
+from sqlalchemy import Date, ForeignKey, Integer, String, Time
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.infrastructure.orm_base import Base
+
+
+class Route(Base):
+    __tablename__ = "delivery_route"
+
+    number: Mapped[str] = mapped_column(String(50), nullable=False, comment="Номер")
+    driver_id: Mapped[int] = mapped_column(
+        ForeignKey("delivery_driver.id"), nullable=False, comment="Водитель"
+    )
+    vehicle_id: Mapped[int] = mapped_column(
+        ForeignKey("delivery_vehicle.id"), nullable=False, comment="Автомобиль"
+    )
+    date: Mapped[date] = mapped_column(Date, nullable=False, comment="Дата")
+    status: Mapped[str] = mapped_column(String(20), default="planned", comment="Статус")
+
+    driver: Mapped["Driver"] = relationship(back_populates="routes")
+    vehicle: Mapped["Vehicle"] = relationship(back_populates="routes")
+    lines: Mapped[list["RouteLine"]] = relationship(back_populates="route")
+
+
+class RouteLine(Base):
+    __tablename__ = "delivery_route_line"
+
+    route_id: Mapped[int] = mapped_column(
+        ForeignKey("delivery_route.id"), nullable=False, comment="Маршрут"
+    )
+    delivery_order_id: Mapped[int] = mapped_column(
+        ForeignKey("delivery_order.id"), nullable=False, comment="Заказ на доставку"
+    )
+    order: Mapped[int] = mapped_column(Integer, nullable=False, comment="Порядок")
+    planned_time: Mapped[time | None] = mapped_column(Time, nullable=True, comment="Плановое время")
+    actual_time: Mapped[time | None] = mapped_column(Time, nullable=True, comment="Фактическое время")
+    status: Mapped[str] = mapped_column(String(20), default="pending", comment="Статус")
+
+    route: Mapped["Route"] = relationship(back_populates="lines")
+    delivery_order: Mapped["DeliveryOrder"] = relationship()
+
+
+
+========================================
+FILE: app/delivery/repository.py
+========================================
+
+
+
+========================================
+FILE: app/delivery/services/delivery_order_service.py
+========================================
+"""Сервис заказов на доставку."""
+
+from __future__ import annotations
+
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.delivery.models import DeliveryOrder
+from app.infrastructure.events import event_bus
+from app.infrastructure.events.event_types import EventTypes
+
+
+class DeliveryOrderService:
+    def __init__(self, session: AsyncSession) -> None:
+        self._s = session
+
+    async def create(self, *, user_id: int, **kwargs) -> DeliveryOrder:
+        order = DeliveryOrder(
+            created_by_id=user_id,
+            updated_by_id=user_id,
+            **kwargs,
+        )
+        self._s.add(order)
+        await self._s.flush()
+
+        # Отправить событие
+        await event_bus.emit(EventTypes.DELIVERY_ORDER_CREATED, {
+            "_event_type": EventTypes.DELIVERY_ORDER_CREATED,
+            "order_id": order.id,
+            "order_number": order.number,
+        })
+
+        return order
+
+    async def get_by_id(self, order_id: int) -> DeliveryOrder | None:
+        return await self._s.get(DeliveryOrder, order_id)
+
+    async def set_status(self, *, user_id: int, order_id: int, status: str) -> DeliveryOrder | None:
+        order = await self._s.get(DeliveryOrder, order_id)
+        if order is None:
+            return None
+        order.status = status
+        order.updated_by_id = user_id
+        await self._s.flush()
+        return order
+
+    async def assign(self, *, user_id: int, order_id: int) -> DeliveryOrder | None:
+        return await self.set_status(user_id=user_id, order_id=order_id, status="assigned")
+
+    async def mark_in_transit(self, *, user_id: int, order_id: int) -> DeliveryOrder | None:
+        return await self.set_status(user_id=user_id, order_id=order_id, status="in_transit")
+
+    async def mark_delivered(self, *, user_id: int, order_id: int) -> DeliveryOrder | None:
+        return await self.set_status(user_id=user_id, order_id=order_id, status="delivered")
+
+    async def cancel(self, *, user_id: int, order_id: int) -> DeliveryOrder | None:
+        return await self.set_status(user_id=user_id, order_id=order_id, status="cancelled")
+
+    async def list_all(self) -> list[DeliveryOrder]:
+        stmt = select(DeliveryOrder).where()
+        return list(await self._s.scalars(stmt))
+
+
+
+========================================
+FILE: app/delivery/services/__init__.py
+========================================
+"""Сервисы модуля delivery."""
+
+from app.delivery.services.delivery_order_service import DeliveryOrderService
+
+__all__ = ["DeliveryOrderService"]
+
+
+
+========================================
+FILE: app/documents/__init__.py
+========================================
+
+
+
+========================================
+FILE: app/documents/models/document.py
+========================================
+"""Документы."""
+
+from __future__ import annotations
+
+from datetime import date
+from decimal import Decimal
+
+from sqlalchemy import Boolean, Date, ForeignKey, Numeric, String
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.infrastructure.orm_base import Base
+
+
+class Document(Base):
+    """Складской документ."""
+
+    __tablename__ = "documents_document"
+
+    document_number: Mapped[str] = mapped_column(String(50), nullable=False, comment="Номер документа")
+    document_date: Mapped[date | None] = mapped_column(Date, nullable=True, comment="Дата документа")
+    delivery_date: Mapped[date | None] = mapped_column(Date, nullable=True, comment="Дата доставки")
+    document_type: Mapped[str] = mapped_column(String(20), nullable=False, comment="Тип документа")
+    contract_id: Mapped[int | None] = mapped_column(
+        ForeignKey("parties_contract.id"), nullable=True, comment="Договор"
+    )
+    warehouse_id: Mapped[int] = mapped_column(
+        ForeignKey("warehouse_warehouse.id"), nullable=False, comment="Склад"
+    )
+    virtual_warehouse_id: Mapped[int | None] = mapped_column(
+        ForeignKey("warehouse_virtual_warehouse.id"), nullable=True, comment="Виртуальный склад"
+    )
+    status: Mapped[str] = mapped_column(String(20), default="draft", comment="Статус")
+    is_delivery: Mapped[bool] = mapped_column(Boolean, default=False, comment="Признак доставки")
+    is_edo: Mapped[bool] = mapped_column(Boolean, default=False, comment="Признак ЭДО")
+
+    lines: Mapped[list["DocumentLine"]] = relationship(back_populates="document")
+
+
+class DocumentLine(Base):
+    """Строка документа."""
+
+    __tablename__ = "documents_document_line"
+
+    document_id: Mapped[int] = mapped_column(
+        ForeignKey("documents_document.id"), nullable=False, comment="Документ"
+    )
+    product_id: Mapped[int] = mapped_column(
+        ForeignKey("warehouse_product.id"), nullable=False, comment="Товар"
+    )
+    batch_id: Mapped[int | None] = mapped_column(
+        ForeignKey("warehouse_batch.id"), nullable=True, comment="Партия"
+    )
+    quantity: Mapped[Decimal] = mapped_column(Numeric(20, 3), nullable=False, comment="Количество")
+    processed_quantity: Mapped[Decimal] = mapped_column(
+        Numeric(20, 3), default=Decimal("0"), comment="Обработано"
+    )
+
+    document: Mapped["Document"] = relationship(back_populates="lines")
+    product: Mapped["Product"] = relationship()
+    batch: Mapped["Batch | None"] = relationship()
+
+
+
+========================================
+FILE: app/documents/models/__init__.py
+========================================
+"""Модели модуля documents."""
+
+from app.documents.models.document import Document, DocumentLine
+
+__all__ = [
+    "Document",
+    "DocumentLine",
+]
+
+
+
+========================================
+FILE: app/documents/repository.py
+========================================
+
+
+
+========================================
+FILE: app/documents/services/document_service.py
+========================================
+"""Сервис документов."""
+
+from __future__ import annotations
+
+from decimal import Decimal
+
+import logging
+
+from sqlalchemy import select
+
+logger = logging.getLogger(__name__)
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.documents.models import Document, DocumentLine
+
+
+class DocumentService:
+    def __init__(self, session: AsyncSession) -> None:
+        self._s = session
+
+    async def create(
+        self,
+        *,
+        user_id: int,
+        document_type: str,
+        warehouse_id: int,
+        document_number: str,
+        document_date=None,
+        delivery_date=None,
+        contract_id: int | None = None,
+        virtual_warehouse_id: int | None = None,
+        is_delivery: bool = False,
+        is_edo: bool = False,
+    ) -> Document:
+        logger.info("Создание документа: %s", document_number)
+        doc = Document(
+            document_type=document_type,
+            warehouse_id=warehouse_id,
+            document_number=document_number,
+            document_date=document_date,
+            delivery_date=delivery_date,
+            contract_id=contract_id,
+            virtual_warehouse_id=virtual_warehouse_id,
+            is_delivery=is_delivery,
+            is_edo=is_edo,
+            created_by_id=user_id,
+            updated_by_id=user_id,
+        )
+        self._s.add(doc)
+        await self._s.flush()
+        logger.info("Документ создан: id=%s", doc.id)
+        return doc
+
+    async def get_by_id(self, document_id: int) -> Document | None:
+        return await self._s.get(Document, document_id)
+
+    async def add_line(
+        self,
+        *,
+        user_id: int,
+        document_id: int,
+        product_id: int,
+        quantity: Decimal,
+        batch_id: int | None = None,
+    ) -> DocumentLine:
+        if quantity <= 0:
+            raise ValueError("Количество должно быть больше 0")
+
+        line = DocumentLine(
+            document_id=document_id,
+            product_id=product_id,
+            batch_id=batch_id,
+            quantity=quantity,
+            created_by_id=user_id,
+            updated_by_id=user_id,
+        )
+        self._s.add(line)
+        await self._s.flush()
+        return line
+
+    async def set_status(self, *, user_id: int, document_id: int, status: str) -> Document | None:
+        doc = await self._s.get(Document, document_id)
+        if doc is None:
+            return None
+        doc.status = status
+        doc.updated_by_id = user_id
+        await self._s.flush()
+        return doc
+
+    async def start(self, *, user_id: int, document_id: int) -> Document | None:
+        return await self.set_status(user_id=user_id, document_id=document_id, status="in_progress")
+
+    async def complete(self, *, user_id: int, document_id: int) -> Document | None:
+        return await self.set_status(user_id=user_id, document_id=document_id, status="completed")
+
+    async def cancel(self, *, user_id: int, document_id: int) -> Document | None:
+        return await self.set_status(user_id=user_id, document_id=document_id, status="cancelled")
+
+    async def list_all(self) -> list[Document]:
+        stmt = select(Document).where().order_by(Document.created_at.desc())
+        return list(await self._s.scalars(stmt))
+
+    async def list_by_type(self, document_type: str) -> list[Document]:
+        stmt = (
+            select(Document)
+            .where(Document.document_type == document_type)
+            .order_by(Document.created_at.desc())
+        )
+        return list(await self._s.scalars(stmt))
+
+
+
+========================================
+FILE: app/documents/services/__init__.py
+========================================
+"""Сервисы модуля documents."""
+
+from app.documents.services.document_service import DocumentService
+
+__all__ = ["DocumentService"]
+
+
+
+========================================
+FILE: app/files/__init__.py
+========================================
+"""Модуль файлов."""
+
+from app.files.models import File
+
+__all__ = ["File"]
+
+
+
+========================================
+FILE: app/files/models.py
+========================================
+"""Модель файла."""
+
+from __future__ import annotations
+
+from sqlalchemy import String
+from sqlalchemy.orm import Mapped, mapped_column
+
+from app.infrastructure.orm_base import Base
+
+
+class File(Base):
+    """Файл: фото, документы, импорт/экспорт."""
+
+    __tablename__ = "files"
+
+    file_path: Mapped[str] = mapped_column(String(500), comment="Путь к файлу")
+    file_type: Mapped[str] = mapped_column(String(30), comment="Тип файла")
+    original_name: Mapped[str] = mapped_column(String(255), comment="Исходное имя")
+    size: Mapped[int] = mapped_column(comment="Размер (байт)")
+    mime_type: Mapped[str] = mapped_column(String(100), default="", comment="MIME тип")
+    uploaded_by_id: Mapped[int | None] = mapped_column(
+        nullable=True, comment="Кем загружен"
+    )
+
+    def __repr__(self) -> str:
+        return f"<File(id={self.id}, name={self.original_name})>"
+
+
+
+========================================
+FILE: app/files/routes.py
+========================================
+"""API для файлов."""
+
+from __future__ import annotations
+
+import os
+from uuid import uuid4
+
+from fastapi import APIRouter, Depends, File, UploadFile, status
+from fastapi.responses import FileResponse
+from sqlalchemy import select
+
+from app.api.deps import SessionDep, UserDep, require_permission
+from app.files import schemas
+from app.core.exceptions import NotFoundError
+from app.files.models import File as FileModel
+
+router = APIRouter(prefix="/files", tags=["files"])
+
+UPLOAD_DIR = "uploads"
+
+
+@router.post("/upload", response_model=schemas.FileRead, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_permission("create", "files"))])
+async def upload_file(
+    file: UploadFile = File(...),
+    file_type: str = "document_scan",
+    session: SessionDep = None,
+    user_id: UserDep = None,
+) -> schemas.FileRead:
+    os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+    content = await file.read()
+    filename = f"{uuid4().hex}_{file.filename}"
+    file_path = os.path.join(UPLOAD_DIR, filename)
+
+    with open(file_path, "wb") as f:
+        f.write(content)
+
+    file_model = FileModel(
+        file_path=file_path,
+        file_type=file_type,
+        original_name=file.filename,
+        size=len(content),
+        mime_type=file.content_type or "",
+        uploaded_by_id=user_id,
+    )
+    session.add(file_model)
+    await session.flush()
+
+    return schemas.FileRead.model_validate(file_model)
+
+
+@router.get("", response_model=list[schemas.FileRead], dependencies=[Depends(require_permission("view", "files"))])
+async def list_files(session: SessionDep) -> list[schemas.FileRead]:
+    rows = list(await session.scalars(
+        select(FileModel).where()
+    ))
+    return [schemas.FileRead.model_validate(r) for r in rows]
+
+
+@router.get("/{file_id}", response_model=schemas.FileRead, dependencies=[Depends(require_permission("view", "files"))])
+async def get_file(file_id: int, session: SessionDep) -> schemas.FileRead:
+    file_model = await session.get(FileModel, file_id)
+    if file_model is None:
+        raise NotFoundError("Файл не найден")
+    return schemas.FileRead.model_validate(file_model)
+
+
+@router.get("/{file_id}/download")
+async def download_file(file_id: int, session: SessionDep):
+    file_model = await session.get(FileModel, file_id)
+    if file_model is None:
+        raise NotFoundError("Файл не найден")
+
+    if not os.path.exists(file_model.file_path):
+        raise NotFoundError("Файл отсутствует на диске")
+
+    return FileResponse(
+        file_model.file_path,
+        media_type=file_model.mime_type or "application/octet-stream",
+        filename=file_model.original_name,
+    )
+
+
+@router.patch(
+    "/{file_id}",
+    response_model=schemas.FileRead,
+    dependencies=[Depends(require_permission("update", "files"))],
+)
+async def update_file(
+    file_id: int,
+    file_type: str | None = None,
+    session: SessionDep = None,
+    user_id: UserDep = None,
+) -> schemas.FileRead:
+    file_model = await session.get(FileModel, file_id)
+    if file_model is None:
+        raise NotFoundError("Файл не найден")
+    if file_type:
+        file_model.file_type = file_type
+    file_model.updated_by_id = user_id
+    await session.flush()
+    return schemas.FileRead.model_validate(file_model)
+
+
+@router.delete("/{file_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_permission("delete", "files"))])
+async def delete_file(file_id: int, session: SessionDep, user_id: UserDep) -> None:
+    file_model = await session.get(FileModel, file_id)
+    if file_model is None:
+        raise NotFoundError("Файл не найден")
+    file_model.soft_delete(user_id)
+    await session.flush()
+
+
+
+========================================
+FILE: app/files/schemas.py
+========================================
+"""Схемы для файлов."""
+
+from __future__ import annotations
+
+from app.api.v1.base_schemas import BaseRead
+
+
+class FileRead(BaseRead):
+    file_path: str
+    file_type: str
+    original_name: str
+    size: int
+    mime_type: str = ""
+    uploaded_by_id: int | None = None
+
+
+
+========================================
+FILE: app/infrastructure/audit/__init__.py
+========================================
+
+
+
+========================================
+FILE: app/infrastructure/events/events.py
+========================================
+"""EventBus — шина событий."""
+
+from __future__ import annotations
+
+import logging
+from collections import defaultdict
+from typing import Any, Awaitable, Callable
+
+logger = logging.getLogger(__name__)
+
+EventHandler = Callable[[dict[str, Any]], Awaitable[None]]
+
+
+class EventBus:
+    """Простая асинхронная шина событий."""
+
+    def __init__(self) -> None:
+        self._handlers: dict[str, list[EventHandler]] = defaultdict(list)
+
+    def subscribe(self, event_type: str, handler: EventHandler) -> None:
+        """Подписать обработчик на событие."""
+        self._handlers[event_type].append(handler)
+        logger.info("Подписчик %s на событие %s", handler.__name__, event_type)
+
+    def unsubscribe(self, event_type: str, handler: EventHandler) -> None:
+        """Отписать обработчик."""
+        if handler in self._handlers[event_type]:
+            self._handlers[event_type].remove(handler)
+
+    async def emit(self, event_type: str, data: dict[str, Any]) -> None:
+        """Отправить событие всем подписчикам."""
+        handlers = self._handlers.get(event_type, [])
+        logger.info("Событие %s: %s", event_type, data)
+
+        for handler in handlers:
+            try:
+                await handler(data)
+            except Exception as e:
+                logger.error(
+                    "Ошибка обработчика %s для события %s: %s",
+                    handler.__name__,
+                    event_type,
+                    e,
+                )
+
+
+event_bus = EventBus()
+
+
+
+========================================
+FILE: app/infrastructure/events/event_types.py
+========================================
+"""Типы событий системы."""
+
+from __future__ import annotations
+
+
+class EventTypes:
+    """Все типы событий."""
+
+    IMPORT_COMPLETED = "import.completed"
+    IMPORT_FAILED = "import.failed"
+
+    DOCUMENT_CREATED = "document.created"
+    DOCUMENT_STATUS_CHANGED = "document.status_changed"
+
+    DELIVERY_ORDER_CREATED = "delivery_order.created"
+    DELIVERY_ORDER_ASSIGNED = "delivery_order.assigned"
+    DELIVERY_ORDER_IN_TRANSIT = "delivery_order.in_transit"
+    DELIVERY_ORDER_DELIVERED = "delivery_order.delivered"
+    DELIVERY_ORDER_CANCELLED = "delivery_order.cancelled"
+
+    ROUTE_ASSIGNED = "route.assigned"
+
+    TASK_CREATED = "task.created"
+    TASK_COMPLETED = "task.completed"
+
+
+
+========================================
+FILE: app/infrastructure/events/__init__.py
+========================================
+"""Система событий."""
+
+from app.infrastructure.events.events import EventBus, event_bus
+
+__all__ = ["EventBus", "event_bus"]
+
+
+
+========================================
+FILE: app/infrastructure/external/dadata.py
+========================================
+"""Клиент DaData для нормализации адресов."""
+
+from __future__ import annotations
+
+from typing import Any
+
+from app.core.config import get_settings
+
+
+class DaDataClient:
+    """Обёртка над API DaData."""
+
+    def __init__(self) -> None:
+        settings = get_settings()
+        self.token = settings.dadata_token
+        self.secret = settings.dadata_secret
+        self._client = None
+
+    def _init_client(self):
+        if self._client is None:
+            from dadata import Dadata
+
+            self._client = Dadata(self.token, self.secret)
+        return self._client
+
+    def clean_address(self, raw_address: str) -> dict[str, Any] | None:
+        """Нормализация адреса через DaData clean."""
+        if not self.token or not self.secret:
+            return None
+
+        try:
+            client = self._init_client()
+            result = client.clean("address", raw_address)
+
+            if not result:
+                return None
+
+            if isinstance(result, list):
+                result = result[0] if result else {}
+
+            return {
+                "full_address": result.get("result", raw_address),
+                "fias_id": result.get("fias_id", ""),
+                "latitude": result.get("geo_lat"),
+                "longitude": result.get("geo_lon"),
+                "postal_code": result.get("postal_code", ""),
+                "region": result.get("region_with_type", ""),
+                "city": result.get("city_with_type") or result.get("settlement_with_type", ""),
+                "street": result.get("street_with_type", ""),
+                "house": result.get("house", ""),
+            }
+        except Exception:
+            return None
+
+
+
+========================================
+FILE: app/infrastructure/external/__init__.py
+========================================
+"""Внешние сервисы."""
+
+from app.infrastructure.external.dadata import DaDataClient
+
+__all__ = ["DaDataClient"]
+
+
+
+========================================
+FILE: app/infrastructure/__init__.py
+========================================
+
+
+
+========================================
+FILE: app/infrastructure/logging/__init__.py
+========================================
+"""Логирование."""
+
+from app.infrastructure.logging.setup import setup_logging
+
+__all__ = ["setup_logging"]
+
+
+
+========================================
+FILE: app/infrastructure/logging/setup.py
+========================================
+"""Настройка логирования."""
+
+from __future__ import annotations
+
+import logging
+import logging.config
+from pathlib import Path
+
+from app.core.config import Settings
+
+
+class MaxLevelFilter(logging.Filter):
+    """Фильтр — пропускает только записи до max_level включительно."""
+
+    def __init__(self, max_level: int) -> None:
+        super().__init__()
+        self.max_level = max_level
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        return record.levelno <= self.max_level
+
+
+def setup_logging(settings: Settings) -> None:
+    """Инициализация логирования."""
+    _ensure_log_dirs(
+        settings.app_log_file_path,
+        settings.error_log_file_path,
+        settings.sql_log_file_path,
+    )
+
+    log_level = _normalize_level(settings.log_level)
+    sql_level = "DEBUG" if settings.debug_sql else "ERROR"
+
+    config = {
+        "version": 1,
+        "disable_existing_loggers": False,
+        "filters": {
+            "max_info_warning": {"()": MaxLevelFilter, "max_level": logging.WARNING}
+        },
+        "formatters": {
+            "default": {
+                "format": "%(asctime)s | %(levelname)s | %(name)s | %(message)s",
+            }
+        },
+        "handlers": {
+            "stdout": {
+                "class": "logging.StreamHandler",
+                "formatter": "default",
+                "level": log_level,
+            },
+            "app_file": {
+                "class": "logging.handlers.RotatingFileHandler",
+                "formatter": "default",
+                "filename": settings.app_log_file_path,
+                "maxBytes": 10 * 1024 * 1024,
+                "backupCount": 5,
+                "encoding": "utf-8",
+                "level": log_level,
+                "filters": ["max_info_warning"],
+            },
+            "error_file": {
+                "class": "logging.handlers.RotatingFileHandler",
+                "formatter": "default",
+                "filename": settings.error_log_file_path,
+                "maxBytes": 10 * 1024 * 1024,
+                "backupCount": 5,
+                "encoding": "utf-8",
+                "level": "ERROR",
+            },
+            "sql_file": {
+                "class": "logging.handlers.RotatingFileHandler",
+                "formatter": "default",
+                "filename": settings.sql_log_file_path,
+                "maxBytes": 10 * 1024 * 1024,
+                "backupCount": 5,
+                "encoding": "utf-8",
+                "level": sql_level,
+            },
+        },
+        "root": {
+            "level": log_level,
+            "handlers": ["stdout", "app_file", "error_file"],
+        },
+        "loggers": {
+            "uvicorn": {
+                "handlers": ["stdout", "app_file", "error_file"],
+                "level": log_level,
+            },
+            "uvicorn.error": {
+                "handlers": ["stdout", "app_file", "error_file"],
+                "level": log_level,
+                "propagate": False,
+            },
+            "uvicorn.access": {
+                "handlers": ["stdout", "app_file", "error_file"],
+                "level": log_level,
+                "propagate": False,
+            },
+            "sqlalchemy.engine": {
+                "handlers": ["sql_file"],
+                "level": sql_level,
+                "propagate": False,
+            },
+            "sqlalchemy.pool": {
+                "handlers": ["sql_file"],
+                "level": sql_level,
+                "propagate": False,
+            },
+        },
+    }
+    logging.config.dictConfig(config)
+
+
+def _normalize_level(raw_level: str) -> str:
+    level = (raw_level or "").strip().upper()
+    return level if level in {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"} else "INFO"
+
+
+def _ensure_log_dirs(*file_paths: str) -> None:
+    for path in file_paths:
+        directory = Path(path).expanduser().resolve().parent
+        directory.mkdir(parents=True, exist_ok=True)
+
+
+
+========================================
+FILE: app/infrastructure/orm_base.py
+========================================
+"""Базовый класс для всех ORM-моделей."""
+
+from __future__ import annotations
+
+from datetime import datetime, timezone
+
+from sqlalchemy import Boolean, DateTime, ForeignKey, func
+
+from app.core.context import get_current_user_id_context
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+
+
+class Base(DeclarativeBase):
+    """Базовый класс с audit-полями и soft delete."""
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True, comment="ID записи")
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="true", comment="Активна"
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False, comment="Создана"
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+        comment="Обновлена",
+    )
+    created_by_id: Mapped[int | None] = mapped_column(
+        ForeignKey("accounts_user.id"),
+        nullable=True,
+        default=lambda: get_current_user_id_context(),
+        comment="Создал (user ID)",
+    )
+    updated_by_id: Mapped[int | None] = mapped_column(
+        ForeignKey("accounts_user.id"),
+        nullable=True,
+        default=lambda: get_current_user_id_context(),
+        onupdate=lambda: get_current_user_id_context(),
+        comment="Изменил (user ID)",
+    )
+    is_deleted: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="false", comment="Удалена (soft)"
+    )
+    deleted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, comment="Удалена (когда)"
+    )
+    deleted_by_id: Mapped[int | None] = mapped_column(
+        ForeignKey("accounts_user.id"), nullable=True, comment="Удалил (user ID)"
+    )
+
+    def activate(self, user_id: int | None = None) -> None:
+        self.is_active = True
+        self.updated_by_id = user_id
+
+    def deactivate(self, user_id: int | None = None) -> None:
+        self.is_active = False
+        self.updated_by_id = user_id
+
+    def soft_delete(self, user_id: int | None = None) -> None:
+        self.is_deleted = True
+        self.is_active = False
+        self.deleted_at = datetime.now(timezone.utc)
+        self.deleted_by_id = user_id
+
+    def restore(self, user_id: int | None = None) -> None:
+        self.is_deleted = False
+        self.is_active = True
+        self.deleted_at = None
+        self.deleted_by_id = None
+        self.updated_by_id = user_id
+
+    def __repr__(self) -> str:
+        return f"<{self.__class__.__name__}(id={self.id})>"
+
+
+
+========================================
+FILE: app/infrastructure/uow.py
+========================================
+"""Unit of Work — управление транзакцией."""
+
+from __future__ import annotations
+
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
+
+class UnitOfWork:
+    """Управляет транзакцией: открывает сессию, коммитит или откатывает."""
+
+    def __init__(self, session_factory: async_sessionmaker) -> None:
+        self._session_factory = session_factory
+        self._session: AsyncSession | None = None
+
+    async def __aenter__(self) -> AsyncSession:
+        self._session = self._session_factory()
+        return self._session
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
+        if self._session is None:
+            return
+
+        if exc_type is not None:
+            await self._session.rollback()
+        else:
+            await self._session.commit()
+
+        await self._session.close()
+        self._session = None
+
+    @property
+    def session(self) -> AsyncSession:
+        if self._session is None:
+            raise RuntimeError("UnitOfWork не открыт")
+        return self._session
+
+
+
+========================================
+FILE: app/__init__.py
+========================================
+
+
+
+========================================
+FILE: app/integration/adapters/base.py
+========================================
+"""Базовый адаптер."""
+
+from __future__ import annotations
+
+from abc import ABC, abstractmethod
+from typing import Any
+
+
+class BaseAdapter(ABC):
+    """Базовый класс адаптера для парсинга файлов."""
+
+    @abstractmethod
+    def parse(self, file_path: str) -> tuple[Any | None, list[str]]:
+        """Парсинг файла. Возвращает (данные, ошибки)."""
+        ...
+
+
+
+========================================
+FILE: app/integration/adapters/__init__.py
+========================================
+"""Адаптеры интеграций."""
+
+from app.integration.adapters.base import BaseAdapter
+from app.integration.adapters.zln_adapter import ZLNAdapter
+
+__all__ = ["BaseAdapter", "ZLNAdapter"]
+
+
+
+========================================
+FILE: app/integration/adapters/zln_adapter.py
+========================================
+"""Адаптер для поклажедателя Зиландия (ZLN)."""
+
+from __future__ import annotations
+
+import xml.etree.ElementTree as ET
+from datetime import datetime
+from decimal import Decimal
+
+from app.integration.adapters.base import BaseAdapter
+
+
+class ZLNAdapter(BaseAdapter):
+    """Парсинг XML-файлов Зиландии."""
+
+    def parse(self, file_path: str):
+        tree = ET.parse(file_path)
+        root = tree.getroot()
+
+        if root.tag == "PORDER":
+            return self._parse_porder(root)
+        elif root.tag == "ORDER":
+            return self._parse_order(root)
+        else:
+            return None, [f"Неизвестный тип документа: {root.tag}"]
+
+    @staticmethod
+    def _get_text(element, tag):
+        child = element.find(tag)
+        return child.text.strip() if child is not None and child.text else ""
+
+    @staticmethod
+    def _parse_date(text):
+        if not text:
+            return None
+        try:
+            return datetime.strptime(text, "%Y%m%d").date()
+        except ValueError:
+            return None
+
+    @staticmethod
+    def _parse_decimal(text):
+        if not text:
+            return Decimal("0")
+        try:
+            return Decimal(text.replace(",", "."))
+        except Exception:
+            return Decimal("0")
+
+    @staticmethod
+    def _parse_int(text):
+        if not text:
+            return None
+        try:
+            return int(text.strip())
+        except ValueError:
+            return None
+
+    def _parse_items(self, root):
+        """Парсинг ITEMS — общий для PORDER и ORDER."""
+        items = []
+        items_el = root.find("ITEMS")
+        if items_el is not None:
+            for item_el in items_el.findall("ITEM"):
+                item_id = self._get_text(item_el, "ID")
+                if not item_id:
+                    continue
+
+                shelf_life = self._get_text(item_el, "TOTALSHELFLIFE")
+                min_shelf_life = self._get_text(item_el, "MINSHELFLIFE")
+
+                items.append({
+                    "external_id": item_id,
+                    "ean": self._get_text(item_el, "EAN"),
+                    "name": self._get_text(item_el, "NAME"),
+                    "legal_name": self._get_text(item_el, "LEGAL_NAME"),
+                    "product_class": self._get_text(item_el, "CLASS"),
+                    "product_type": self._get_text(item_el, "TYPE"),
+                    "unit": self._get_text(item_el, "BUM"),
+                    "gross_mass": self._parse_decimal(self._get_text(item_el, "GROSS_MASS")),
+                    "net_mass": self._parse_decimal(self._get_text(item_el, "NET_MASS")),
+                    "price": self._parse_decimal(self._get_text(item_el, "PRICE")),
+                    "shelf_life_days": self._parse_int(shelf_life),
+                    "min_shelf_life_days": self._parse_int(min_shelf_life),
+                })
+
+        return items
+
+    def _parse_lines(self, root):
+        """Парсинг строк (LN) — общий для PORDER и ORDER."""
+        lines = []
+        for ln_el in root.findall("LN"):
+            item_id = self._get_text(ln_el, "ITEM")
+            quantity = self._get_text(ln_el, "QNT")
+
+            if not item_id:
+                continue
+
+            try:
+                qty = int(quantity)
+            except ValueError:
+                continue
+
+            if qty <= 0:
+                continue
+
+            lines.append({
+                "external_id": item_id,
+                "quantity": qty,
+                "unit": self._get_text(ln_el, "UNIT"),
+            })
+
+        return lines
+
+    def _parse_porder(self, root):
+        """Парсинг входящего заказа (PORDER)."""
+        errors = []
+
+        doc_no = self._get_text(root, "DOC_NO")
+        doc_date = self._parse_date(self._get_text(root, "DOC_DATE"))
+        delivery_date = self._parse_date(self._get_text(root, "DELIV_DATE"))
+        loc = self._get_text(root, "LOC")
+
+        # Поставщик (VENDOR)
+        vendor_id = self._get_text(root, "VENDOR/ID")
+        vendor_name = self._get_text(root, "VENDOR/NAME")
+        vendor_legal_name = self._get_text(root, "VENDOR/LEGAL_NAME")
+        vendor_inn = self._get_text(root, "VENDOR/INN")
+        vendor_kpp = self._get_text(root, "VENDOR/KPP")
+
+        if not doc_no:
+            errors.append("Номер документа не указан")
+
+        items = self._parse_items(root)
+        lines = self._parse_lines(root)
+
+        if not items:
+            errors.append(f"{doc_no}: Нет товаров в документе")
+        if not lines:
+            errors.append(f"{doc_no}: Нет строк в документе")
+
+        if errors:
+            return None, errors
+
+        return {
+            "document_type": "porder",
+            "document_number": doc_no,
+            "document_date": doc_date,
+            "delivery_date": delivery_date,
+            "partner_code": self._get_text(root, "PARTNER"),
+            "virtual_warehouse_code": loc,
+            "vendor_code": vendor_id,
+            "vendor_name": vendor_name,
+            "vendor_legal_name": vendor_legal_name,
+            "vendor_inn": vendor_inn,
+            "vendor_kpp": vendor_kpp,
+            "items": items,
+            "lines": lines,
+        }, []
+
+    def _parse_order(self, root):
+        """Парсинг исходящего заказа (ORDER)."""
+        errors = []
+
+        doc_no = self._get_text(root, "DOC_NO")
+        doc_date = self._parse_date(self._get_text(root, "DOC_DATE"))
+        delivery_date = self._parse_date(self._get_text(root, "DELIV_DATE"))
+        loc = self._get_text(root, "LOC")
+
+        # Клиент (CUSTOMER)
+        customer_id = self._get_text(root, "CUSTOMER/ID")
+        customer_name = self._get_text(root, "CUSTOMER/NAME")
+        customer_legal_name = self._get_text(root, "CUSTOMER/LEGAL_NAME")
+        customer_inn = self._get_text(root, "CUSTOMER/INN")
+        customer_kpp = self._get_text(root, "CUSTOMER/KPP")
+        use_edo = self._get_text(root, "CUSTOMER/USE_EDO")
+
+        # Адрес доставки
+        delivery_address = self._get_text(root, "DELIV_ADDR") or self._get_text(root, "CONSIG_ADDR")
+
+        if not doc_no:
+            errors.append("Номер документа не указан")
+
+        items = self._parse_items(root)
+        lines = self._parse_lines(root)
+
+        if not items:
+            errors.append(f"{doc_no}: Нет товаров в документе")
+        if not lines:
+            errors.append(f"{doc_no}: Нет строк в документе")
+
+        if errors:
+            return None, errors
+
+        return {
+            "document_type": "order",
+            "document_number": doc_no,
+            "document_date": doc_date,
+            "delivery_date": delivery_date,
+            "partner_code": self._get_text(root, "PARTNER"),
+            "virtual_warehouse_code": loc,
+            "customer_code": customer_id,
+            "customer_name": customer_name,
+            "customer_legal_name": customer_legal_name,
+            "customer_inn": customer_inn,
+            "customer_kpp": customer_kpp,
+            "use_edo": use_edo == "1",
+            "is_delivery": self._get_text(root, "DELIV") == "1",
+            "delivery_address": delivery_address,
+            "items": items,
+            "lines": lines,
+        }, []
+
+
+
+========================================
+FILE: app/integration/ftp_service.py
+========================================
+
+
+
+========================================
+FILE: app/integration/__init__.py
+========================================
+
+
+
+========================================
+FILE: app/integration/models/__init__.py
+========================================
+"""Модели модуля integration."""
+
+from app.integration.models.integration_profile import (
+    IntegrationProfile,
+    IntegrationLog,
+    IntegrationError,
+)
+
+__all__ = [
+    "IntegrationProfile",
+    "IntegrationLog",
+    "IntegrationError",
+]
+
+
+
+========================================
+FILE: app/integration/models/integration_profile.py
+========================================
+"""Профиль интеграции и журнал импорта."""
+
+from __future__ import annotations
+
+from typing import Any
+from uuid import uuid4
+
+from sqlalchemy import Boolean, ForeignKey, Integer, String
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.infrastructure.orm_base import Base
+
+
+class IntegrationProfile(Base):
+    """Профиль интеграции."""
+
+    __tablename__ = "integration_profile"
+
+    depositor_id: Mapped[int] = mapped_column(
+        ForeignKey("parties_depositor.id"), nullable=False, comment="Поклажедатель"
+    )
+    name: Mapped[str] = mapped_column(String(255), nullable=False, comment="Название")
+    source_type: Mapped[str] = mapped_column(String(20), nullable=False, comment="Тип источника")
+    config: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, comment="Настройки")
+
+    depositor: Mapped["Depositor"] = relationship()
+    logs: Mapped[list["IntegrationLog"]] = relationship(back_populates="profile")
+
+
+class IntegrationLog(Base):
+    """Журнал импорта с прогрессом."""
+
+    __tablename__ = "integration_log"
+
+    task_id: Mapped[str] = mapped_column(
+        String(36), default=lambda: str(uuid4()), comment="UUID задачи импорта"
+    )
+    profile_id: Mapped[int | None] = mapped_column(
+        ForeignKey("integration_profile.id"), nullable=True, comment="Профиль (если импорт по одному)"
+    )
+    status: Mapped[str] = mapped_column(
+        String(20), default="starting", comment="Статус: starting, processing, completed, failed"
+    )
+    document_type: Mapped[str | None] = mapped_column(
+        String(20), nullable=True, comment="Тип: porder, order, all"
+    )
+    total_rows: Mapped[int] = mapped_column(Integer, default=0, comment="Всего файлов")
+    processed_rows: Mapped[int] = mapped_column(Integer, default=0, comment="Обработано файлов")
+    success_rows: Mapped[int] = mapped_column(Integer, default=0, comment="Успешно")
+    error_rows: Mapped[int] = mapped_column(Integer, default=0, comment="С ошибками")
+    messages: Mapped[list[dict]] = mapped_column(JSONB, default=list, comment="Лог сообщений")
+    errors: Mapped[list[str]] = mapped_column(JSONB, default=list, comment="Ошибки")
+    current_step: Mapped[str] = mapped_column(
+        String(255), default="", comment="Текущий шаг"
+    )
+    order_number: Mapped[str] = mapped_column(
+        String(100), default="", comment="Текущий номер заказа"
+    )
+    file_id: Mapped[int | None] = mapped_column(
+        ForeignKey("files.id"), nullable=True, comment="Файл с ошибками (Excel)"
+    )
+
+    profile: Mapped["IntegrationProfile | None"] = relationship(back_populates="logs")
+
+
+class IntegrationError(Base):
+    """Ошибка импорта."""
+
+    __tablename__ = "integration_error"
+
+    log_id: Mapped[int] = mapped_column(
+        ForeignKey("integration_log.id"), nullable=False, comment="Журнал"
+    )
+    row_number: Mapped[int] = mapped_column(Integer, default=0, comment="Номер строки")
+    error_message: Mapped[str] = mapped_column(String, default="", comment="Сообщение об ошибке")
+    raw_data: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, comment="Исходные данные")
+
+    log: Mapped["IntegrationLog"] = relationship()
+
+
+
+========================================
+FILE: app/integration/repository.py
+========================================
+
+
+
+========================================
+FILE: app/integration/services/ftp_service.py
+========================================
+"""Сервис FTP."""
+
+from __future__ import annotations
+
+import os
+
+
+class FTPService:
+    """Работа с FTP."""
+
+    def __init__(self, host: str, username: str, password: str):
+        self.host = host
+        self.username = username
+        self.password = password
+        self._ftp = None
+
+    def connect(self):
+        from ftplib import FTP
+
+        self._ftp = FTP(self.host)
+        self._ftp.login(self.username, self.password)
+        return self
+
+    def disconnect(self):
+        if self._ftp:
+            self._ftp.quit()
+            self._ftp = None
+
+    def list_files(self, remote_path: str) -> list[str]:
+        self._ftp.cwd(remote_path)
+        files = []
+        self._ftp.retrlines("LIST", files.append)
+        return [f.split()[-1] for f in files if f.startswith("-")]
+
+    def download(self, remote_path: str, local_dir: str) -> str:
+        filename = os.path.basename(remote_path)
+        local_path = os.path.join(local_dir, filename)
+        with open(local_path, "wb") as f:
+            self._ftp.retrbinary(f"RETR {remote_path}", f.write)
+        return local_path
+
+    def delete(self, remote_path: str):
+        self._ftp.delete(remote_path)
+
+
+
+========================================
+FILE: app/integration/services/__init__.py
+========================================
+"""Сервисы модуля integration."""
+
+from app.integration.services.ftp_service import FTPService
+from app.integration.services.integration_service import IntegrationService, AdapterService
+
+__all__ = ["FTPService", "IntegrationService", "AdapterService"]
+
+
+
+========================================
+FILE: app/integration/services/integration_service.py
+========================================
+"""Сервис импорта заказов."""
+
+from __future__ import annotations
+
+import logging
+
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.orders.models import InboundOrder, InboundOrderLine, OutboundOrder, OutboundOrderLine
+from app.integration.adapters import ZLNAdapter
+from app.parties.models import Client
+from app.warehouse.models import VirtualWarehouse
+from app.parties.services import AddressService, ClientService
+from app.parties.repository import AddressRepository, ClientRepository
+from app.warehouse.services import ProductService
+
+logger = logging.getLogger(__name__)
+
+
+class IntegrationService:
+    """Обработка импортированных документов."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._s = session
+
+    async def process_document(
+        self,
+        universal_doc: dict,
+        depositor_id: int,
+        user_id: int,
+    ) -> tuple[object | None, list[str]]:
+        errors = []
+
+        logger.info("Начало импорта: %s", universal_doc.get("document_number"))
+        doc_type = universal_doc.get("document_type")
+        doc_number = universal_doc.get("document_number", "")
+
+        try:
+            # 0. Проверка дубликата
+            if doc_type == "porder":
+                existing = await self._s.scalar(
+                    select(InboundOrder).where(
+                        InboundOrder.depositor_id == depositor_id,
+                        InboundOrder.number == doc_number,
+                    )
+                )
+            elif doc_type == "order":
+                existing = await self._s.scalar(
+                    select(OutboundOrder).where(
+                        OutboundOrder.depositor_id == depositor_id,
+                        OutboundOrder.number == doc_number,
+                    )
+                )
+            else:
+                existing = None
+
+            if existing:
+                logger.info("Заказ %s уже существует, пропускаю", doc_number)
+                return None, [f"Заказ {doc_number} уже существует"]
+
+            # 1. Товары — для всех типов
+            product_service = ProductService(self._s)
+            for item in universal_doc.get("items", []):
+                try:
+                    await product_service.get_or_create(
+                        depositor_id=depositor_id,
+                        external_id=item["external_id"],
+                        defaults={
+                            "name": item.get("name", item["external_id"]),
+                            "legal_name": item.get("legal_name", ""),
+                            "weight": item.get("net_mass", 0),
+                            "shelf_life_days": item.get("shelf_life_days"),
+                            "min_shelf_life_days": item.get("min_shelf_life_days"),
+                        },
+                        user_id=user_id,
+                    )
+                except ValueError as e:
+                    errors.append(f"Товар {item['external_id']}: {e}")
+
+            if errors:
+                return None, errors
+
+            # 2. Создаем заказ в зависимости от типа
+            if doc_type == "porder":
+                order = await self._create_inbound_order(
+                    universal_doc, depositor_id, user_id
+                )
+            elif doc_type == "order":
+                order = await self._create_outbound_order(
+                    universal_doc, depositor_id, user_id
+                )
+            else:
+                return None, [f"Неизвестный тип документа: {doc_type}"]
+
+            logger.info("Импорт завершён: %s", universal_doc.get("document_number"))
+            return order, []
+
+        except Exception as e:
+            logger.error("Ошибка импорта: %s", e)
+            return None, [f"Ошибка: {e}"]
+
+    async def _get_or_create_warehouse(self, depositor_id: int, vw_code: str) -> tuple[int, int | None]:
+        """Найти виртуальный склад, вернуть (warehouse_id, vw_id)."""
+        from app.warehouse.models import Warehouse
+
+        if vw_code:
+            stmt = select(VirtualWarehouse).where(
+                VirtualWarehouse.depositor_id == depositor_id,
+                VirtualWarehouse.code == vw_code,
+            )
+            vw = await self._s.scalar(stmt)
+            if vw:
+                return vw.warehouse_id, vw.id
+
+        # Первый склад
+        stmt = select(Warehouse).limit(1)
+        warehouse = await self._s.scalar(stmt)
+        if warehouse is None:
+            raise ValueError("Склад не найден")
+        return warehouse.id, None
+
+    async def _create_inbound_order(
+        self,
+        doc: dict,
+        depositor_id: int,
+        user_id: int,
+    ) -> InboundOrder:
+        """Создать входящий заказ (приёмка)."""
+        # 1. Проверить дубликат
+        existing = await self._s.scalar(
+            select(InboundOrder).where(
+                InboundOrder.depositor_id == depositor_id,
+                InboundOrder.number == doc["document_number"],
+            )
+        )
+        if existing:
+            raise ValueError(f"Заказ {doc['document_number']} уже существует")
+
+        # 2. Найти/создать поставщика (Client без адреса)
+        client_service = ClientService(ClientRepository(self._s))
+        vendor_code = doc.get("vendor_code", "")
+        if vendor_code:
+            supplier, _ = await client_service.get_or_create(
+                user_id=user_id,
+                depositor_id=depositor_id,
+                code=vendor_code,
+                name=doc.get("vendor_name", vendor_code),
+                legal_name=doc.get("vendor_legal_name", ""),
+                inn=doc.get("vendor_inn", ""),
+                kpp=doc.get("vendor_kpp", ""),
+            )
+        else:
+            supplier = None
+
+        # 3. Найти склад
+        warehouse_id, vw_id = await self._get_or_create_warehouse(
+            depositor_id, doc.get("virtual_warehouse_code", "")
+        )
+
+        # 4. Создать заказ
+        order = InboundOrder(
+            depositor_id=depositor_id,
+            warehouse_id=warehouse_id,
+            number=doc["document_number"],
+            supplier_code=vendor_code,
+            supplier_id=supplier.id if supplier else None,
+            order_date=doc.get("document_date") or doc.get("delivery_date"),
+            planned_date=doc.get("delivery_date"),
+            created_by_id=user_id,
+            updated_by_id=user_id,
+        )
+        self._s.add(order)
+        await self._s.flush()
+
+        # 5. Создать строки
+        for line in doc.get("lines", []):
+            from app.warehouse.models import Product
+
+            stmt = select(Product).where(
+                Product.depositor_id == depositor_id,
+                Product.external_id == line["external_id"],
+            )
+            product = await self._s.scalar(stmt)
+
+            if product is None:
+                continue
+
+            order_line = InboundOrderLine(
+                order_id=order.id,
+                product_id=product.id,
+                quantity=line["quantity"],
+                created_by_id=user_id,
+                updated_by_id=user_id,
+            )
+            self._s.add(order_line)
+
+        await self._s.flush()
+        return order
+
+    async def _create_outbound_order(
+        self,
+        doc: dict,
+        depositor_id: int,
+        user_id: int,
+    ) -> OutboundOrder:
+        """Создать исходящий заказ (отгрузка)."""
+        customer_code = doc.get("customer_code", "")
+        delivery_address = doc.get("delivery_address", "")
+
+        # 1. Проверить дубликат
+        existing = await self._s.scalar(
+            select(OutboundOrder).where(
+                OutboundOrder.depositor_id == depositor_id,
+                OutboundOrder.number == doc["document_number"],
+            )
+        )
+        if existing:
+            raise ValueError(f"Заказ {doc['document_number']} уже существует")
+
+        # 2. Найти/создать адрес доставки
+        address_service = AddressService(AddressRepository(self._s))
+        address = await address_service.get_or_create(
+            delivery_address, "import", user_id
+        )
+
+        # 3. Найти/создать клиента (code + delivery_address_id)
+        client_service = ClientService(ClientRepository(self._s))
+        client, _ = await client_service.get_or_create(
+            user_id=user_id,
+            depositor_id=depositor_id,
+            code=customer_code,
+            name=doc.get("customer_name", customer_code),
+            legal_name=doc.get("customer_legal_name", ""),
+            inn=doc.get("customer_inn", ""),
+            kpp=doc.get("customer_kpp", ""),
+            delivery_address_id=address.id,
+            is_edo=doc.get("use_edo", False),
+        )
+
+        # 4. Найти склад
+        warehouse_id, vw_id = await self._get_or_create_warehouse(
+            depositor_id, doc.get("virtual_warehouse_code", "")
+        )
+
+        # 5. Создать заказ
+        order = OutboundOrder(
+            depositor_id=depositor_id,
+            warehouse_id=warehouse_id,
+            number=doc["document_number"],
+            customer_code=customer_code,
+            customer_name=client.name,
+            delivery_address_name=delivery_address,
+            client_id=client.id,
+            order_date=doc.get("document_date") or doc.get("delivery_date"),
+            shipping_date=doc.get("delivery_date"),
+            needs_delivery=doc.get("is_delivery", False),
+            created_by_id=user_id,
+            updated_by_id=user_id,
+        )
+        self._s.add(order)
+        await self._s.flush()
+
+        # 6. Создать строки
+        for line in doc.get("lines", []):
+            from app.warehouse.models import Product
+
+            stmt = select(Product).where(
+                Product.depositor_id == depositor_id,
+                Product.external_id == line["external_id"],
+            )
+            product = await self._s.scalar(stmt)
+
+            if product is None:
+                continue
+
+            order_line = OutboundOrderLine(
+                order_id=order.id,
+                product_id=product.id,
+                quantity=line["quantity"],
+                created_by_id=user_id,
+                updated_by_id=user_id,
+            )
+            self._s.add(order_line)
+
+        await self._s.flush()
+        return order
+
+
+class AdapterService:
+    """Выбор адаптера."""
+
+    ADAPTERS = {
+        "ZLN": ZLNAdapter,
+    }
+
+    @classmethod
+    def get_adapter(cls, partner_code: str):
+        adapter = cls.ADAPTERS.get(partner_code)
+        if not adapter:
+            raise ValueError(f"Адаптер для {partner_code} не найден")
+        return adapter()
+
+
+
+========================================
+FILE: app/main.py
+========================================
+"""Точка входа FastAPI."""
+
+from fastapi import FastAPI
+
+from app.api.v1.router import api_router
+from app.core.config import get_settings
+from app.core.middleware import setup_middleware
+from app.infrastructure.logging import setup_logging
+from app.core.init_db import init_db
+from app.notifications.services.dispatcher import setup_notification_dispatcher
+
+settings = get_settings()
+setup_logging(settings)
+# Подписка на события (диспетчер уведомлений)
+setup_notification_dispatcher(None)
+
+app = FastAPI(title="LMS FastAPI")
+
+
+@app.on_event("startup")
+async def startup_event():
+    """Инициализация при старте."""
+    from app.core.database import async_session_factory
+
+    async with async_session_factory() as session:
+        await init_db(session)
+setup_middleware(app, settings)
+app.include_router(api_router)
+
+
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+from pathlib import Path
+
+# Раздача фронтенда
+frontend_dist = Path(__file__).parent.parent / "frontend" / "dist"
+
+if frontend_dist.exists():
+    app.mount("/assets", StaticFiles(directory=frontend_dist / "assets"), name="assets")
+
+    @app.get("/{full_path:path}")
+    async def serve_frontend(full_path: str):
+        file_path = frontend_dist / full_path
+        if file_path.exists() and file_path.is_file():
+            return FileResponse(file_path)
+        return FileResponse(frontend_dist / "index.html")
+
+
+
+========================================
+FILE: app/notifications/adapters/app_adapter.py
+========================================
+"""Адаптер доставки в приложение."""
+
+from __future__ import annotations
+
+from typing import Any
+
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.notifications.adapters.base import BaseAdapter
+from app.notifications.models import Notification
+
+
+class AppAdapter(BaseAdapter):
+    """Создает уведомление в БД."""
+
+    channel = "app"
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._s = session
+
+    async def send(self, recipient: dict[str, Any], notification: dict[str, Any]) -> None:
+        """Создать уведомление в БД."""
+        notify = Notification(
+            user_id=recipient["user_id"],
+            title=notification["title"],
+            text=notification["text"],
+            notification_type=notification.get("notification_type", "system"),
+            link=notification.get("link", ""),
+        )
+        self._s.add(notify)
+        await self._s.flush()
+
+
+
+========================================
+FILE: app/notifications/adapters/base.py
+========================================
+"""Базовый адаптер доставки."""
+
+from __future__ import annotations
+
+from abc import ABC, abstractmethod
+from typing import Any
+
+
+class BaseAdapter(ABC):
+    """Базовый класс адаптера."""
+
+    channel: str = "base"
+
+    @abstractmethod
+    async def send(self, recipient: dict[str, Any], notification: dict[str, Any]) -> None:
+        """Отправить уведомление."""
+        ...
+
+
+
+========================================
+FILE: app/notifications/adapters/email_adapter.py
+========================================
+"""Адаптер доставки по email (заглушка)."""
+
+from __future__ import annotations
+
+import logging
+from pathlib import Path
+from typing import Any
+
+from app.notifications.adapters.base import BaseAdapter
+
+logger = logging.getLogger(__name__)
+
+EMAIL_DIR = Path("logs/emails")
+
+
+class EmailAdapter(BaseAdapter):
+    """Сохраняет письма в файл (заглушка)."""
+
+    channel = "email"
+
+    async def send(self, recipient: dict[str, Any], notification: dict[str, Any]) -> None:
+        """Сохранить письмо в файл."""
+        EMAIL_DIR.mkdir(parents=True, exist_ok=True)
+
+        email_to = recipient.get("email", "unknown@example.com")
+        title = notification.get("title", "Без темы")
+        text = notification.get("text", "")
+
+        filename = EMAIL_DIR / f"email_{title.replace(' ', '_')}.txt"
+        with open(filename, "a", encoding="utf-8") as f:
+            f.write(f"Кому: {email_to}\n")
+            f.write(f"Тема: {title}\n")
+            f.write(f"Содержание:\n{text}\n")
+            f.write("---\n")
+
+        logger.info("Письмо сохранено: %s", filename)
+
+
+
+========================================
+FILE: app/notifications/adapters/__init__.py
+========================================
+"""Адаптеры доставки уведомлений."""
+
+from app.notifications.adapters.base import BaseAdapter
+from app.notifications.adapters.app_adapter import AppAdapter
+from app.notifications.adapters.email_adapter import EmailAdapter
+
+__all__ = ["BaseAdapter", "AppAdapter", "EmailAdapter"]
+
+
+
+========================================
+FILE: app/notifications/__init__.py
+========================================
+
+
+
+========================================
+FILE: app/notifications/models/__init__.py
+========================================
+"""Модели модуля notifications."""
+
+from app.notifications.models.notification import Notification
+from app.notifications.models.notification_rule import NotificationRule
+
+__all__ = ["Notification", "NotificationRule"]
+
+
+
+========================================
+FILE: app/notifications/models/notification.py
+========================================
+"""Уведомления."""
+
+from __future__ import annotations
+
+from sqlalchemy import ForeignKey, String, Text
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.infrastructure.orm_base import Base
+
+
+class Notification(Base):
+    __tablename__ = "notifications_notification"
+
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("accounts_user.id"), nullable=False, comment="Получатель"
+    )
+    title: Mapped[str] = mapped_column(String(255), nullable=False, comment="Заголовок")
+    text: Mapped[str] = mapped_column(Text, nullable=False, comment="Текст")
+    notification_type: Mapped[str] = mapped_column(
+        String(20), default="system", comment="Тип уведомления"
+    )
+    status: Mapped[str] = mapped_column(String(20), default="pending", comment="Статус")
+    link: Mapped[str] = mapped_column(String(500), default="", comment="Ссылка")
+    sent_at: Mapped[str | None] = mapped_column(String(50), nullable=True, comment="Когда отправлено")
+    read_at: Mapped[str | None] = mapped_column(String(50), nullable=True, comment="Когда прочитано")
+
+    user: Mapped["User"] = relationship(foreign_keys=[user_id])
+
+
+
+========================================
+FILE: app/notifications/models/notification_rule.py
+========================================
+"""Правила уведомлений."""
+
+from __future__ import annotations
+
+from sqlalchemy import Boolean, ForeignKey, String
+from sqlalchemy.orm import Mapped, mapped_column
+
+from app.infrastructure.orm_base import Base
+
+
+class NotificationRule(Base):
+    """Правило: при событии отправить уведомление через канал."""
+
+    __tablename__ = "notifications_rule"
+
+    event_type: Mapped[str] = mapped_column(
+        String(100), nullable=False, comment="Тип события"
+    )
+    channel: Mapped[str] = mapped_column(
+        String(20), nullable=False, comment="Канал: app, email"
+    )
+    recipient_type: Mapped[str] = mapped_column(
+        String(30), nullable=False, comment="Тип получателя: user, role"
+    )
+    recipient_id: Mapped[int | None] = mapped_column(
+        ForeignKey("accounts_user.id"),
+        nullable=True,
+        comment="ID пользователя (если recipient_type=user)",
+    )
+    role_code: Mapped[str | None] = mapped_column(
+        ForeignKey("accounts_role.code"),
+        nullable=True,
+        comment="Код роли (если recipient_type=role)",
+    )
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, default=True, comment="Правило активно"
+    )
+
+
+
+========================================
+FILE: app/notifications/repository.py
+========================================
+
+
+
+========================================
+FILE: app/notifications/services/dispatcher.py
+========================================
+"""Диспетчер уведомлений — подписчик на события."""
+
+from __future__ import annotations
+
+import logging
+
+from sqlalchemy import select
+
+from app.accounts.models import Role, User
+from app.infrastructure.events import event_bus
+from app.infrastructure.events.event_types import EventTypes
+from app.notifications.adapters import AppAdapter, EmailAdapter
+from app.notifications.models import NotificationRule
+
+logger = logging.getLogger(__name__)
+
+
+class NotificationDispatcher:
+    """При событии читает правила и отправляет уведомления."""
+
+    def __init__(self, session) -> None:
+        self._s = session
+        self._app_adapter = AppAdapter(session)
+        self._email_adapter = EmailAdapter()
+
+    async def handle_event(self, data: dict) -> None:
+        """Обработать событие — найти правила и отправить."""
+        from app.core.database import async_session_factory
+
+        event_type = data.get("_event_type", "")
+
+        async with async_session_factory() as session:
+            self._s = session
+            self._app_adapter = AppAdapter(session)
+
+            # Найти активные правила для события
+            stmt = select(NotificationRule).where(
+                NotificationRule.event_type == event_type,
+                NotificationRule.is_active.is_(True),
+            )
+            rules = list(await session.scalars(stmt))
+
+            for rule in rules:
+                recipients = await self._get_recipients(rule)
+                notification = self._build_notification(event_type, data)
+
+                for recipient in recipients:
+                    if rule.channel == "app":
+                        await self._app_adapter.send(recipient, notification)
+                    elif rule.channel == "email":
+                        await self._email_adapter.send(recipient, notification)
+
+            await session.commit()
+
+    async def _get_recipients(self, rule: NotificationRule) -> list[dict]:
+        """Получить получателей по правилу."""
+        if rule.recipient_type == "user" and rule.recipient_id:
+            user = await self._s.get(User, rule.recipient_id)
+            if user:
+                return [{"user_id": user.id, "email": user.email}]
+
+        elif rule.recipient_type == "role" and rule.role_code:
+            stmt = (
+                select(User)
+                .join(User.roles)
+                .where(Role.code == rule.role_code, User.is_active.is_(True))
+            )
+            users = list(await self._s.scalars(stmt))
+            return [{"user_id": u.id, "email": u.email} for u in users]
+
+        return []
+
+    def _build_notification(self, event_type: str, data: dict) -> dict:
+        """Создать текст уведомления на основе события."""
+        templates = {
+            EventTypes.IMPORT_COMPLETED: {
+                "title": "Импорт завершен",
+                "text": f"Импорт завершен. Успешно: {data.get('success_rows', 0)}, ошибок: {data.get('error_rows', 0)}",
+                "notification_type": "info",
+            },
+            EventTypes.IMPORT_FAILED: {
+                "title": "Ошибка импорта",
+                "text": f"Импорт завершился с ошибкой: {data.get('error', '')}",
+                "notification_type": "error",
+            },
+            EventTypes.DELIVERY_ORDER_CREATED: {
+                "title": "Новая заявка на доставку",
+                "text": f"Создана заявка №{data.get('order_number', '')}",
+                "notification_type": "info",
+            },
+            EventTypes.ROUTE_ASSIGNED: {
+                "title": "Назначен маршрут",
+                "text": f"Вы назначены на маршрут №{data.get('route_number', '')}",
+                "notification_type": "info",
+                "link": f"/routes/{data.get('route_id', '')}",
+            },
+            EventTypes.TASK_COMPLETED: {
+                "title": "Задание выполнено",
+                "text": f"Задание №{data.get('task_id', '')} выполнено",
+                "notification_type": "info",
+            },
+        }
+        return templates.get(
+            event_type,
+            {
+                "title": "Событие",
+                "text": str(data),
+                "notification_type": "system",
+            },
+        )
+
+
+def setup_notification_dispatcher(session=None) -> None:
+    """Подписать диспетчер на все события."""
+    dispatcher = NotificationDispatcher(session)
+
+    event_bus.subscribe(EventTypes.IMPORT_COMPLETED, dispatcher.handle_event)
+    event_bus.subscribe(EventTypes.IMPORT_FAILED, dispatcher.handle_event)
+    event_bus.subscribe(EventTypes.DELIVERY_ORDER_CREATED, dispatcher.handle_event)
+    event_bus.subscribe(EventTypes.ROUTE_ASSIGNED, dispatcher.handle_event)
+    event_bus.subscribe(EventTypes.TASK_COMPLETED, dispatcher.handle_event)
+
+    logger.info("Диспетчер уведомлений подписан на события")
+
+
+
+========================================
+FILE: app/notifications/services/__init__.py
+========================================
+"""Сервисы модуля notifications."""
+
+from app.notifications.services.notification_service import NotificationService
+
+__all__ = ["NotificationService"]
+
+
+
+========================================
+FILE: app/notifications/services/notification_service.py
+========================================
+"""Сервис уведомлений."""
+
+from __future__ import annotations
+
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.notifications.models import Notification
+
+
+class NotificationService:
+    def __init__(self, session: AsyncSession) -> None:
+        self._s = session
+
+    async def create(
+        self,
+        user_id: int,
+        title: str,
+        text: str,
+        notification_type: str = "system",
+        link: str = "",
+    ) -> Notification:
+        notification = Notification(
+            user_id=user_id,
+            title=title,
+            text=text,
+            notification_type=notification_type,
+            link=link,
+        )
+        self._s.add(notification)
+        await self._s.flush()
+        return notification
+
+    async def mark_read(self, notification_id: int) -> Notification | None:
+        notification = await self._s.get(Notification, notification_id)
+        if notification is None:
+            return None
+        from datetime import datetime
+
+        notification.status = "read"
+        notification.read_at = datetime.now().isoformat()
+        await self._s.flush()
+        return notification
+
+    async def mark_all_read(self, user_id: int) -> int:
+        from sqlalchemy import update
+
+        stmt = (
+            update(Notification)
+            .where(
+                Notification.user_id == user_id,
+                Notification.status == "pending",
+            )
+            .values(status="read", read_at=datetime.now().isoformat())
+        )
+        result = await self._s.execute(stmt)
+        return result.rowcount
+
+    async def get_unread(self, user_id: int) -> list[Notification]:
+        stmt = select(Notification).where(
+            Notification.user_id == user_id,
+            Notification.status == "pending",
+        )
+        return list(await self._s.scalars(stmt))
+
+    async def list_by_user(self, user_id: int) -> list[Notification]:
+        stmt = select(Notification).where(
+            Notification.user_id == user_id,
+        )
+        return list(await self._s.scalars(stmt))
+
+
+
+========================================
+FILE: app/orders/__init__.py
+========================================
+"""Модуль заказов."""
+
+from app.orders.models.inbound import InboundOrder, InboundOrderLine
+from app.orders.models.outbound import OutboundOrder, OutboundOrderLine
+from app.orders.models.return_order import ReturnOrder, ReturnOrderLine
+
+__all__ = [
+    "InboundOrder",
+    "InboundOrderLine",
+    "OutboundOrder",
+    "OutboundOrderLine",
+    "ReturnOrder",
+    "ReturnOrderLine",
+]
+
+
+
+========================================
+FILE: app/orders/models/inbound.py
+========================================
+"""Входящие заказы (заявки на приёмку)."""
+
+from __future__ import annotations
+
+from datetime import date
+from decimal import Decimal
+
+from sqlalchemy import Boolean, Date, ForeignKey, Numeric, String, Text
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy import UniqueConstraint
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+from app.parties.models import Client
+from app.warehouse.models import Warehouse
+
+from app.infrastructure.orm_base import Base
+
+
+class InboundOrder(Base):
+    """Заявка на приёмку товара."""
+
+    __tablename__ = "orders_inbound"
+    __table_args__ = (
+        UniqueConstraint("depositor_id", "number", name="uq_inbound_depositor_number"),
+    )
+
+    depositor_id: Mapped[int] = mapped_column(
+        ForeignKey("parties_depositor.id"), nullable=False, comment="Поклажедатель"
+    )
+    warehouse_id: Mapped[int | None] = mapped_column(
+        ForeignKey("warehouse_warehouse.id"), nullable=True, comment="Склад"
+    )
+    number: Mapped[str] = mapped_column(
+        String(100), nullable=False, comment="Номер заявки"
+    )
+    supplier_code: Mapped[str] = mapped_column(
+        String(100), default="", comment="Код поставщика"
+    )
+    supplier_id: Mapped[int | None] = mapped_column(
+        ForeignKey("parties_client.id"), nullable=True, comment="Поставщик"
+    )
+    order_date: Mapped[date] = mapped_column(Date, nullable=False, comment="Дата заявки")
+    planned_date: Mapped[date | None] = mapped_column(
+        Date, nullable=True, comment="Планируемая дата приёмки"
+    )
+    notes: Mapped[str] = mapped_column(Text, default="", comment="Примечания")
+    status: Mapped[str] = mapped_column(
+        String(50), default="new", comment="Статус заявки"
+    )
+    pordrsp_exported: Mapped[bool] = mapped_column(
+        Boolean, default=False, comment="Отклик pordrsp выгружен"
+    )
+    recadv_exported: Mapped[bool] = mapped_column(
+        Boolean, default=False, comment="Подтверждение recadv выгружено"
+    )
+    has_shortage: Mapped[bool] = mapped_column(
+        Boolean, default=False, comment="Есть недогруз"
+    )
+
+    lines: Mapped[list["InboundOrderLine"]] = relationship(back_populates="order")
+    depositor: Mapped["Depositor"] = relationship()
+    warehouse: Mapped["Warehouse | None"] = relationship()
+    supplier: Mapped["Client | None"] = relationship(foreign_keys=[supplier_id])
+
+
+class InboundOrderLine(Base):
+    """Строка заявки на приёмку."""
+
+    __tablename__ = "orders_inbound_line"
+
+    order_id: Mapped[int] = mapped_column(
+        ForeignKey("orders_inbound.id"), nullable=False, comment="Заявка"
+    )
+    product_id: Mapped[int | None] = mapped_column(
+        ForeignKey("warehouse_product.id"), nullable=True, comment="Товар"
+    )
+    quantity: Mapped[Decimal] = mapped_column(
+        Numeric(10, 3), nullable=False, comment="Количество"
+    )
+    batch_number: Mapped[str] = mapped_column(
+        String(100), default="", comment="Номер партии"
+    )
+    manufacture_date: Mapped[date | None] = mapped_column(
+        Date, nullable=True, comment="Дата изготовления"
+    )
+    serial_numbers: Mapped[list] = mapped_column(
+        JSONB, default=list, comment="Серийные номера"
+    )
+
+    order: Mapped["InboundOrder"] = relationship(back_populates="lines")
+    product: Mapped["Product | None"] = relationship()
+
+
+
+========================================
+FILE: app/orders/models/__init__.py
+========================================
+"""Модели заказов."""
+
+from app.orders.models.inbound import InboundOrder, InboundOrderLine
+from app.orders.models.outbound import OutboundOrder, OutboundOrderLine
+from app.orders.models.return_order import ReturnOrder, ReturnOrderLine
+
+__all__ = [
+    "InboundOrder",
+    "InboundOrderLine",
+    "OutboundOrder",
+    "OutboundOrderLine",
+    "ReturnOrder",
+    "ReturnOrderLine",
+]
+
+
+
+========================================
+FILE: app/orders/models/outbound.py
+========================================
+"""Исходящие заказы (заявки на отгрузку)."""
+
+from __future__ import annotations
+
+from datetime import date
+from decimal import Decimal
+from uuid import uuid4
+
+from sqlalchemy import Boolean, Date, ForeignKey, Numeric, String, Text
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy import UniqueConstraint
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.infrastructure.orm_base import Base
+
+
+class OutboundOrder(Base):
+    """Заявка на отгрузку товара."""
+
+    __tablename__ = "orders_outbound"
+    __table_args__ = (
+        UniqueConstraint("depositor_id", "number", name="uq_outbound_depositor_number"),
+    )
+
+    depositor_id: Mapped[int] = mapped_column(
+        ForeignKey("parties_depositor.id"), nullable=False, comment="Поклажедатель"
+    )
+    warehouse_id: Mapped[int | None] = mapped_column(
+        ForeignKey("warehouse_warehouse.id"), nullable=True, comment="Склад"
+    )
+    number: Mapped[str] = mapped_column(
+        String(100), nullable=False, comment="Номер заявки"
+    )
+    customer_code: Mapped[str] = mapped_column(
+        String(100), default="", comment="Код клиента"
+    )
+    customer_name: Mapped[str] = mapped_column(
+        String(255), default="", comment="Наименование клиента"
+    )
+    client_id: Mapped[int | None] = mapped_column(
+        ForeignKey("parties_client.id"), nullable=True, comment="Клиент"
+    )
+    delivery_address_name: Mapped[str] = mapped_column(
+        String(255), default="", comment="Адрес доставки"
+    )
+    order_date: Mapped[date] = mapped_column(Date, nullable=False, comment="Дата заявки")
+    shipping_date: Mapped[date | None] = mapped_column(
+        Date, nullable=True, comment="Планируемая дата отгрузки"
+    )
+    needs_delivery: Mapped[bool] = mapped_column(
+        Boolean, default=False, comment="Нужна доставка"
+    )
+    delivery_only: Mapped[bool] = mapped_column(
+        Boolean, default=False, comment="Только доставка (без склада)"
+    )
+    places_count: Mapped[int | None] = mapped_column(
+        nullable=True, comment="Количество мест"
+    )
+    declared_weight: Mapped[Decimal | None] = mapped_column(
+        Numeric(12, 3), nullable=True, comment="Заявленный вес, кг"
+    )
+    delivery_contact: Mapped[str] = mapped_column(
+        String(255), default="", comment="Контакт для доставки"
+    )
+    notes: Mapped[str] = mapped_column(Text, default="", comment="Примечания")
+    status: Mapped[str] = mapped_column(
+        String(50), default="new", comment="Статус заявки"
+    )
+    ordrsp_exported: Mapped[bool] = mapped_column(
+        Boolean, default=False, comment="Отклик ordrsp выгружен"
+    )
+    desadv_exported: Mapped[bool] = mapped_column(
+        Boolean, default=False, comment="Уведомление desadv выгружено"
+    )
+    zone_id: Mapped[int | None] = mapped_column(
+        ForeignKey("parties_delivery_zone.id"), nullable=True, comment="Зона доставки"
+    )
+    document_number: Mapped[str] = mapped_column(
+        String(100), default="", comment="Номер документа"
+    )
+    is_printed: Mapped[bool] = mapped_column(
+        Boolean, default=False, comment="Документы распечатаны"
+    )
+    uuid: Mapped[str] = mapped_column(
+        String(36), default=lambda: str(uuid4()), unique=True, comment="UUID для QR"
+    )
+    delivery_status: Mapped[str | None] = mapped_column(
+        String(20), nullable=True, comment="Статус доставки"
+    )
+
+    lines: Mapped[list["OutboundOrderLine"]] = relationship(back_populates="order")
+    depositor: Mapped["Depositor"] = relationship()
+    client: Mapped["Client | None"] = relationship()
+    warehouse: Mapped["Warehouse | None"] = relationship()
+
+
+class OutboundOrderLine(Base):
+    """Строка заявки на отгрузку."""
+
+    __tablename__ = "orders_outbound_line"
+
+    order_id: Mapped[int] = mapped_column(
+        ForeignKey("orders_outbound.id"), nullable=False, comment="Заявка"
+    )
+    product_id: Mapped[int | None] = mapped_column(
+        ForeignKey("warehouse_product.id"), nullable=True, comment="Товар"
+    )
+    quantity: Mapped[Decimal] = mapped_column(
+        Numeric(10, 3), nullable=False, comment="Количество"
+    )
+    location_id: Mapped[int | None] = mapped_column(
+        ForeignKey("warehouse_location.id"), nullable=True, comment="Ячейка"
+    )
+    batch_number: Mapped[str] = mapped_column(
+        String(100), default="", comment="Номер партии"
+    )
+    manufacture_date: Mapped[date | None] = mapped_column(
+        Date, nullable=True, comment="Дата изготовления"
+    )
+    serial_numbers: Mapped[list] = mapped_column(
+        JSONB, default=list, comment="Серийные номера"
+    )
+
+    order: Mapped["OutboundOrder"] = relationship(back_populates="lines")
+    product: Mapped["Product | None"] = relationship()
+    location: Mapped["Location | None"] = relationship()
+
+
+
+========================================
+FILE: app/orders/models/return_order.py
+========================================
+"""Возвраты товара."""
+
+from __future__ import annotations
+
+from datetime import date
+from decimal import Decimal
+
+from sqlalchemy import Date, ForeignKey, Numeric, String, Text
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.infrastructure.orm_base import Base
+
+
+class ReturnOrder(Base):
+    """Возврат товара от клиента."""
+
+    __tablename__ = "orders_return"
+
+    outbound_order_id: Mapped[int] = mapped_column(
+        ForeignKey("orders_outbound.id"), nullable=False, comment="Исходный исходящий заказ"
+    )
+    inbound_order_id: Mapped[int | None] = mapped_column(
+        ForeignKey("orders_inbound.id"), nullable=True, comment="Созданный приходный заказ"
+    )
+    depositor_id: Mapped[int] = mapped_column(
+        ForeignKey("parties_depositor.id"), nullable=False, comment="Поклажедатель"
+    )
+    warehouse_id: Mapped[int | None] = mapped_column(
+        ForeignKey("warehouse_warehouse.id"), nullable=True, comment="Склад"
+    )
+    customer_code: Mapped[str] = mapped_column(
+        String(100), default="", comment="Код клиента"
+    )
+    customer_name: Mapped[str] = mapped_column(
+        String(255), default="", comment="Наименование клиента"
+    )
+    return_date: Mapped[date] = mapped_column(Date, nullable=False, comment="Дата возврата")
+    return_type: Mapped[str] = mapped_column(
+        String(20), default="partial", comment="Тип возврата: full, partial"
+    )
+    status: Mapped[str] = mapped_column(
+        String(50), default="new", comment="Статус возврата"
+    )
+    notes: Mapped[str] = mapped_column(Text, default="", comment="Примечания")
+
+    lines: Mapped[list["ReturnOrderLine"]] = relationship(back_populates="return_order")
+
+
+class ReturnOrderLine(Base):
+    """Строка возврата."""
+
+    __tablename__ = "orders_return_line"
+
+    return_order_id: Mapped[int] = mapped_column(
+        ForeignKey("orders_return.id"), nullable=False, comment="Возврат"
+    )
+    outbound_order_line_id: Mapped[int | None] = mapped_column(
+        ForeignKey("orders_outbound_line.id"), nullable=True, comment="Исходная строка"
+    )
+    product_id: Mapped[int] = mapped_column(
+        ForeignKey("warehouse_product.id"), nullable=False, comment="Товар"
+    )
+    qty_returned: Mapped[Decimal] = mapped_column(
+        Numeric(10, 3), nullable=False, comment="Количество возвращаемого товара"
+    )
+    batch_number: Mapped[str] = mapped_column(
+        String(100), default="", comment="Партия"
+    )
+    manufacture_date: Mapped[date | None] = mapped_column(
+        Date, nullable=True, comment="Дата производства"
+    )
+    reason: Mapped[str] = mapped_column(
+        Text, default="", comment="Причина возврата"
+    )
+
+    return_order: Mapped["ReturnOrder"] = relationship(back_populates="lines")
+    product: Mapped["Product"] = relationship()
+
+
+
+========================================
+FILE: app/parties/__init__.py
+========================================
+
+
+
+========================================
+FILE: app/parties/models/address.py
+========================================
+"""Адреса и зоны доставки."""
+
+from __future__ import annotations
+
+from decimal import Decimal
+
+from sqlalchemy import ForeignKey, Numeric, String, Text
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.infrastructure.orm_base import Base
+
+
+class DeliveryZone(Base):
+    """Зона доставки."""
+
+    __tablename__ = "parties_delivery_zone"
+
+    name: Mapped[str] = mapped_column(
+        String(255), unique=True, nullable=False, comment="Название"
+    )
+
+    addresses: Mapped[list["Address"]] = relationship(back_populates="delivery_zone")
+
+    def __repr__(self) -> str:
+        return f"<DeliveryZone(id={self.id}, name={self.name})>"
+
+
+class Address(Base):
+    """Нормализованный адрес."""
+
+    __tablename__ = "parties_address"
+
+    full_address: Mapped[str] = mapped_column(Text, nullable=False, comment="Полный адрес")
+    region: Mapped[str] = mapped_column(String(255), default="", comment="Регион")
+    city: Mapped[str] = mapped_column(String(255), default="", comment="Город")
+    street: Mapped[str] = mapped_column(String(255), default="", comment="Улица")
+    house: Mapped[str] = mapped_column(String(64), default="", comment="Дом")
+    building: Mapped[str] = mapped_column(String(32), default="", comment="Корпус")
+    structure: Mapped[str] = mapped_column(String(32), default="", comment="Строение")
+    flat: Mapped[str] = mapped_column(String(32), default="", comment="Квартира")
+    fias_id: Mapped[str] = mapped_column(String(36), default="", comment="FIAS ID")
+    latitude: Mapped[Decimal | None] = mapped_column(Numeric(9, 6), nullable=True, comment="Широта")
+    longitude: Mapped[Decimal | None] = mapped_column(Numeric(9, 6), nullable=True, comment="Долгота")
+    postal_code: Mapped[str] = mapped_column(String(10), default="", comment="Индекс")
+    delivery_zone_id: Mapped[int | None] = mapped_column(
+        ForeignKey("parties_delivery_zone.id"), nullable=True, comment="Зона доставки"
+    )
+
+    delivery_zone: Mapped[DeliveryZone | None] = relationship(back_populates="addresses")
+    raw_addresses: Mapped[list["RawAddress"]] = relationship(back_populates="normalized_address")
+    legal_entities_registered: Mapped[list["LegalEntity"]] = relationship(
+        foreign_keys="LegalEntity.legal_address_id", 
+    )
+    legal_entities_actual: Mapped[list["LegalEntity"]] = relationship(
+        foreign_keys="LegalEntity.actual_address_id", 
+    )
+
+    def __repr__(self) -> str:
+        return f"<Address(id={self.id}, full_address={self.full_address[:50]})>"
+
+
+class RawAddress(Base):
+    """Сырой адрес до нормализации."""
+
+    __tablename__ = "parties_raw_address"
+
+    raw_text: Mapped[str] = mapped_column(Text, nullable=False, comment="Сырой адрес")
+    hash: Mapped[str] = mapped_column(String(64), unique=True, comment="SHA256 от нормализованного")
+    normalized_address_id: Mapped[int] = mapped_column(
+        ForeignKey("parties_address.id"), nullable=False, comment="Нормализованный адрес"
+    )
+    source: Mapped[str] = mapped_column(String(50), default="", comment="Источник")
+
+    normalized_address: Mapped[Address] = relationship(back_populates="raw_addresses")
+
+    def __repr__(self) -> str:
+        return f"<RawAddress(id={self.id}, raw_text={self.raw_text[:50]})>"
+
+
+
+========================================
+FILE: app/parties/models/client.py
+========================================
+"""Клиент."""
+
+from __future__ import annotations
+
+from sqlalchemy import Boolean, ForeignKey, String, UniqueConstraint
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.infrastructure.orm_base import Base
+
+
+class Client(Base):
+    """Клиент поклажедателя (код + адрес доставки)."""
+
+    __tablename__ = "parties_client"
+    __table_args__ = (
+        UniqueConstraint(
+            "depositor_id", "code", "delivery_address_id",
+            name="uq_client_depositor_code_address"
+        ),
+    )
+
+    depositor_id: Mapped[int] = mapped_column(
+        ForeignKey("parties_depositor.id"), nullable=False, comment="Поклажедатель"
+    )
+    code: Mapped[str] = mapped_column(
+        String(50), nullable=False, comment="Код клиента"
+    )
+    name: Mapped[str] = mapped_column(String(255), nullable=False, comment="Наименование")
+    legal_name: Mapped[str] = mapped_column(
+        String(255), default="", comment="Полное наименование"
+    )
+    inn: Mapped[str] = mapped_column(String(12), default="", comment="ИНН")
+    kpp: Mapped[str] = mapped_column(String(9), default="", comment="КПП")
+    legal_address_id: Mapped[int | None] = mapped_column(
+        ForeignKey("parties_address.id"), nullable=True, comment="Юридический адрес"
+    )
+    delivery_address_id: Mapped[int | None] = mapped_column(
+        ForeignKey("parties_address.id"), nullable=True, comment="Адрес доставки"
+    )
+    is_edo: Mapped[bool] = mapped_column(Boolean, default=False, comment="Признак ЭДО")
+
+    depositor: Mapped["Depositor"] = relationship()
+    legal_address: Mapped["Address | None"] = relationship(foreign_keys=[legal_address_id])
+    delivery_address: Mapped["Address"] = relationship(foreign_keys=[delivery_address_id])
+
+    def __repr__(self) -> str:
+        return f"<Client(id={self.id}, code={self.code})>"
+
+
+
+========================================
+FILE: app/parties/models/contract.py
+========================================
+"""Договор."""
+
+from __future__ import annotations
+
+from datetime import date
+from typing import Any
+
+from sqlalchemy import Date, ForeignKey, JSON, String
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.infrastructure.orm_base import Base
+
+
+class Contract(Base):
+    """Договор между юрлицами."""
+
+    __tablename__ = "parties_contract"
+
+    number: Mapped[str] = mapped_column(String(50), nullable=False, comment="Номер договора")
+    customer_id: Mapped[int] = mapped_column(
+        ForeignKey("parties_legal_entity.id"), nullable=False, comment="Заказчик"
+    )
+    executor_id: Mapped[int] = mapped_column(
+        ForeignKey("parties_legal_entity.id"), nullable=False, comment="Исполнитель"
+    )
+    contract_type: Mapped[str] = mapped_column(
+        String(20), nullable=False, comment="Тип договора"
+    )
+    start_date: Mapped[date] = mapped_column(Date, nullable=False, comment="Дата начала")
+    end_date: Mapped[date | None] = mapped_column(Date, nullable=True, comment="Дата окончания")
+    status: Mapped[str] = mapped_column(String(20), default="active", comment="Статус")
+    terms: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, comment="Условия")
+
+    customer: Mapped["LegalEntity"] = relationship(
+        foreign_keys=[customer_id], 
+    )
+    executor: Mapped["LegalEntity"] = relationship(
+        foreign_keys=[executor_id], 
+    )
+    tariff_documents: Mapped[list["TariffDocument"]] = relationship(back_populates="contract")
+
+    def __repr__(self) -> str:
+        return f"<Contract(id={self.id}, number={self.number})>"
+
+
+
+========================================
+FILE: app/parties/models/counterparty.py
+========================================
+"""Поклажедатель, хранитель, перевозчик."""
+
+from __future__ import annotations
+
+from sqlalchemy import ForeignKey, String
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.infrastructure.orm_base import Base
+
+
+class Depositor(Base):
+    """Поклажедатель."""
+
+    __tablename__ = "parties_depositor"
+
+    legal_entity_id: Mapped[int] = mapped_column(
+        ForeignKey("parties_legal_entity.id"),
+        unique=True,
+        nullable=False,
+        comment="Юрлицо",
+    )
+    code: Mapped[str] = mapped_column(
+        String(50), default="", comment="Код поклажедателя"
+    )
+
+    def __repr__(self) -> str:
+        return f"<Depositor(id={self.id}, code={self.code})>"
+
+
+class Keeper(Base):
+    """Хранитель."""
+
+    __tablename__ = "parties_keeper"
+
+    legal_entity_id: Mapped[int] = mapped_column(
+        ForeignKey("parties_legal_entity.id"),
+        unique=True,
+        nullable=False,
+        comment="Юрлицо",
+    )
+
+    def __repr__(self) -> str:
+        return f"<Keeper(id={self.id})>"
+
+
+class Carrier(Base):
+    """Перевозчик."""
+
+    __tablename__ = "parties_carrier"
+
+    legal_entity_id: Mapped[int] = mapped_column(
+        ForeignKey("parties_legal_entity.id"),
+        unique=True,
+        nullable=False,
+        comment="Юрлицо",
+    )
+
+    def __repr__(self) -> str:
+        return f"<Carrier(id={self.id})>"
+
+
+
+========================================
+FILE: app/parties/models/__init__.py
+========================================
+"""Модели модуля parties."""
+
+from app.parties.models.address import Address, RawAddress, DeliveryZone
+from app.parties.models.legal_entity import LegalEntity
+from app.parties.models.counterparty import Depositor, Keeper, Carrier
+from app.parties.models.client import Client
+from app.parties.models.contract import Contract
+from app.parties.models.tariff import TariffDocument, Tariff
+
+__all__ = [
+    "Address",
+    "RawAddress",
+    "DeliveryZone",
+    "LegalEntity",
+    "Depositor",
+    "Keeper",
+    "Carrier",
+    "Client",
+        "Contract",
+    "TariffDocument",
+    "Tariff",
+]
+
+
+
+========================================
+FILE: app/parties/models/legal_entity.py
+========================================
+"""Юридическое лицо."""
+
+from __future__ import annotations
+
+from sqlalchemy import ForeignKey, String
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.infrastructure.orm_base import Base
+
+
+class LegalEntity(Base):

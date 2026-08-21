@@ -1,0 +1,3500 @@
+========================================
+FILE: app/accounts/__init__.py
+========================================
+
+
+
+========================================
+FILE: app/accounts/models/audit.py
+========================================
+"""Модель аудита."""
+
+from __future__ import annotations
+
+from typing import Any
+
+from sqlalchemy import ForeignKey, String
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.orm import Mapped, mapped_column
+
+from app.infrastructure.orm_base import Base
+
+
+class Audit(Base):
+    """Журнал действий пользователей."""
+
+    __tablename__ = "accounts_audit"
+
+    user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("accounts_user.id"), nullable=True, comment="Пользователь"
+    )
+    action: Mapped[str] = mapped_column(String(20), comment="Действие")
+    entity_type: Mapped[str] = mapped_column(String(100), comment="Тип сущности")
+    entity_id: Mapped[str | None] = mapped_column(
+        String(36), nullable=True, comment="ID сущности"
+    )
+    changes: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, default=dict, comment="Изменения"
+    )
+    ip_address: Mapped[str] = mapped_column(String(45), default="", comment="IP адрес")
+    user_agent: Mapped[str] = mapped_column(
+        String(500), default="", comment="User Agent"
+    )
+
+
+
+========================================
+FILE: app/accounts/models/__init__.py
+========================================
+"""Модели модуля accounts."""
+
+from app.accounts.models.user import User
+from app.accounts.models.role import Role, user_roles
+from app.accounts.models.audit import Audit
+from app.accounts.models.user_settings import UserSettings
+from app.accounts.models.user_table_settings import UserTableSettings
+from app.accounts.models.user_list_preset import UserListPreset
+from app.accounts.models.user_depositor import UserDepositor
+
+__all__ = [
+    "User",
+    "Role",
+    "user_roles",
+    "Audit",
+    "UserSettings",
+    "UserTableSettings",
+    "UserListPreset",
+    "UserDepositor",
+    ]
+
+
+
+========================================
+FILE: app/accounts/models/role.py
+========================================
+"""Модель роли."""
+
+from __future__ import annotations
+
+from typing import Any
+
+from sqlalchemy import Column, ForeignKey, String, Table
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.infrastructure.orm_base import Base
+
+# Связующая таблица многие-ко-многим
+user_roles = Table(
+    "accounts_user_roles",
+    Base.metadata,
+    Column("user_id", ForeignKey("accounts_user.id"), primary_key=True),
+    Column("role_id", ForeignKey("accounts_role.id"), primary_key=True),
+)
+
+
+class Role(Base):
+    """Роль пользователя."""
+
+    __tablename__ = "accounts_role"
+
+    name: Mapped[str] = mapped_column(String(100), unique=True, comment="Название")
+    code: Mapped[str] = mapped_column(String(50), unique=True, comment="Код")
+    permissions: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, default=dict, comment="Права"
+    )
+
+    users: Mapped[list["User"]] = relationship(
+        secondary=user_roles,
+        back_populates="roles",
+    )
+
+
+
+========================================
+FILE: app/accounts/models/user_depositor.py
+========================================
+"""Привязка пользователя к поклажедателю."""
+
+from __future__ import annotations
+
+from sqlalchemy import ForeignKey, UniqueConstraint
+from sqlalchemy.orm import Mapped, mapped_column
+
+from app.infrastructure.orm_base import Base
+
+
+class UserDepositor(Base):
+    """Пользователь имеет доступ к поклажедателю."""
+
+    __tablename__ = "accounts_user_depositor"
+    __table_args__ = (
+        UniqueConstraint("user_id", "depositor_id", name="uq_user_depositor"),
+    )
+
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("accounts_user.id"), nullable=False, comment="Пользователь"
+    )
+    depositor_id: Mapped[int] = mapped_column(
+        ForeignKey("parties_depositor.id"), nullable=False, comment="Поклажедатель"
+    )
+
+
+
+========================================
+FILE: app/accounts/models/user_list_preset.py
+========================================
+"""Пресеты списков пользователя."""
+
+from __future__ import annotations
+
+from typing import Any
+
+from sqlalchemy import Boolean, ForeignKey, String, UniqueConstraint
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.orm import Mapped, mapped_column
+
+from app.infrastructure.orm_base import Base
+
+
+class UserListPreset(Base):
+    """Именованный пресет списка."""
+
+    __tablename__ = "accounts_user_list_presets"
+    __table_args__ = (
+        UniqueConstraint("user_id", "table_id", "name", name="uq_user_preset_name"),
+    )
+
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("accounts_user.id"), nullable=False, comment="Пользователь"
+    )
+    table_id: Mapped[str] = mapped_column(
+        String(50), comment="Идентификатор сущности (entity_key)"
+    )
+    name: Mapped[str] = mapped_column(
+        String(255), nullable=False, comment="Название пресета"
+    )
+    config: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, default=dict, comment="Конфигурация пресета"
+    )
+    is_default: Mapped[bool] = mapped_column(
+        Boolean, default=False, comment="Пресет по умолчанию"
+    )
+
+
+
+========================================
+FILE: app/accounts/models/user.py
+========================================
+"""Модель пользователя."""
+
+from __future__ import annotations
+
+from typing import Any
+
+from sqlalchemy import Boolean, String
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.infrastructure.orm_base import Base
+
+
+class User(Base):
+    """Пользователь системы."""
+
+    __tablename__ = "accounts_user"
+
+    username: Mapped[str] = mapped_column(
+        String(64), unique=True, index=True, comment="Имя пользователя"
+    )
+    password_hash: Mapped[str] = mapped_column(String(255), comment="Хэш пароля")
+    phone: Mapped[str] = mapped_column(String(20), default="", comment="Телефон")
+    email: Mapped[str] = mapped_column(String(255), default="", comment="Email")
+    is_superuser: Mapped[bool] = mapped_column(
+        Boolean, default=False, comment="Суперпользователь"
+    )
+    extra_permissions: Mapped[dict[str, list[str]]] = mapped_column(
+        JSONB,
+        default=dict,
+        comment="Дополнительные права пользователя",
+    )
+
+    roles: Mapped[list["Role"]] = relationship(
+        secondary="accounts_user_roles",
+        back_populates="users",
+    )
+
+    def has_permission(self, action: str, entity: str) -> bool:
+        """
+        Проверка права пользователя.
+
+        Args:
+            action: Действие (view, create, update, delete, approve, execute, complete)
+            entity: Сущность/модуль (products, documents, delivery, users, ...)
+
+        Returns:
+            True, если право есть
+        """
+        # Суперпользователь имеет все права
+        if self.is_superuser:
+            return True
+
+        # Проверяем личные дополнительные права
+        if self._has_extra_permission(action, entity):
+            return True
+
+        # Проверяем права ролей
+        for role in self.roles:
+            if self._has_role_permission(role, action, entity):
+                return True
+
+        return False
+
+    def _has_extra_permission(self, action: str, entity: str) -> bool:
+        """Проверка личных прав пользователя."""
+        if not self.extra_permissions:
+            return False
+
+        allowed_actions = self.extra_permissions.get(entity, [])
+        return action in allowed_actions
+
+    def _has_role_permission(self, role: "Role", action: str, entity: str) -> bool:
+        """Проверка прав роли."""
+        permissions = role.permissions or {}
+        allowed_actions = permissions.get(entity, [])
+        return action in allowed_actions
+
+    def get_all_permissions(self) -> dict[str, list[str]]:
+        """
+        Возвращает все права пользователя (объединение ролей и личных).
+
+        Returns:
+            Словарь вида: {"products": ["view", "create"], ...}
+        """
+        if self.is_superuser:
+            return {"all": ["all"]}
+
+        result: dict[str, list[str]] = {}
+
+        # Собираем права из ролей
+        for role in self.roles:
+            permissions = role.permissions or {}
+            for entity, actions in permissions.items():
+                if entity not in result:
+                    result[entity] = []
+                for action in actions:
+                    if action not in result[entity]:
+                        result[entity].append(action)
+
+        # Добавляем личные права
+        if self.extra_permissions:
+            for entity, actions in self.extra_permissions.items():
+                if entity not in result:
+                    result[entity] = []
+                for action in actions:
+                    if action not in result[entity]:
+                        result[entity].append(action)
+
+        return result
+
+    def has_group_access(self, entity: str) -> bool:
+        """
+        Проверка доступа к группе (модулю).
+
+        Args:
+            entity: Модуль (products, documents, delivery, ...)
+
+        Returns:
+            True, если есть хоть какое-то право на модуль
+        """
+        if self.is_superuser:
+            return True
+
+        # Проверяем личные права
+        if self.extra_permissions and entity in self.extra_permissions:
+            return bool(self.extra_permissions[entity])
+
+        # Проверяем роли
+        for role in self.roles:
+            permissions = role.permissions or {}
+            if entity in permissions and permissions[entity]:
+                return True
+
+        return False
+
+
+
+========================================
+FILE: app/accounts/models/user_settings.py
+========================================
+"""Настройки интерфейса пользователя."""
+
+from __future__ import annotations
+
+from sqlalchemy import ForeignKey, String
+from sqlalchemy.orm import Mapped, mapped_column
+
+from app.infrastructure.orm_base import Base
+
+
+class UserSettings(Base):
+    """Настройки интерфейса пользователя."""
+
+    __tablename__ = "accounts_user_settings"
+
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("accounts_user.id"),
+        unique=True,
+        nullable=False,
+        comment="Пользователь",
+    )
+    menu_style: Mapped[str] = mapped_column(
+        String(10), default="top", comment="Стиль меню"
+    )
+    theme: Mapped[str] = mapped_column(String(10), default="light", comment="Тема")
+    density: Mapped[str] = mapped_column(
+        String(15), default="compact", comment="Плотность"
+    )
+    font_size: Mapped[str] = mapped_column(
+        String(10), default="small", comment="Размер шрифта"
+    )
+
+
+
+========================================
+FILE: app/accounts/models/user_table_settings.py
+========================================
+"""Настройки таблиц пользователя."""
+
+from __future__ import annotations
+
+from typing import Any
+
+from sqlalchemy import ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.orm import Mapped, mapped_column
+
+from app.infrastructure.orm_base import Base
+
+
+class UserTableSettings(Base):
+    """Настройки таблиц пользователя."""
+
+    __tablename__ = "accounts_user_table_settings"
+    __table_args__ = (
+        UniqueConstraint("user_id", "table_id", name="uq_user_table_settings"),
+    )
+
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("accounts_user.id"), nullable=False, comment="Пользователь"
+    )
+    table_id: Mapped[str] = mapped_column(
+        String(50), comment="Идентификатор сущности (entity_key)"
+    )
+    columns_order: Mapped[list[str]] = mapped_column(
+        JSONB, default=list, comment="Порядок колонок"
+    )
+    hidden_columns: Mapped[list[str]] = mapped_column(
+        JSONB, default=list, comment="Скрытые колонки"
+    )
+    column_widths: Mapped[dict[str, int]] = mapped_column(
+        JSONB, default=dict, comment="Ширины колонок"
+    )
+    page_size: Mapped[int] = mapped_column(
+        Integer, default=50, comment="Размер страницы"
+    )
+    default_ordering: Mapped[str] = mapped_column(
+        String(50), default="-created_at", comment="Сортировка"
+    )
+    filters: Mapped[dict[str, str]] = mapped_column(
+        JSONB, default=dict, comment="Фильтры"
+    )
+    exclude_filters: Mapped[dict[str, list[str]]] = mapped_column(
+        JSONB, default=dict, comment="Исключения фильтров"
+    )
+    sort: Mapped[dict[str, Any] | None] = mapped_column(
+        JSONB, nullable=True, comment="Сортировка (column, direction)"
+    )
+    quick_filters: Mapped[list[str]] = mapped_column(
+        JSONB, default=list, comment="Быстрые фильтры"
+    )
+
+
+
+========================================
+FILE: app/accounts/repository_list.py
+========================================
+"""Репозитории для настроек списков и пресетов."""
+
+from __future__ import annotations
+
+from sqlalchemy import select, update
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.accounts.models import UserListPreset, UserTableSettings
+
+
+class TableSettingsRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self._s = session
+
+    async def get_by_user_and_table(
+        self, user_id: int, table_id: str
+    ) -> UserTableSettings | None:
+        stmt = select(UserTableSettings).where(
+            UserTableSettings.user_id == user_id,
+            UserTableSettings.table_id == table_id,
+        )
+        return await self._s.scalar(stmt)
+
+    async def create(self, user_id: int, table_id: str, **fields) -> UserTableSettings:
+        settings = UserTableSettings(user_id=user_id, table_id=table_id, **fields)
+        self._s.add(settings)
+        await self._s.flush()
+        return settings
+
+    async def update(
+        self, user_id: int, table_id: str, **fields
+    ) -> UserTableSettings | None:
+        settings = await self.get_by_user_and_table(user_id, table_id)
+        if settings is None:
+            return None
+        for key, value in fields.items():
+            setattr(settings, key, value)
+        await self._s.flush()
+        return settings
+
+    async def delete(self, user_id: int, table_id: str) -> bool:
+        settings = await self.get_by_user_and_table(user_id, table_id)
+        if settings is None:
+            return False
+        await self._s.delete(settings)
+        await self._s.flush()
+        return True
+
+
+class ListPresetRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self._s = session
+
+    async def list_by_user_and_table(
+        self, user_id: int, table_id: str
+    ) -> list[UserListPreset]:
+        stmt = (
+            select(UserListPreset)
+            .where(
+                UserListPreset.user_id == user_id,
+                UserListPreset.table_id == table_id,
+            )
+            .order_by(UserListPreset.name)
+        )
+        return list(await self._s.scalars(stmt))
+
+    async def get_by_id(self, preset_id: int) -> UserListPreset | None:
+        return await self._s.get(UserListPreset, preset_id)
+
+    async def create(self, **fields) -> UserListPreset:
+        preset = UserListPreset(**fields)
+        self._s.add(preset)
+        await self._s.flush()
+        return preset
+
+    async def update(self, preset_id: int, **fields) -> UserListPreset | None:
+        preset = await self.get_by_id(preset_id)
+        if preset is None:
+            return None
+        for key, value in fields.items():
+            setattr(preset, key, value)
+        await self._s.flush()
+        return preset
+
+    async def delete(self, preset_id: int) -> bool:
+        preset = await self.get_by_id(preset_id)
+        if preset is None:
+            return False
+        await self._s.delete(preset)
+        await self._s.flush()
+        return True
+
+    async def clear_default(self, user_id: int, table_id: str) -> None:
+        stmt = (
+            update(UserListPreset)
+            .where(
+                UserListPreset.user_id == user_id,
+                UserListPreset.table_id == table_id,
+            )
+            .values(is_default=False)
+        )
+        await self._s.execute(stmt)
+        await self._s.flush()
+
+
+
+========================================
+FILE: app/accounts/repository.py
+========================================
+"""Репозиторий для модуля accounts."""
+
+from __future__ import annotations
+
+from sqlalchemy import or_, select
+from sqlalchemy.orm import selectinload
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.accounts.models import Audit, Role, User, UserSettings, UserTableSettings
+
+
+class UserRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self._s = session
+
+    async def get_by_id(self, user_id: int) -> User | None:
+        stmt = select(User).where(User.id == user_id).options(selectinload(User.roles))
+        return await self._s.scalar(stmt)
+
+    async def get_by_username(self, username: str) -> User | None:
+        stmt = select(User).where(User.username == username).options(selectinload(User.roles))
+        return await self._s.scalar(stmt)
+
+    async def create(self, **kwargs) -> User:
+        user = User(**kwargs)
+        self._s.add(user)
+        await self._s.flush()
+        await self._s.refresh(user)
+        return user
+
+    async def list_all(self) -> list[User]:
+        stmt = select(User).where()
+        return list(await self._s.scalars(stmt))
+
+    async def update(self, user_id: int, **kwargs) -> User | None:
+        user = await self._s.get(User, user_id)
+        if user is None:
+            return None
+        for field, value in kwargs.items():
+            setattr(user, field, value)
+        await self._s.flush()
+        return user
+
+
+class RoleRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self._s = session
+
+    async def get_by_id(self, role_id: int) -> Role | None:
+        return await self._s.get(Role, role_id)
+
+    async def get_by_code(self, code: str) -> Role | None:
+        stmt = select(Role).where(Role.code == code)
+        return await self._s.scalar(stmt)
+
+    async def create(self, **kwargs) -> Role:
+        role = Role(**kwargs)
+        self._s.add(role)
+        await self._s.flush()
+        return role
+
+    async def list_all(self) -> list[Role]:
+        stmt = select(Role).where()
+        return list(await self._s.scalars(stmt))
+
+    async def update(self, role_id: int, **kwargs) -> Role | None:
+        role = await self._s.get(Role, role_id)
+        if role is None:
+            return None
+        for field, value in kwargs.items():
+            setattr(role, field, value)
+        await self._s.flush()
+        return role
+
+
+class AuditRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self._s = session
+
+    async def create(self, **kwargs) -> Audit:
+        audit = Audit(**kwargs)
+        self._s.add(audit)
+        await self._s.flush()
+        return audit
+
+    async def list_by_user(self, user_id: int, limit: int = 100) -> list[Audit]:
+        stmt = select(Audit).where(Audit.user_id == user_id).order_by(Audit.created_at.desc()).limit(limit)
+        return list(await self._s.scalars(stmt))
+
+
+class UserSettingsRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self._s = session
+
+    async def get_by_user(self, user_id: int) -> UserSettings | None:
+        stmt = select(UserSettings).where(UserSettings.user_id == user_id)
+        return await self._s.scalar(stmt)
+
+    async def get_or_create(self, user_id: int) -> UserSettings:
+        settings = await self.get_by_user(user_id)
+        if settings:
+            return settings
+        settings = UserSettings(user_id=user_id)
+        self._s.add(settings)
+        await self._s.flush()
+        return settings
+
+    async def update(self, user_id: int, **kwargs) -> UserSettings | None:
+        settings = await self.get_by_user(user_id)
+        if settings is None:
+            return None
+        for field, value in kwargs.items():
+            setattr(settings, field, value)
+        await self._s.flush()
+        return settings
+
+
+class UserTableSettingsRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self._s = session
+
+    async def get_by_user_and_table(self, user_id: int, table_id: str) -> UserTableSettings | None:
+        stmt = select(UserTableSettings).where(
+            UserTableSettings.user_id == user_id,
+            UserTableSettings.table_id == table_id,
+        )
+        return await self._s.scalar(stmt)
+
+    async def get_or_create(self, user_id: int, table_id: str) -> UserTableSettings:
+        settings = await self.get_by_user_and_table(user_id, table_id)
+        if settings:
+            return settings
+        settings = UserTableSettings(user_id=user_id, table_id=table_id)
+        self._s.add(settings)
+        await self._s.flush()
+        return settings
+
+    async def update(self, user_id: int, table_id: str, **kwargs) -> UserTableSettings | None:
+        settings = await self.get_by_user_and_table(user_id, table_id)
+        if settings is None:
+            return None
+        for field, value in kwargs.items():
+            setattr(settings, field, value)
+        await self._s.flush()
+        return settings
+
+
+
+========================================
+FILE: app/accounts/services/audit_service.py
+========================================
+"""Сервис аудита."""
+
+from __future__ import annotations
+
+from app.accounts.models import Audit
+from app.accounts.repository import AuditRepository
+
+
+class AuditService:
+    def __init__(self, repo: AuditRepository) -> None:
+        self._repo = repo
+
+    async def log(
+        self,
+        user_id: int | None,
+        action: str,
+        entity_type: str,
+        entity_id: str | None = None,
+        changes: dict | None = None,
+        request=None,
+    ) -> Audit:
+        return await self._repo.create(
+            user_id=user_id,
+            action=action,
+            entity_type=entity_type,
+            entity_id=str(entity_id) if entity_id else None,
+            changes=changes or {},
+            ip_address=request.headers.get("x-forwarded-for", "") if request else "",
+            user_agent=request.headers.get("user-agent", "") if request else "",
+        )
+
+    async def list_by_user(self, user_id: int, limit: int = 100) -> list[Audit]:
+        return await self._repo.list_by_user(user_id, limit)
+
+
+
+========================================
+FILE: app/accounts/services/__init__.py
+========================================
+"""Сервисы модуля accounts."""
+
+from app.accounts.services.user_service import UserService
+from app.accounts.services.role_service import RoleService
+from app.accounts.services.audit_service import AuditService
+from app.accounts.services.table_settings_service import TableSettingsService
+
+__all__ = [
+    "UserService",
+    "RoleService",
+    "AuditService",
+    "TableSettingsService",
+]
+
+
+
+========================================
+FILE: app/accounts/services/list_settings_service.py
+========================================
+"""Сервис настроек списков и пресетов."""
+
+from __future__ import annotations
+
+from app.accounts.models import UserListPreset, UserTableSettings
+from app.accounts.repository_list import ListPresetRepository, TableSettingsRepository
+from app.core.list_defaults import get_default_prefs, merge_with_defaults
+
+
+class ListSettingsService:
+    def __init__(
+        self,
+        settings_repo: TableSettingsRepository,
+        preset_repo: ListPresetRepository,
+    ) -> None:
+        self._settings = settings_repo
+        self._presets = preset_repo
+
+    async def get_settings(self, user_id: int, entity_key: str) -> dict:
+        """Получить настройки пользователя или заводские."""
+        settings = await self._settings.get_by_user_and_table(user_id, entity_key)
+        if settings is None:
+            return get_default_prefs(entity_key)
+
+        return merge_with_defaults(self._to_prefs(settings), entity_key)
+
+    async def get_defaults(self, entity_key: str) -> dict:
+        """Получить заводские настройки."""
+        return get_default_prefs(entity_key)
+
+    async def save_settings(self, user_id: int, entity_key: str, prefs: dict) -> dict:
+        """Сохранить настройки пользователя."""
+        fields = self._from_prefs(prefs)
+        settings = await self._settings.update(user_id, entity_key, **fields)
+        if settings is None:
+            settings = await self._settings.create(user_id, entity_key, **fields)
+        return self._to_prefs(settings)
+
+    async def delete_settings(self, user_id: int, entity_key: str) -> bool:
+        """Удалить настройки пользователя."""
+        return await self._settings.delete(user_id, entity_key)
+
+    async def list_presets(self, user_id: int, entity_key: str) -> list[UserListPreset]:
+        """Список пресетов."""
+        return await self._presets.list_by_user_and_table(user_id, entity_key)
+
+    async def create_preset(
+        self, user_id: int, entity_key: str, name: str, config: dict, is_default: bool
+    ) -> UserListPreset:
+        """Создать пресет."""
+        if is_default:
+            await self._presets.clear_default(user_id, entity_key)
+        return await self._presets.create(
+            user_id=user_id,
+            table_id=entity_key,
+            name=name,
+            config=config,
+            is_default=is_default,
+        )
+
+    async def update_preset(
+        self, preset_id: int, user_id: int, entity_key: str, **fields
+    ) -> UserListPreset | None:
+        """Обновить пресет."""
+        if fields.get("is_default"):
+            await self._presets.clear_default(user_id, entity_key)
+        return await self._presets.update(preset_id, **fields)
+
+    async def delete_preset(self, preset_id: int) -> bool:
+        """Удалить пресет."""
+        return await self._presets.delete(preset_id)
+
+    async def apply_preset(self, user_id: int, entity_key: str, preset_id: int) -> dict:
+        """Применить пресет как текущие настройки."""
+        preset = await self._presets.get_by_id(preset_id)
+        if preset is None:
+            raise ValueError("Пресет не найден")
+        return await self.save_settings(user_id, entity_key, preset.config)
+
+    async def set_default(self, user_id: int, entity_key: str, preset_id: int) -> UserListPreset | None:
+        """Установить пресет по умолчанию."""
+        preset = await self._presets.get_by_id(preset_id)
+        if preset is None:
+            return None
+        await self._presets.clear_default(user_id, entity_key)
+        return await self._presets.update(preset_id, is_default=True)
+
+    def _to_prefs(self, settings: UserTableSettings) -> dict:
+        """Модель → prefs dict."""
+        return {
+            "order": settings.columns_order or [],
+            "hidden": settings.hidden_columns or [],
+            "widths": settings.column_widths or {},
+            "filters": settings.filters or {},
+            "exclude_filters": settings.exclude_filters or {},
+            "sort": settings.sort,
+            "quick_filters": settings.quick_filters or [],
+        }
+
+    def _from_prefs(self, prefs: dict) -> dict:
+        """prefs dict → поля модели."""
+        return {
+            "columns_order": prefs.get("order", []),
+            "hidden_columns": prefs.get("hidden", []),
+            "column_widths": prefs.get("widths", {}),
+            "filters": prefs.get("filters", {}),
+            "exclude_filters": prefs.get("exclude_filters", {}),
+            "sort": prefs.get("sort"),
+            "quick_filters": prefs.get("quick_filters", []),
+        }
+
+
+
+========================================
+FILE: app/accounts/services/role_service.py
+========================================
+"""Сервис ролей."""
+
+from __future__ import annotations
+
+from app.accounts.models import Role
+from app.accounts.repository import RoleRepository
+
+
+class RoleService:
+    def __init__(self, repo: RoleRepository) -> None:
+        self._repo = repo
+
+    async def create(self, name: str, code: str, permissions: dict | None = None) -> Role:
+        existing = await self._repo.get_by_code(code)
+        if existing:
+            raise ValueError(f"Роль с кодом {code} уже существует")
+
+        return await self._repo.create(
+            name=name,
+            code=code,
+            permissions=permissions or {},
+        )
+
+    async def get_by_id(self, role_id: int) -> Role | None:
+        return await self._repo.get_by_id(role_id)
+
+    async def list_all(self) -> list[Role]:
+        return await self._repo.list_all()
+
+    async def update_permissions(self, role_id: int, permissions: dict) -> Role | None:
+        return await self._repo.update(role_id, permissions=permissions)
+
+    async def has_permission(self, role: Role, permission_code: str) -> bool:
+        return permission_code in role.permissions
+
+
+
+========================================
+FILE: app/accounts/services/table_settings_service.py
+========================================
+"""Сервис настроек таблиц."""
+
+from __future__ import annotations
+
+from app.accounts.models import UserTableSettings
+from app.accounts.repository import UserTableSettingsRepository
+
+
+class TableSettingsService:
+    def __init__(self, repo: UserTableSettingsRepository) -> None:
+        self._repo = repo
+
+    async def get_or_create(self, user_id: int, table_id: str) -> UserTableSettings:
+        return await self._repo.get_or_create(user_id, table_id)
+
+    async def get_columns_order(self, user_id: int, table_id: str) -> list[str]:
+        settings = await self.get_or_create(user_id, table_id)
+        return settings.columns_order or []
+
+    async def get_hidden_columns(self, user_id: int, table_id: str) -> list[str]:
+        settings = await self.get_or_create(user_id, table_id)
+        return settings.hidden_columns or []
+
+    async def get_column_widths(self, user_id: int, table_id: str) -> dict[str, int]:
+        settings = await self.get_or_create(user_id, table_id)
+        return settings.column_widths or {}
+
+    async def update(self, user_id: int, table_id: str, **fields) -> UserTableSettings | None:
+        return await self._repo.update(user_id, table_id, **fields)
+
+
+
+========================================
+FILE: app/accounts/services/user_service.py
+========================================
+"""Сервис пользователей."""
+
+from __future__ import annotations
+
+from app.accounts.models import User
+from app.accounts.repository import UserRepository
+from app.core.security import hash_password, verify_password
+
+
+class UserService:
+    def __init__(self, repo: UserRepository) -> None:
+        self._repo = repo
+
+    async def create(self, username: str, password: str, **kwargs) -> User:
+        existing = await self._repo.get_by_username(username)
+        if existing:
+            raise ValueError("Пользователь уже существует")
+
+        return await self._repo.create(
+            username=username,
+            password_hash=hash_password(password),
+            **kwargs,
+        )
+
+    async def authenticate(self, username: str, password: str) -> User | None:
+        user = await self._repo.get_by_username(username)
+        if user is None:
+            return None
+        if not user.is_active:
+            return None
+        if not verify_password(password, user.password_hash):
+            return None
+        return user
+
+    async def get_by_id(self, user_id: int) -> User | None:
+        return await self._repo.get_by_id(user_id)
+
+    async def list_all(self) -> list[User]:
+        return await self._repo.list_all()
+
+    async def update(self, user_id: int, **kwargs) -> User | None:
+        if "password" in kwargs:
+            kwargs["password_hash"] = hash_password(kwargs.pop("password"))
+        return await self._repo.update(user_id, **kwargs)
+
+    async def soft_delete(self, user_id: int, actor_id: int | None = None) -> bool:
+        user = await self._repo.get_by_id(user_id)
+        if not user:
+            return False
+        user.soft_delete(actor_id)
+        await self._repo._s.flush()
+        return True
+
+
+
+========================================
+FILE: app/api/deps.py
+========================================
+"""Общие зависимости для API."""
+
+from __future__ import annotations
+
+from typing import Annotated
+
+from fastapi import Depends, Query
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.accounts.models import User
+from app.core.dependencies import get_current_user, get_current_user_id, get_session
+from app.core.exceptions import ForbiddenError
+
+# ========== Базовые зависимости ==========
+
+# Сессия БД с автоматическим commit/rollback
+SessionDep = Annotated[AsyncSession, Depends(get_session)]
+
+# ID текущего пользователя (None, если не авторизован)
+UserDep = Annotated[int | None, Depends(get_current_user_id)]
+
+# Текущий пользователь (объект User, требует авторизации)
+CurrentUser = Annotated[User, Depends(get_current_user)]
+
+
+# ========== Пагинация ==========
+
+class PaginationParams:
+    """Параметры пагинации для list-роутов."""
+
+    def __init__(
+        self,
+        limit: int = Query(50, ge=1, le=500, description="Количество записей"),
+        offset: int = Query(0, ge=0, description="Смещение"),
+    ) -> None:
+        self.limit = limit
+        self.offset = offset
+
+
+# ========== Проверка прав ==========
+
+def require_permission(action: str, entity: str):
+    """
+    Проверка конкретного права.
+
+    Args:
+        action: Действие (view, create, update, delete, approve, execute, complete)
+        entity: Модуль (products, documents, delivery, users, ...)
+
+    Returns:
+        Зависимость FastAPI для проверки права
+    """
+    async def checker(current_user: CurrentUser) -> User:
+        if not current_user.has_permission(action, entity):
+            raise ForbiddenError(f"Нет права: {action}:{entity}")
+        return current_user
+
+    return checker
+
+
+def require_group(entity: str):
+    """
+    Проверка доступа к модулю (группе).
+
+    Args:
+        entity: Модуль (products, documents, delivery, ...)
+
+    Returns:
+        Зависимость FastAPI для проверки доступа к модулю
+    """
+    async def checker(current_user: CurrentUser) -> User:
+        if not current_user.has_group_access(entity):
+            raise ForbiddenError(f"Нет доступа к модулю: {entity}")
+        return current_user
+
+    return checker
+
+
+
+========================================
+FILE: app/api/__init__.py
+========================================
+
+
+
+========================================
+FILE: app/api/v1/accounts/__init__.py
+========================================
+
+
+
+========================================
+FILE: app/api/v1/accounts/routes_list.py
+========================================
+"""API для настроек списков и пресетов."""
+
+from __future__ import annotations
+
+from fastapi import APIRouter, Depends, status
+
+from app.accounts.repository_list import ListPresetRepository, TableSettingsRepository
+from app.accounts.services.list_settings_service import ListSettingsService
+from app.api.deps import SessionDep, UserDep
+from app.api.v1.accounts.schemas_list import (
+    PresetCreate,
+    PresetRead,
+    PresetUpdate,
+    TableSettingsRead,
+    TableSettingsUpdate,
+)
+from app.core.exceptions import ConflictError, NotFoundError, UnauthorizedError
+
+router = APIRouter(tags=["list-settings"])
+
+
+def get_service(session: SessionDep) -> ListSettingsService:
+    return ListSettingsService(
+        TableSettingsRepository(session),
+        ListPresetRepository(session),
+    )
+
+
+# ========== Настройки ==========
+
+@router.get("/table-settings/{entity_key}", response_model=TableSettingsRead)
+async def get_table_settings(
+    entity_key: str,
+    session: SessionDep,
+    user_id: UserDep,
+) -> TableSettingsRead:
+    if user_id is None:
+        raise UnauthorizedError("Не авторизован")
+    service = get_service(session)
+    prefs = await service.get_settings(user_id, entity_key)
+    return TableSettingsRead(prefs=prefs)
+
+
+@router.get("/table-settings/{entity_key}/defaults", response_model=TableSettingsRead)
+async def get_table_settings_defaults(
+    entity_key: str,
+) -> TableSettingsRead:
+    service = get_service(None)
+    prefs = service.get_defaults(entity_key)
+    return TableSettingsRead(prefs=prefs)
+
+
+@router.put("/table-settings/{entity_key}", response_model=TableSettingsRead)
+async def put_table_settings(
+    entity_key: str,
+    body: TableSettingsUpdate,
+    session: SessionDep,
+    user_id: UserDep,
+) -> TableSettingsRead:
+    if user_id is None:
+        raise UnauthorizedError("Не авторизован")
+    service = get_service(session)
+    prefs = await service.save_settings(user_id, entity_key, body.prefs.model_dump())
+    return TableSettingsRead(prefs=prefs)
+
+
+@router.delete("/table-settings/{entity_key}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_table_settings(
+    entity_key: str,
+    session: SessionDep,
+    user_id: UserDep,
+) -> None:
+    if user_id is None:
+        raise UnauthorizedError("Не авторизован")
+    service = get_service(session)
+    await service.delete_settings(user_id, entity_key)
+
+
+# ========== Пресеты ==========
+
+@router.get("/list-presets/{entity_key}", response_model=list[PresetRead])
+async def list_presets(
+    entity_key: str,
+    session: SessionDep,
+    user_id: UserDep,
+) -> dict:
+    if user_id is None:
+        raise UnauthorizedError("Не авторизован")
+    service = get_service(session)
+    presets = await service.list_presets(user_id, entity_key)
+    return [PresetRead.model_validate(p) for p in presets]
+
+
+@router.post("/list-presets/{entity_key}", status_code=status.HTTP_201_CREATED)
+async def create_preset(
+    entity_key: str,
+    body: PresetCreate,
+    session: SessionDep,
+    user_id: UserDep,
+) -> PresetRead:
+    if user_id is None:
+        raise UnauthorizedError("Не авторизован")
+    service = get_service(session)
+    preset = await service.create_preset(
+        user_id, entity_key, body.name, body.config, body.is_default
+    )
+    return PresetRead.model_validate(preset)
+
+
+@router.put("/list-presets/{entity_key}/{preset_id}")
+async def update_preset(
+    entity_key: str,
+    preset_id: int,
+    body: PresetUpdate,
+    session: SessionDep,
+    user_id: UserDep,
+) -> PresetRead:
+    if user_id is None:
+        raise UnauthorizedError("Не авторизован")
+    service = get_service(session)
+    preset = await service.update_preset(
+        preset_id, user_id, entity_key, **body.model_dump(exclude_unset=True)
+    )
+    if preset is None:
+        raise NotFoundError("Пресет не найден")
+    return PresetRead.model_validate(preset)
+
+
+@router.delete("/list-presets/{entity_key}/{preset_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_preset(
+    entity_key: str,
+    preset_id: int,
+    session: SessionDep,
+    user_id: UserDep,
+) -> None:
+    if user_id is None:
+        raise UnauthorizedError("Не авторизован")
+    service = get_service(session)
+    ok = await service.delete_preset(preset_id)
+    if not ok:
+        raise NotFoundError("Пресет не найден")
+
+
+@router.post("/list-presets/{entity_key}/{preset_id}/apply")
+async def apply_preset(
+    entity_key: str,
+    preset_id: int,
+    session: SessionDep,
+    user_id: UserDep,
+) -> TableSettingsRead:
+    if user_id is None:
+        raise UnauthorizedError("Не авторизован")
+    service = get_service(session)
+    try:
+        prefs = await service.apply_preset(user_id, entity_key, preset_id)
+    except ValueError as e:
+        raise NotFoundError(str(e)) from e
+    return TableSettingsRead(prefs=prefs)
+
+
+@router.post("/list-presets/{entity_key}/{preset_id}/set-default")
+async def set_default_preset(
+    entity_key: str,
+    preset_id: int,
+    session: SessionDep,
+    user_id: UserDep,
+) -> PresetRead:
+    if user_id is None:
+        raise UnauthorizedError("Не авторизован")
+    service = get_service(session)
+    preset = await service.set_default(user_id, entity_key, preset_id)
+    if preset is None:
+        raise NotFoundError("Пресет не найден")
+    return PresetRead.model_validate(preset)
+
+
+
+========================================
+FILE: app/api/v1/accounts/routes_permissions.py
+========================================
+"""API для управления правами пользователей."""
+
+from __future__ import annotations
+
+from fastapi import APIRouter, Depends, status
+
+from app.accounts.repository import UserRepository
+from app.api.deps import CurrentUser, SessionDep, require_permission
+from app.api.v1.accounts.schemas_permissions import (
+    AvailablePermissionsRead,
+    UserPermissionsRead,
+    UserPermissionsUpdate,
+)
+from app.core.exceptions import NotFoundError
+
+router = APIRouter(tags=["permissions"])
+
+# Список всех модулей (entity)
+AVAILABLE_MODULES = [
+    "users",
+    "roles",
+    "audit",
+    "addresses",
+    "legal_entities",
+    "depositors",
+    "clients",
+    "contracts",
+    "tariffs",
+    "products",
+    "batches",
+    "lpns",
+    "stock",
+    "tasks",
+    "documents",
+    "delivery",
+    "drivers",
+    "vehicles",
+    "routes",
+    "notifications",
+    "integrations",
+    "files",
+]
+
+# Список всех действий (action)
+AVAILABLE_ACTIONS = [
+    "view",
+    "create",
+    "update",
+    "delete",
+    "execute",
+    "complete",
+    "approve",
+    "cancel",
+]
+
+
+@router.get(
+    "/permissions/available",
+    response_model=AvailablePermissionsRead,
+    dependencies=[Depends(require_permission("view", "roles"))],
+)
+async def get_available_permissions() -> AvailablePermissionsRead:
+    """Получить список всех доступных модулей и действий."""
+    return AvailablePermissionsRead(
+        modules=AVAILABLE_MODULES,
+        actions=AVAILABLE_ACTIONS,
+    )
+
+
+@router.get(
+    "/users/{user_id}/permissions",
+    response_model=UserPermissionsRead,
+    dependencies=[Depends(require_permission("view", "users"))],
+)
+async def get_user_permissions(
+    user_id: int,
+    session: SessionDep,
+) -> UserPermissionsRead:
+    """Получить права пользователя."""
+    repo = UserRepository(session)
+    user = await repo.get_by_id(user_id)
+    if user is None:
+        raise NotFoundError("Пользователь не найден")
+
+    return UserPermissionsRead(
+        user_id=user.id,
+        permissions=user.get_all_permissions(),
+        is_superuser=user.is_superuser,
+        extra_permissions=user.extra_permissions or {},
+    )
+
+
+@router.put(
+    "/users/{user_id}/permissions",
+    response_model=UserPermissionsRead,
+    dependencies=[Depends(require_permission("update", "users"))],
+)
+async def update_user_permissions(
+    user_id: int,
+    body: UserPermissionsUpdate,
+    session: SessionDep,
+    current_user: CurrentUser,
+) -> UserPermissionsRead:
+    """Обновить extra_permissions пользователя."""
+    repo = UserRepository(session)
+    user = await repo.get_by_id(user_id)
+    if user is None:
+        raise NotFoundError("Пользователь не найден")
+
+    # Нельзя менять права суперпользователю
+    if user.is_superuser and not current_user.is_superuser:
+        from app.core.exceptions import ForbiddenError
+        raise ForbiddenError("Нельзя менять права суперпользователя")
+
+    # Обновляем extra_permissions
+    user.extra_permissions = body.extra_permissions
+    user.updated_by_id = current_user.id
+    await session.flush()
+
+    return UserPermissionsRead(
+        user_id=user.id,
+        permissions=user.get_all_permissions(),
+        is_superuser=user.is_superuser,
+        extra_permissions=user.extra_permissions or {},
+    )
+
+
+
+========================================
+FILE: app/api/v1/accounts/routes.py
+========================================
+"""API для модуля accounts."""
+
+from __future__ import annotations
+
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, status
+from fastapi.security import OAuth2PasswordRequestForm
+
+from app.accounts.repository import (
+    AuditRepository,
+    RoleRepository,
+    UserRepository,
+    UserSettingsRepository,
+    UserTableSettingsRepository,
+)
+from app.accounts.services import (
+    AuditService,
+    RoleService,
+    TableSettingsService,
+    UserService,
+)
+from app.api.deps import CurrentUser, SessionDep, UserDep, require_permission
+from app.api.v1.accounts import schemas
+from app.core.exceptions import ConflictError, NotFoundError, UnauthorizedError
+from app.core.security import create_access_token
+
+router = APIRouter(tags=["accounts"])
+
+
+# ========== Auth ==========
+
+
+@router.post("/auth/token", response_model=schemas.TokenResponse)
+async def login(
+    session: SessionDep,
+    form: Annotated[OAuth2PasswordRequestForm, Depends()],
+) -> schemas.TokenResponse:
+    service = UserService(UserRepository(session))
+    user = await service.authenticate(form.username, form.password)
+    if user is None:
+        raise UnauthorizedError("Неверное имя пользователя или пароль")
+    token = create_access_token(user.id, user.username)
+    return schemas.TokenResponse(access_token=token)
+
+
+@router.post(
+    "/auth/register",
+    response_model=schemas.UserRead,
+    status_code=status.HTTP_201_CREATED,
+)
+async def register(
+    body: schemas.UserCreate,
+    session: SessionDep,
+) -> schemas.UserRead:
+    service = UserService(UserRepository(session))
+    try:
+        user = await service.create(
+            username=body.username,
+            password=body.password,
+            phone=body.phone,
+            email=body.email,
+        )
+    except ValueError as e:
+        raise ConflictError(str(e)) from e
+    return schemas.UserRead.model_validate(user)
+
+
+@router.get("/auth/me")
+async def me(
+    user: CurrentUser,
+) -> dict:
+    return {
+        "id": user.id,
+        "username": user.username,
+        "phone": user.phone,
+        "email": user.email,
+        "is_superuser": user.is_superuser,
+        "is_active": user.is_active,
+        "permissions": user.get_all_permissions(),
+    }
+
+
+# ========== Users ==========
+
+
+@router.get(
+    "/users",
+    response_model=list[schemas.UserRead],
+    dependencies=[Depends(require_permission("view", "users"))],
+)
+async def list_users(session: SessionDep) -> list[schemas.UserRead]:
+    service = UserService(UserRepository(session))
+    users = await service.list_all()
+    return [schemas.UserRead.model_validate(u) for u in users]
+
+
+@router.get(
+    "/users/{user_id}",
+    response_model=schemas.UserRead,
+    dependencies=[Depends(require_permission("view", "users"))],
+)
+async def get_user(user_id: int, session: SessionDep) -> schemas.UserRead:
+    service = UserService(UserRepository(session))
+    user = await service.get_by_id(user_id)
+    if user is None:
+        raise NotFoundError("Пользователь не найден")
+    return schemas.UserRead.model_validate(user)
+
+
+@router.patch(
+    "/users/{user_id}",
+    response_model=schemas.UserRead,
+    dependencies=[Depends(require_permission("update", "users"))],
+)
+async def update_user(
+    user_id: int,
+    body: schemas.UserUpdate,
+    session: SessionDep,
+) -> schemas.UserRead:
+    service = UserService(UserRepository(session))
+    user = await service.update(user_id, **body.model_dump(exclude_unset=True))
+    if user is None:
+        raise NotFoundError("Пользователь не найден")
+    return schemas.UserRead.model_validate(user)
+
+
+# ========== Roles ==========
+
+
+@router.get(
+    "/roles",
+    response_model=list[schemas.RoleRead],
+    dependencies=[Depends(require_permission("view", "roles"))],
+)
+async def list_roles(session: SessionDep) -> list[schemas.RoleRead]:
+    service = RoleService(RoleRepository(session))
+    roles = await service.list_all()
+    return [schemas.RoleRead.model_validate(r) for r in roles]
+
+
+@router.get(
+    "/roles/{role_id}",
+    response_model=schemas.RoleRead,
+    dependencies=[Depends(require_permission("view", "roles"))],
+)
+async def get_role(role_id: int, session: SessionDep) -> schemas.RoleRead:
+    service = RoleService(RoleRepository(session))
+    role = await service.get_by_id(role_id)
+    if role is None:
+        raise NotFoundError("Роль не найдена")
+    return schemas.RoleRead.model_validate(role)
+
+
+@router.post(
+    "/roles",
+    response_model=schemas.RoleRead,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_permission("create", "roles"))],
+)
+async def create_role(
+    body: schemas.RoleCreate,
+    session: SessionDep,
+) -> schemas.RoleRead:
+    service = RoleService(RoleRepository(session))
+    try:
+        role = await service.create(body.name, body.code, body.permissions)
+    except ValueError as e:
+        raise ConflictError(str(e)) from e
+    return schemas.RoleRead.model_validate(role)
+
+
+@router.delete(
+    "/roles/{role_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_permission("delete", "roles"))],
+)
+async def delete_role(role_id: int, session: SessionDep, current_user: CurrentUser) -> None:
+    from app.accounts.models import Role
+    role = await session.get(Role, role_id)
+    if role is None:
+        raise NotFoundError("Роль не найдена")
+    role.soft_delete(current_user.id)
+    await session.flush()
+
+
+@router.patch(
+    "/roles/{role_id}/permissions",
+    response_model=schemas.RoleRead,
+    dependencies=[Depends(require_permission("update", "roles"))],
+)
+async def update_role_permissions(
+    role_id: int,
+    body: schemas.RolePermissionsUpdate,
+    session: SessionDep,
+) -> schemas.RoleRead:
+    service = RoleService(RoleRepository(session))
+    role = await service.update_permissions(role_id, body.permissions)
+    if role is None:
+        raise NotFoundError("Роль не найдена")
+    return schemas.RoleRead.model_validate(role)
+
+
+# ========== Audit ==========
+
+
+@router.get(
+    "/audit",
+    response_model=list[schemas.AuditRead],
+    dependencies=[Depends(require_permission("view", "audit"))],
+)
+async def list_audit(
+    session: SessionDep,
+    user_id: int | None = None,
+) -> list[schemas.AuditRead]:
+    service = AuditService(AuditRepository(session))
+    if user_id:
+        rows = await service.list_by_user(user_id)
+    else:
+        from app.accounts.models import Audit
+        from sqlalchemy import select as sa_select
+        rows = list(await session.scalars(
+            sa_select(Audit).order_by(Audit.created_at.desc()).limit(100)
+        ))
+    return [schemas.AuditRead.model_validate(r) for r in rows]
+
+
+@router.post(
+    "/audit",
+    response_model=schemas.AuditRead,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_permission("create", "audit"))],
+)
+async def create_audit(
+    body: schemas.AuditCreate,
+    session: SessionDep,
+    user_id: UserDep,
+) -> schemas.AuditRead:
+    service = AuditService(AuditRepository(session))
+    audit = await service.log(
+        user_id=user_id,
+        action=body.action,
+        entity_type=body.entity_type,
+        entity_id=body.entity_id,
+        changes=body.changes,
+    )
+    return schemas.AuditRead.model_validate(audit)
+
+
+@router.patch(
+    "/audit/{audit_id}",
+    response_model=schemas.AuditRead,
+    dependencies=[Depends(require_permission("update", "audit"))],
+)
+async def update_audit(
+    audit_id: int,
+    body: schemas.AuditUpdate,
+    session: SessionDep,
+    user_id: UserDep,
+) -> schemas.AuditRead:
+    from app.accounts.models import Audit
+    audit = await session.get(Audit, audit_id)
+    if audit is None:
+        raise NotFoundError("Запись аудита не найдена")
+    for field, value in body.model_dump(exclude_unset=True).items():
+        setattr(audit, field, value)
+    audit.updated_by_id = user_id
+    await session.flush()
+    return schemas.AuditRead.model_validate(audit)
+
+
+@router.delete(
+    "/audit/{audit_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_permission("delete", "audit"))],
+)
+async def delete_audit(
+    audit_id: int,
+    session: SessionDep,
+    user_id: UserDep,
+) -> None:
+    from app.accounts.models import Audit
+    audit = await session.get(Audit, audit_id)
+    if audit is None:
+        raise NotFoundError("Запись аудита не найдена")
+    audit.soft_delete(user_id)
+    await session.flush()
+
+
+@router.get(
+    "/audit/{audit_id}",
+    response_model=schemas.AuditRead,
+    dependencies=[Depends(require_permission("view", "audit"))],
+)
+async def get_audit(
+    audit_id: int,
+    session: SessionDep,
+) -> schemas.AuditRead:
+    from app.accounts.models import Audit
+
+    audit = await session.get(Audit, audit_id)
+    if audit is None:
+        raise NotFoundError("Запись аудита не найдена")
+    return schemas.AuditRead.model_validate(audit)
+
+
+
+========================================
+FILE: app/api/v1/accounts/routes_user_settings.py
+========================================
+"""API для настроек пользователя и привязок к поклажедателю."""
+
+from __future__ import annotations
+
+from fastapi import APIRouter, Depends, status
+from sqlalchemy import select
+
+from app.accounts.models import UserDepositor, UserSettings
+from app.api.deps import SessionDep, UserDep, require_permission
+from app.core.exceptions import ConflictError, NotFoundError
+
+router = APIRouter(tags=["user-settings"])
+
+
+# ========== Настройки пользователя ==========
+
+@router.get("/user-settings", dependencies=[Depends(require_permission("view", "users"))])
+async def list_user_settings(session: SessionDep):
+    rows = list(await session.scalars(select(UserSettings)))
+    return [
+        {
+            "id": s.id,
+            "user_id": s.user_id,
+            "menu_style": s.menu_style,
+            "theme": s.theme,
+            "density": s.density,
+            "font_size": s.font_size,
+            "is_active": s.is_active,
+            "is_deleted": s.is_deleted,
+            "created_at": s.created_at,
+            "updated_at": s.updated_at,
+        }
+        for s in rows
+    ]
+
+
+@router.post("/user-settings", status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_permission("create", "users"))])
+async def create_user_settings(body: dict, session: SessionDep, user_id: UserDep):
+    existing = await session.scalar(
+        select(UserSettings).where(UserSettings.user_id == body["user_id"])
+    )
+    if existing:
+        raise ConflictError("Настройки для пользователя уже существуют")
+
+    settings = UserSettings(
+        user_id=body["user_id"],
+        menu_style=body.get("menu_style", "top"),
+        theme=body.get("theme", "light"),
+        density=body.get("density", "compact"),
+        font_size=body.get("font_size", "small"),
+        created_by_id=user_id,
+        updated_by_id=user_id,
+    )
+    session.add(settings)
+    await session.flush()
+    return {"id": settings.id}
+
+
+@router.get("/user-settings/{settings_id}", dependencies=[Depends(require_permission("view", "users"))])
+async def get_user_settings(settings_id: int, session: SessionDep):
+    s = await session.get(UserSettings, settings_id)
+    if s is None:
+        raise NotFoundError("Настройки не найдены")
+    return {
+        "id": s.id,
+        "user_id": s.user_id,
+        "menu_style": s.menu_style,
+        "theme": s.theme,
+        "density": s.density,
+        "font_size": s.font_size,
+        "is_active": s.is_active,
+        "is_deleted": s.is_deleted,
+        "created_at": s.created_at,
+        "updated_at": s.updated_at,
+    }
+
+
+@router.patch("/user-settings/{settings_id}", dependencies=[Depends(require_permission("update", "users"))])
+async def update_user_settings(settings_id: int, body: dict, session: SessionDep, user_id: UserDep):
+    s = await session.get(UserSettings, settings_id)
+    if s is None:
+        raise NotFoundError("Настройки не найдены")
+    for field in ["menu_style", "theme", "density", "font_size"]:
+        if field in body:
+            setattr(s, field, body[field])
+    s.updated_by_id = user_id
+    await session.flush()
+    return {"id": s.id}
+
+
+@router.delete("/user-settings/{settings_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_permission("delete", "users"))])
+async def delete_user_settings(settings_id: int, session: SessionDep, user_id: UserDep):
+    s = await session.get(UserSettings, settings_id)
+    if s is None:
+        raise NotFoundError("Настройки не найдены")
+    s.soft_delete(user_id)
+    await session.flush()
+
+
+# ========== Привязки к поклажедателю ==========
+
+@router.get("/user-depositors", dependencies=[Depends(require_permission("view", "users"))])
+async def list_user_depositors(session: SessionDep, user_id: int | None = None):
+    stmt = select(UserDepositor)
+    if user_id:
+        stmt = stmt.where(UserDepositor.user_id == user_id)
+    rows = list(await session.scalars(stmt))
+    return [
+        {
+            "id": ud.id,
+            "user_id": ud.user_id,
+            "depositor_id": ud.depositor_id,
+            "is_active": ud.is_active,
+            "is_deleted": ud.is_deleted,
+            "created_at": ud.created_at,
+            "updated_at": ud.updated_at,
+        }
+        for ud in rows
+    ]
+
+
+@router.post("/user-depositors", status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_permission("create", "users"))])
+async def create_user_depositor(body: dict, session: SessionDep, user_id: UserDep):
+    existing = await session.scalar(
+        select(UserDepositor).where(
+            UserDepositor.user_id == body["user_id"],
+            UserDepositor.depositor_id == body["depositor_id"],
+        )
+    )
+    if existing:
+        raise ConflictError("Привязка уже существует")
+
+    ud = UserDepositor(
+        user_id=body["user_id"],
+        depositor_id=body["depositor_id"],
+        created_by_id=user_id,
+        updated_by_id=user_id,
+    )
+    session.add(ud)
+    await session.flush()
+    return {"id": ud.id}
+
+
+@router.get("/user-depositors/{ud_id}", dependencies=[Depends(require_permission("view", "users"))])
+async def get_user_depositor(ud_id: int, session: SessionDep):
+    ud = await session.get(UserDepositor, ud_id)
+    if ud is None:
+        raise NotFoundError("Привязка не найдена")
+    return {
+        "id": ud.id,
+        "user_id": ud.user_id,
+        "depositor_id": ud.depositor_id,
+        "is_active": ud.is_active,
+        "is_deleted": ud.is_deleted,
+        "created_at": ud.created_at,
+        "updated_at": ud.updated_at,
+    }
+
+
+@router.patch("/user-depositors/{ud_id}", dependencies=[Depends(require_permission("update", "users"))])
+async def update_user_depositor(ud_id: int, body: dict, session: SessionDep, user_id: UserDep):
+    ud = await session.get(UserDepositor, ud_id)
+    if ud is None:
+        raise NotFoundError("Привязка не найдена")
+    for field in ["user_id", "depositor_id"]:
+        if field in body:
+            setattr(ud, field, body[field])
+    ud.updated_by_id = user_id
+    await session.flush()
+    return {"id": ud.id}
+
+
+@router.delete("/user-depositors/{ud_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_permission("delete", "users"))])
+async def delete_user_depositor(ud_id: int, session: SessionDep, user_id: UserDep):
+    ud = await session.get(UserDepositor, ud_id)
+    if ud is None:
+        raise NotFoundError("Привязка не найдена")
+    ud.soft_delete(user_id)
+    await session.flush()
+
+
+
+========================================
+FILE: app/api/v1/accounts/schemas_list.py
+========================================
+"""Схемы для настроек списков и пресетов."""
+
+from __future__ import annotations
+
+from datetime import datetime
+from typing import Any
+
+from pydantic import BaseModel, ConfigDict, Field
+
+
+class ListPrefs(BaseModel):
+    """Настройки списка."""
+
+    order: list[str] = Field(default_factory=list)
+    hidden: list[str] = Field(default_factory=list)
+    widths: dict[str, int] = Field(default_factory=dict)
+    filters: dict[str, str] = Field(default_factory=dict)
+    exclude_filters: dict[str, list[str]] = Field(default_factory=dict)
+    sort: dict[str, Any] | None = None
+    quick_filters: list[str] = Field(default_factory=list)
+
+
+class TableSettingsRead(BaseModel):
+    """Ответ API — обёртка prefs."""
+
+    prefs: ListPrefs
+
+
+class TableSettingsUpdate(BaseModel):
+    """Обновление настроек таблицы."""
+
+    prefs: ListPrefs
+
+
+class PresetRead(BaseModel):
+    """Пресет списка."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    config: dict[str, Any] = Field(default_factory=dict)
+    is_default: bool = False
+    created_at: datetime
+    updated_at: datetime
+
+
+class PresetCreate(BaseModel):
+    """Создание пресета."""
+
+    name: str = Field(min_length=1, max_length=255)
+    config: dict[str, Any] = Field(default_factory=dict)
+    is_default: bool = False
+
+
+class PresetUpdate(BaseModel):
+    """Обновление пресета."""
+
+    name: str | None = Field(default=None, min_length=1, max_length=255)
+    config: dict[str, Any] | None = None
+    is_default: bool | None = None
+
+
+
+========================================
+FILE: app/api/v1/accounts/schemas_permissions.py
+========================================
+"""Схемы для управления правами."""
+
+from __future__ import annotations
+
+from pydantic import BaseModel, Field
+
+
+class UserPermissionsRead(BaseModel):
+    """Права пользователя."""
+
+    user_id: int
+    permissions: dict[str, list[str]] = Field(default_factory=dict)
+    is_superuser: bool = False
+    extra_permissions: dict[str, list[str]] = Field(default_factory=dict)
+
+
+class UserPermissionsUpdate(BaseModel):
+    """Обновление extra_permissions пользователя."""
+
+    extra_permissions: dict[str, list[str]] = Field(default_factory=dict)
+
+
+class AvailablePermissionsRead(BaseModel):
+    """Список доступных модулей и действий."""
+
+    modules: list[str] = Field(default_factory=list)
+    actions: list[str] = Field(default_factory=list)
+
+
+
+========================================
+FILE: app/api/v1/accounts/schemas.py
+========================================
+"""Схемы для модуля accounts."""
+
+from __future__ import annotations
+
+from pydantic import BaseModel, ConfigDict, Field
+
+from app.api.v1.base_schemas import BaseRead
+
+
+class UserRead(BaseRead):
+    username: str
+    phone: str = ""
+    email: str = ""
+    is_superuser: bool = False
+    extra_permissions: dict = Field(default_factory=dict)
+
+
+class UserCreate(BaseModel):
+    username: str = Field(min_length=1, max_length=64)
+    password: str = Field(min_length=8, max_length=128)
+    phone: str = ""
+    email: str = ""
+
+
+class UserUpdate(BaseModel):
+    phone: str | None = None
+    email: str | None = None
+    is_active: bool | None = None
+
+
+class RoleRead(BaseRead):
+    name: str
+    code: str
+    permissions: dict = Field(default_factory=dict)
+
+
+class RoleCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+    code: str = Field(min_length=1, max_length=50)
+    permissions: dict = Field(default_factory=dict)
+
+
+class RolePermissionsUpdate(BaseModel):
+    permissions: dict = Field(default_factory=dict)
+
+
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+
+class AuditRead(BaseRead):
+    user_id: int | None
+    action: str
+    entity_type: str
+    entity_id: str | None
+    changes: dict = Field(default_factory=dict)
+    ip_address: str = ""
+    user_agent: str = ""
+
+
+class AuditCreate(BaseModel):
+    action: str
+    entity_type: str
+    entity_id: str | None = None
+    changes: dict = Field(default_factory=dict)
+
+
+class AuditUpdate(BaseModel):
+    action: str | None = None
+    entity_type: str | None = None
+    entity_id: str | None = None
+    changes: dict | None = None
+
+
+class TableSettingsData(BaseModel):
+    order: list[str] = Field(default_factory=list)
+    hidden: list[str] = Field(default_factory=list)
+    widths: dict[str, int] = Field(default_factory=dict)
+
+
+class TableSettingsRead(BaseModel):
+    prefs: TableSettingsData | None = None
+
+
+class TableSettingsUpdate(BaseModel):
+    order: list[str] = Field(default_factory=list)
+    hidden: list[str] = Field(default_factory=list)
+    widths: dict[str, int] = Field(default_factory=dict)
+
+
+
+========================================
+FILE: app/api/v1/base_schemas.py
+========================================
+"""Базовые схемы для API."""
+
+from __future__ import annotations
+
+from datetime import datetime
+
+from pydantic import BaseModel, ConfigDict
+
+
+class BaseRead(BaseModel):
+    """Базовая схема для чтения — все поля модели."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    is_active: bool = True
+    is_deleted: bool = False
+    created_at: datetime
+    updated_at: datetime
+    created_by_id: int | None = None
+    updated_by_id: int | None = None
+    deleted_at: datetime | None = None
+    deleted_by_id: int | None = None
+
+
+
+========================================
+FILE: app/api/v1/delivery/__init__.py
+========================================
+
+
+
+========================================
+FILE: app/api/v1/delivery/routes_deviations_lines.py
+========================================
+"""API для отклонений и строк маршрутов."""
+
+from __future__ import annotations
+
+from fastapi import APIRouter, Depends, status
+from sqlalchemy import select
+
+from app.api.deps import SessionDep, UserDep, require_permission
+from app.core.exceptions import NotFoundError
+from app.delivery.models import DeliveryDeviation, RouteLine
+from app.infrastructure.events import event_bus
+from app.infrastructure.events.event_types import EventTypes
+
+router = APIRouter(tags=["delivery-deviations-lines"])
+
+
+# ========== Отклонения ==========
+
+@router.get(
+    "/deviations",
+    response_model=list[dict],
+    dependencies=[Depends(require_permission("view", "delivery"))],
+)
+async def list_deviations(
+    session: SessionDep,
+    delivery_order_id: int | None = None,
+) -> list[dict]:
+    stmt = select(DeliveryDeviation)
+    if delivery_order_id:
+        stmt = stmt.where(DeliveryDeviation.delivery_order_id == delivery_order_id)
+    rows = list(await session.scalars(stmt))
+    return [
+        {
+            "id": d.id,
+            "delivery_order_id": d.delivery_order_id,
+            "deviation_type": d.deviation_type,
+            "quantity": d.quantity,
+            "description": d.description,
+            "is_active": d.is_active,
+            "is_deleted": d.is_deleted,
+            "created_at": d.created_at,
+            "updated_at": d.updated_at,
+            "created_by_id": d.created_by_id,
+            "updated_by_id": d.updated_by_id,
+            "deleted_at": d.deleted_at,
+            "deleted_by_id": d.deleted_by_id,
+        }
+        for d in rows
+    ]
+
+
+@router.post(
+    "/deviations",
+    response_model=dict,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_permission("create", "delivery"))],
+)
+async def create_deviation(
+    body: dict,
+    session: SessionDep,
+    user_id: UserDep,
+) -> dict:
+    deviation = DeliveryDeviation(
+        delivery_order_id=body["delivery_order_id"],
+        deviation_type=body["deviation_type"],
+        quantity=body.get("quantity", 0),
+        description=body.get("description", ""),
+        created_by_id=user_id,
+        updated_by_id=user_id,
+    )
+    session.add(deviation)
+    await session.flush()
+    return {"id": deviation.id}
+
+
+@router.get(
+    "/deviations/{deviation_id}",
+    response_model=dict,
+    dependencies=[Depends(require_permission("view", "delivery"))],
+)
+async def get_deviation(deviation_id: int, session: SessionDep) -> dict:
+    d = await session.get(DeliveryDeviation, deviation_id)
+    if d is None:
+        raise NotFoundError("Отклонение не найдено")
+    return {
+        "id": d.id,
+        "delivery_order_id": d.delivery_order_id,
+        "deviation_type": d.deviation_type,
+        "quantity": d.quantity,
+        "description": d.description,
+        "is_active": d.is_active,
+        "is_deleted": d.is_deleted,
+        "created_at": d.created_at,
+        "updated_at": d.updated_at,
+        "created_by_id": d.created_by_id,
+        "updated_by_id": d.updated_by_id,
+        "deleted_at": d.deleted_at,
+        "deleted_by_id": d.deleted_by_id,
+    }
+
+
+@router.patch(
+    "/deviations/{deviation_id}",
+    response_model=dict,
+    dependencies=[Depends(require_permission("update", "delivery"))],
+)
+async def update_deviation(
+    deviation_id: int,
+    body: dict,
+    session: SessionDep,
+    user_id: UserDep,
+) -> dict:
+    d = await session.get(DeliveryDeviation, deviation_id)
+    if d is None:
+        raise NotFoundError("Отклонение не найдено")
+    for field in ["deviation_type", "quantity", "description"]:
+        if field in body:
+            setattr(d, field, body[field])
+    d.updated_by_id = user_id
+    await session.flush()
+    return {"id": d.id}
+
+
+@router.delete(
+    "/deviations/{deviation_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_permission("delete", "delivery"))],
+)
+async def delete_deviation(
+    deviation_id: int,
+    session: SessionDep,
+    user_id: UserDep,
+) -> None:
+    d = await session.get(DeliveryDeviation, deviation_id)
+    if d is None:
+        raise NotFoundError("Отклонение не найдено")
+    d.soft_delete(user_id)
+    await session.flush()
+
+
+# ========== Строки маршрута ==========
+
+@router.get(
+    "/route-lines",
+    response_model=list[dict],
+    dependencies=[Depends(require_permission("view", "routes"))],
+)
+async def list_route_lines(
+    session: SessionDep,
+    route_id: int | None = None,
+) -> list[dict]:
+    stmt = select(RouteLine)
+    if route_id:
+        stmt = stmt.where(RouteLine.route_id == route_id)
+    rows = list(await session.scalars(stmt))
+    return [
+        {
+            "id": rl.id,
+            "route_id": rl.route_id,
+            "delivery_order_id": rl.delivery_order_id,
+            "order": rl.order,
+            "planned_time": rl.planned_time,
+            "actual_time": rl.actual_time,
+            "status": rl.status,
+            "is_active": rl.is_active,
+            "is_deleted": rl.is_deleted,
+            "created_at": rl.created_at,
+            "updated_at": rl.updated_at,
+            "created_by_id": rl.created_by_id,
+            "updated_by_id": rl.updated_by_id,
+            "deleted_at": rl.deleted_at,
+            "deleted_by_id": rl.deleted_by_id,
+        }
+        for rl in rows
+    ]
+
+
+@router.post(
+    "/route-lines",
+    response_model=dict,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_permission("create", "routes"))],
+)
+async def create_route_line(
+    body: dict,
+    session: SessionDep,
+    user_id: UserDep,
+) -> dict:
+    rl = RouteLine(
+        route_id=body["route_id"],
+        delivery_order_id=body["delivery_order_id"],
+        order=body.get("order", 0),
+        planned_time=body.get("planned_time"),
+        actual_time=body.get("actual_time"),
+        status=body.get("status", "pending"),
+        created_by_id=user_id,
+        updated_by_id=user_id,
+    )
+    session.add(rl)
+    await session.flush()
+
+    # Отправить событие о назначении маршрута
+    await event_bus.emit(EventTypes.ROUTE_ASSIGNED, {
+        "_event_type": EventTypes.ROUTE_ASSIGNED,
+        "route_id": rl.route_id,
+        "route_number": rl.route_id,
+        "delivery_order_id": rl.delivery_order_id,
+    })
+
+    return {"id": rl.id}
+
+
+@router.get(
+    "/route-lines/{line_id}",
+    response_model=dict,
+    dependencies=[Depends(require_permission("view", "routes"))],
+)
+async def get_route_line(line_id: int, session: SessionDep) -> dict:
+    rl = await session.get(RouteLine, line_id)
+    if rl is None:
+        raise NotFoundError("Строка маршрута не найдена")
+    return {
+        "id": rl.id,
+        "route_id": rl.route_id,
+        "delivery_order_id": rl.delivery_order_id,
+        "order": rl.order,
+        "planned_time": rl.planned_time,
+        "actual_time": rl.actual_time,
+        "status": rl.status,
+        "is_active": rl.is_active,
+        "is_deleted": rl.is_deleted,
+        "created_at": rl.created_at,
+        "updated_at": rl.updated_at,
+        "created_by_id": rl.created_by_id,
+        "updated_by_id": rl.updated_by_id,
+        "deleted_at": rl.deleted_at,
+        "deleted_by_id": rl.deleted_by_id,
+    }
+
+
+@router.patch(
+    "/route-lines/{line_id}",
+    response_model=dict,
+    dependencies=[Depends(require_permission("update", "routes"))],
+)
+async def update_route_line(
+    line_id: int,
+    body: dict,
+    session: SessionDep,
+    user_id: UserDep,
+) -> dict:
+    rl = await session.get(RouteLine, line_id)
+    if rl is None:
+        raise NotFoundError("Строка маршрута не найдена")
+    for field in ["order", "planned_time", "actual_time", "status"]:
+        if field in body:
+            setattr(rl, field, body[field])
+    rl.updated_by_id = user_id
+    await session.flush()
+    return {"id": rl.id}
+
+
+@router.delete(
+    "/route-lines/{line_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_permission("delete", "routes"))],
+)
+async def delete_route_line(
+    line_id: int,
+    session: SessionDep,
+    user_id: UserDep,
+) -> None:
+    rl = await session.get(RouteLine, line_id)
+    if rl is None:
+        raise NotFoundError("Строка маршрута не найдена")
+    rl.soft_delete(user_id)
+    await session.flush()
+
+
+
+========================================
+FILE: app/api/v1/delivery/routes.py
+========================================
+"""API для модуля delivery."""
+
+from __future__ import annotations
+
+from fastapi import APIRouter, Depends, status
+from sqlalchemy import select
+
+from app.api.deps import SessionDep, UserDep, require_permission
+from app.api.v1.delivery import schemas
+from app.core.exceptions import NotFoundError
+from app.delivery.models import DeliveryOrder, Driver, Route, Vehicle
+from app.infrastructure.events import event_bus
+from app.infrastructure.events.event_types import EventTypes
+from app.delivery.services import DeliveryOrderService
+
+router = APIRouter(prefix="/delivery", tags=["delivery"])
+
+
+# ========== Заказы на доставку ==========
+
+
+@router.get("/orders", response_model=list[schemas.DeliveryOrderRead], dependencies=[Depends(require_permission("view", "delivery"))])
+async def list_orders(
+    session: SessionDep,
+) -> list[schemas.DeliveryOrderRead]:
+    service = DeliveryOrderService(session)
+    rows = await service.list_all()
+    return [schemas.DeliveryOrderRead.model_validate(r) for r in rows]
+
+
+@router.post(
+    "/orders",
+    response_model=schemas.DeliveryOrderRead,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_order(
+    body: schemas.DeliveryOrderCreate,
+    session: SessionDep,
+    user_id: UserDep,
+) -> schemas.DeliveryOrderRead:
+    service = DeliveryOrderService(session)
+    order = await service.create(user_id=user_id, **body.model_dump())
+    return schemas.DeliveryOrderRead.model_validate(order)
+
+
+@router.get("/orders/{order_id}", response_model=schemas.DeliveryOrderRead, dependencies=[Depends(require_permission("view", "delivery"))])
+async def get_order(order_id: int, session: SessionDep) -> schemas.DeliveryOrderRead:
+    service = DeliveryOrderService(session)
+    order = await service.get_by_id(order_id)
+    if order is None:
+        raise NotFoundError("Заказ не найден")
+    return schemas.DeliveryOrderRead.model_validate(order)
+
+
+@router.delete(
+    "/orders/{order_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_permission("delete", "delivery"))],
+)
+async def delete_order(order_id: int, session: SessionDep, user_id: UserDep) -> None:
+    order = await session.get(DeliveryOrder, order_id)
+    if order is None:
+        raise NotFoundError("Заказ не найден")
+    order.soft_delete(user_id)
+    await session.flush()
+
+
+@router.patch("/orders/{order_id}/status", response_model=schemas.DeliveryOrderRead, dependencies=[Depends(require_permission("update", "delivery"))])
+async def update_order_status(
+    order_id: int,
+    body: schemas.DeliveryOrderStatusUpdate,
+    session: SessionDep,
+    user_id: UserDep,
+) -> schemas.DeliveryOrderRead:
+    service = DeliveryOrderService(session)
+    order = await service.set_status(
+        user_id=user_id,
+        order_id=order_id,
+        status=body.status,
+    )
+    if order is None:
+        raise NotFoundError("Заказ не найден")
+    return schemas.DeliveryOrderRead.model_validate(order)
+
+
+# ========== Водители ==========
+
+
+@router.get("/drivers", response_model=list[schemas.DriverRead], dependencies=[Depends(require_permission("view", "drivers"))])
+async def list_drivers(session: SessionDep) -> list[schemas.DriverRead]:
+    rows = list(
+        await session.scalars(select(Driver).where())
+    )
+    return [schemas.DriverRead.model_validate(r) for r in rows]
+
+
+@router.post(
+    "/drivers", response_model=schemas.DriverRead, status_code=status.HTTP_201_CREATED
+)
+async def create_driver(
+    body: schemas.DriverCreate,
+    session: SessionDep,
+    user_id: UserDep,
+) -> schemas.DriverRead:
+    driver = Driver(
+        created_by_id=user_id,
+        updated_by_id=user_id,
+        **body.model_dump(),
+    )
+    session.add(driver)
+    await session.flush()
+    return schemas.DriverRead.model_validate(driver)
+
+
+@router.get("/drivers/{driver_id}", response_model=schemas.DriverRead, dependencies=[Depends(require_permission("view", "drivers"))])
+async def get_driver(driver_id: int, session: SessionDep) -> schemas.DriverRead:
+    driver = await session.get(Driver, driver_id)
+    if driver is None:
+        raise NotFoundError("Водитель не найден")
+    return schemas.DriverRead.model_validate(driver)
+
+
+@router.patch("/drivers/{driver_id}", response_model=schemas.DriverRead, dependencies=[Depends(require_permission("update", "drivers"))])
+async def update_driver(
+    driver_id: int,
+    body: schemas.DriverCreate,
+    session: SessionDep,
+    user_id: UserDep,
+) -> schemas.DriverRead:
+    driver = await session.get(Driver, driver_id)
+    if driver is None:
+        raise NotFoundError("Водитель не найден")
+    for field, value in body.model_dump(exclude_unset=True).items():
+        setattr(driver, field, value)
+    driver.updated_by_id = user_id
+    await session.flush()
+    return schemas.DriverRead.model_validate(driver)
+
+
+@router.delete("/drivers/{driver_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_permission("delete", "drivers"))])
+async def delete_driver(driver_id: int, session: SessionDep, user_id: UserDep) -> None:
+    driver = await session.get(Driver, driver_id)
+    if driver is None:
+        raise NotFoundError("Водитель не найден")
+    driver.soft_delete(user_id)
+    await session.flush()
+
+
+# ========== Автомобили ==========
+
+
+@router.get("/vehicles", response_model=list[schemas.VehicleRead], dependencies=[Depends(require_permission("view", "vehicles"))])
+async def list_vehicles(session: SessionDep) -> list[schemas.VehicleRead]:
+    rows = list(
+        await session.scalars(select(Vehicle).where())
+    )
+    return [schemas.VehicleRead.model_validate(r) for r in rows]
+
+
+@router.post(
+    "/vehicles", response_model=schemas.VehicleRead, status_code=status.HTTP_201_CREATED
+)
+async def create_vehicle(
+    body: schemas.VehicleCreate,
+    session: SessionDep,
+    user_id: UserDep,
+) -> schemas.VehicleRead:
+    vehicle = Vehicle(
+        created_by_id=user_id,
+        updated_by_id=user_id,
+        **body.model_dump(),
+    )
+    session.add(vehicle)
+    await session.flush()
+    return schemas.VehicleRead.model_validate(vehicle)
+
+
+@router.get("/vehicles/{vehicle_id}", response_model=schemas.VehicleRead, dependencies=[Depends(require_permission("view", "vehicles"))])
+async def get_vehicle(vehicle_id: int, session: SessionDep) -> schemas.VehicleRead:
+    vehicle = await session.get(Vehicle, vehicle_id)
+    if vehicle is None:
+        raise NotFoundError("Автомобиль не найден")
+    return schemas.VehicleRead.model_validate(vehicle)
+
+
+@router.patch("/vehicles/{vehicle_id}", response_model=schemas.VehicleRead, dependencies=[Depends(require_permission("update", "vehicles"))])
+async def update_vehicle(
+    vehicle_id: int,
+    body: schemas.VehicleCreate,
+    session: SessionDep,
+    user_id: UserDep,
+) -> schemas.VehicleRead:
+    vehicle = await session.get(Vehicle, vehicle_id)
+    if vehicle is None:
+        raise NotFoundError("Автомобиль не найден")
+    for field, value in body.model_dump(exclude_unset=True).items():
+        setattr(vehicle, field, value)
+    vehicle.updated_by_id = user_id
+    await session.flush()
+    return schemas.VehicleRead.model_validate(vehicle)
+
+
+@router.delete("/vehicles/{vehicle_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_permission("delete", "vehicles"))])
+async def delete_vehicle(
+    vehicle_id: int, session: SessionDep, user_id: UserDep
+) -> None:
+    vehicle = await session.get(Vehicle, vehicle_id)
+    if vehicle is None:
+        raise NotFoundError("Автомобиль не найден")
+    vehicle.soft_delete(user_id)
+    await session.flush()
+
+
+# ========== Маршруты ==========
+
+
+@router.get("/routes", response_model=list[schemas.RouteRead], dependencies=[Depends(require_permission("view", "routes"))])
+async def list_routes(session: SessionDep) -> list[schemas.RouteRead]:
+    rows = list(await session.scalars(select(Route).where()))
+    return [schemas.RouteRead.model_validate(r) for r in rows]
+
+
+@router.post(
+    "/routes", response_model=schemas.RouteRead, status_code=status.HTTP_201_CREATED
+)
+async def create_route(
+    body: schemas.RouteCreate,
+    session: SessionDep,
+    user_id: UserDep,
+) -> schemas.RouteRead:
+    route = Route(
+        created_by_id=user_id,
+        updated_by_id=user_id,
+        **body.model_dump(),
+    )
+    session.add(route)
+    await session.flush()
+    return schemas.RouteRead.model_validate(route)
+
+
+@router.get("/routes/{route_id}", response_model=schemas.RouteRead, dependencies=[Depends(require_permission("view", "routes"))])
+async def get_route(route_id: int, session: SessionDep) -> schemas.RouteRead:
+    route = await session.get(Route, route_id)
+    if route is None:
+        raise NotFoundError("Маршрут не найден")
+    return schemas.RouteRead.model_validate(route)
+
+
+@router.patch("/routes/{route_id}", response_model=schemas.RouteRead, dependencies=[Depends(require_permission("update", "routes"))])
+async def update_route(
+    route_id: int,
+    body: schemas.RouteCreate,
+    session: SessionDep,
+    user_id: UserDep,
+) -> schemas.RouteRead:
+    route = await session.get(Route, route_id)
+    if route is None:
+        raise NotFoundError("Маршрут не найден")
+    for field, value in body.model_dump(exclude_unset=True).items():
+        setattr(route, field, value)
+    route.updated_by_id = user_id
+    await session.flush()
+    return schemas.RouteRead.model_validate(route)
+
+
+@router.delete("/routes/{route_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_permission("delete", "routes"))])
+async def delete_route(route_id: int, session: SessionDep, user_id: UserDep) -> None:
+    route = await session.get(Route, route_id)
+    if route is None:
+        raise NotFoundError("Маршрут не найден")
+    route.soft_delete(user_id)
+    await session.flush()
+
+
+
+========================================
+FILE: app/api/v1/delivery/schemas.py
+========================================
+"""Схемы для модуля delivery."""
+
+from __future__ import annotations
+
+from datetime import date, time
+
+from pydantic import BaseModel
+
+from app.api.v1.base_schemas import BaseRead
+
+
+class DeliveryOrderRead(BaseRead):
+    number: str
+    contract_id: int
+    document_id: int | None = None
+    contact_person: str = ""
+    phone: str = ""
+    delivery_date: date | None = None
+    time_from: time | None = None
+    time_to: time | None = None
+    status: str = "created"
+    is_edo: bool = False
+    comment: str = ""
+
+
+class DeliveryOrderCreate(BaseModel):
+    number: str
+    contract_id: int
+    document_id: int | None = None
+    contact_person: str = ""
+    phone: str = ""
+    delivery_date: date | None = None
+    time_from: time | None = None
+    time_to: time | None = None
+    is_edo: bool = False
+    comment: str = ""
+
+
+class DeliveryOrderStatusUpdate(BaseModel):
+    status: str
+
+
+class DriverRead(BaseRead):
+    name: str
+    phone: str = ""
+    carrier_id: int | None = None
+
+
+class DriverCreate(BaseModel):
+    name: str
+    phone: str = ""
+    carrier_id: int | None = None
+
+
+class VehicleRead(BaseRead):
+    number: str
+    brand: str = ""
+    model: str = ""
+    capacity: float | None = None
+    volume: float | None = None
+    carrier_id: int | None = None
+
+
+class VehicleCreate(BaseModel):
+    number: str
+    brand: str = ""
+    model: str = ""
+    capacity: float | None = None
+    volume: float | None = None
+    carrier_id: int | None = None
+
+
+class RouteRead(BaseRead):
+    number: str
+    driver_id: int
+    vehicle_id: int
+    date: date
+    status: str = "planned"
+
+
+class RouteCreate(BaseModel):
+    number: str
+    driver_id: int
+    vehicle_id: int
+    date: date
+
+
+
+========================================
+FILE: app/api/v1/documents/__init__.py
+========================================
+
+
+
+========================================
+FILE: app/api/v1/documents/routes.py
+========================================
+"""API для модуля documents."""
+
+from __future__ import annotations
+
+from fastapi import APIRouter, Depends, status
+
+from app.api.deps import SessionDep, UserDep, require_permission
+from app.api.v1.documents import schemas
+from app.core.exceptions import BadRequestError, NotFoundError
+from app.documents.models import Document
+from app.documents.services import DocumentService
+
+router = APIRouter(prefix="/documents", tags=["documents"])
+
+
+@router.get("", response_model=list[schemas.DocumentRead], dependencies=[Depends(require_permission("view", "documents"))])
+async def list_documents(
+    session: SessionDep,
+    document_type: str | None = None,
+) -> list[schemas.DocumentRead]:
+    service = DocumentService(session)
+    if document_type:
+        rows = await service.list_by_type(document_type)
+    else:
+        rows = await service.list_all()
+    return [schemas.DocumentRead.model_validate(r) for r in rows]
+
+
+@router.post("", response_model=schemas.DocumentRead, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_permission("create", "documents"))])
+async def create_document(
+    body: schemas.DocumentCreate,
+    session: SessionDep,
+    user_id: UserDep,
+) -> schemas.DocumentRead:
+    service = DocumentService(session)
+    doc = await service.create(user_id=user_id, **body.model_dump())
+    return schemas.DocumentRead.model_validate(doc)
+
+
+@router.get("/{document_id}", response_model=schemas.DocumentRead, dependencies=[Depends(require_permission("view", "documents"))])
+async def get_document(document_id: int, session: SessionDep) -> schemas.DocumentRead:
+    service = DocumentService(session)
+    doc = await service.get_by_id(document_id)
+    if doc is None:
+        raise NotFoundError("Документ не найден")
+    return schemas.DocumentRead.model_validate(doc)
+
+
+@router.post("/{document_id}/lines", response_model=schemas.DocumentLineRead, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_permission("update", "documents"))])
+async def add_line(
+    document_id: int,
+    body: schemas.DocumentLineCreate,
+    session: SessionDep,
+    user_id: UserDep,
+) -> schemas.DocumentLineRead:
+    service = DocumentService(session)
+    try:
+        line = await service.add_line(
+            user_id=user_id,
+            document_id=document_id,
+            product_id=body.product_id,
+            quantity=body.quantity,
+            batch_id=body.batch_id,
+        )
+    except ValueError as e:
+        raise BadRequestError(str(e)) from e
+    return schemas.DocumentLineRead.model_validate(line)
+
+
+@router.get(
+    "/{document_id}/lines",
+    response_model=list[schemas.DocumentLineRead],
+    dependencies=[Depends(require_permission("view", "documents"))],
+)
+async def list_document_lines(
+    document_id: int,
+    session: SessionDep,
+) -> list[schemas.DocumentLineRead]:
+    from sqlalchemy import select as sa_select
+    from app.documents.models import DocumentLine
+
+    rows = list(await session.scalars(
+        sa_select(DocumentLine).where(DocumentLine.document_id == document_id)
+    ))
+    return [schemas.DocumentLineRead.model_validate(r) for r in rows]
+
+
+@router.delete("/{document_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_permission("delete", "documents"))])
+async def delete_document(document_id: int, session: SessionDep, user_id: UserDep) -> None:
+    doc = await session.get(Document, document_id)
+    if doc is None:
+        raise NotFoundError("Документ не найден")
+    doc.soft_delete(user_id)
+    await session.flush()
+
+
+@router.get(
+    "/lines/{line_id}",
+    response_model=schemas.DocumentLineRead,
+    dependencies=[Depends(require_permission("view", "documents"))],
+)
+async def get_document_line(
+    line_id: int,
+    session: SessionDep,
+) -> schemas.DocumentLineRead:
+    from app.documents.models import DocumentLine
+    line = await session.get(DocumentLine, line_id)
+    if line is None:
+        raise NotFoundError("Строка документа не найдена")
+    return schemas.DocumentLineRead.model_validate(line)
+
+
+@router.patch(
+    "/lines/{line_id}",
+    response_model=schemas.DocumentLineRead,
+    dependencies=[Depends(require_permission("update", "documents"))],
+)
+async def update_document_line(
+    line_id: int,
+    body: schemas.DocumentLineCreate,
+    session: SessionDep,
+    user_id: UserDep,
+) -> schemas.DocumentLineRead:
+    from app.documents.models import DocumentLine
+    line = await session.get(DocumentLine, line_id)
+    if line is None:
+        raise NotFoundError("Строка документа не найдена")
+    for field, value in body.model_dump(exclude_unset=True).items():
+        setattr(line, field, value)
+    line.updated_by_id = user_id
+    await session.flush()
+    return schemas.DocumentLineRead.model_validate(line)
+
+
+@router.delete(
+    "/lines/{line_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_permission("delete", "documents"))],
+)
+async def delete_document_line(
+    line_id: int,
+    session: SessionDep,
+    user_id: UserDep,
+) -> None:
+    from app.documents.models import DocumentLine
+    line = await session.get(DocumentLine, line_id)
+    if line is None:
+        raise NotFoundError("Строка документа не найдена")
+    line.soft_delete(user_id)
+    await session.flush()
+
+
+@router.patch("/{document_id}/status", response_model=schemas.DocumentRead, dependencies=[Depends(require_permission("update", "documents"))])
+async def update_status(
+    document_id: int,
+    body: schemas.DocumentStatusUpdate,
+    session: SessionDep,
+    user_id: UserDep,
+) -> schemas.DocumentRead:
+    service = DocumentService(session)
+    doc = await service.set_status(
+        user_id=user_id,
+        document_id=document_id,
+        status=body.status,
+    )
+    if doc is None:
+        raise NotFoundError("Документ не найден")
+    return schemas.DocumentRead.model_validate(doc)
+
+
+
+========================================
+FILE: app/api/v1/documents/schemas.py
+========================================
+"""Схемы для модуля documents."""
+
+from __future__ import annotations
+
+from datetime import date
+from decimal import Decimal
+
+from pydantic import BaseModel
+
+from app.api.v1.base_schemas import BaseRead
+
+
+class DocumentRead(BaseRead):
+    document_number: str
+    document_date: date | None = None
+    delivery_date: date | None = None
+    document_type: str
+    contract_id: int | None = None
+    warehouse_id: int
+    virtual_warehouse_id: int | None = None
+    status: str
+    is_delivery: bool = False
+    is_edo: bool = False
+
+
+class DocumentCreate(BaseModel):
+    document_type: str
+    warehouse_id: int
+    document_number: str
+    document_date: date | None = None
+    delivery_date: date | None = None
+    contract_id: int | None = None
+    virtual_warehouse_id: int | None = None
+    is_delivery: bool = False
+    is_edo: bool = False
+
+
+class DocumentLineRead(BaseRead):
+    document_id: int
+    product_id: int
+    batch_id: int | None = None
+    quantity: Decimal
+    processed_quantity: Decimal = Decimal("0")
+
+
+class DocumentLineCreate(BaseModel):
+    document_id: int
+    product_id: int
+    quantity: Decimal
+    batch_id: int | None = None
+
+
+class DocumentStatusUpdate(BaseModel):
+    status: str
+
+
+
+========================================
+FILE: app/api/v1/__init__.py
+========================================
+
+
+
+========================================
+FILE: app/api/v1/integration/__init__.py
+========================================
+
+
+
+========================================
+FILE: app/api/v1/integration/routes_import.py
+========================================
+"""API для запуска импорта с подробным логом."""
+
+from __future__ import annotations
+
+import asyncio
+import logging
+import tempfile
+import time
+import io
+
+from fastapi import APIRouter, Depends
+from fastapi.responses import StreamingResponse
+from sqlalchemy import select
+
+from app.api.deps import SessionDep, UserDep, require_permission
+from app.core.context import set_current_user_id
+from app.core.exceptions import NotFoundError
+from app.integration.adapters import ZLNAdapter
+from app.integration.models import IntegrationLog, IntegrationProfile
+from app.integration.services.ftp_service import FTPService
+from app.integration.services.integration_service import IntegrationService
+from app.infrastructure.events import event_bus
+from app.infrastructure.events.event_types import EventTypes
+
+logger = logging.getLogger(__name__)
+
+router = APIRouter(prefix="/integrations", tags=["integrations"])
+
+
+@router.post(
+    "/import",
+    dependencies=[Depends(require_permission("create", "integrations"))],
+)
+async def start_import(
+    session: SessionDep,
+    user_id: UserDep,
+    document_type: str | None = None,
+) -> dict:
+    """Запустить импорт. Возвращает task_id."""
+    
+    import uuid
+
+    # Общий task_id для всей задачи
+    task_id = str(uuid.uuid4())
+
+    asyncio.create_task(
+        _run_import_background(task_id, user_id or 1, document_type)
+    )
+
+    return {"task_id": task_id, "status": "starting"}
+
+
+async def _log_message(session, log: IntegrationLog, message: str, step: str = "") -> None:
+    """Добавить сообщение в лог."""
+    log.messages = (log.messages or []) + [message]
+    if step:
+        log.current_step = step
+    await session.commit()
+
+
+async def _log_error(session, log: IntegrationLog, error: str) -> None:
+    """Добавить ошибку в лог."""
+    log.errors = (log.errors or []) + [error]
+    await session.commit()
+
+
+async def _run_import_background(task_id: str, user_id: int, document_type: str | None) -> None:
+    """Фоновый импорт: одна запись лога на каждый профиль."""
+    # Установить системного пользователя для аудита
+    set_current_user_id(user_id)
+    """Фоновый импорт: одна запись лога на каждый профиль."""
+    from app.core.database import async_session_factory
+    from uuid import uuid4
+
+    async with async_session_factory() as session:
+        try:
+            # 1. Поиск активных профилей
+            profiles = list(await session.scalars(
+                select(IntegrationProfile).where(
+                    IntegrationProfile.is_active.is_(True),
+                )
+            ))
+
+            if not profiles:
+                log = IntegrationLog(
+                    task_id=task_id,
+                    status="failed",
+                    document_type=document_type,
+                    errors=["Нет активных профилей интеграции"],
+                    created_by_id=user_id,
+                    updated_by_id=user_id,
+                )
+                session.add(log)
+                await session.commit()
+                return
+
+            # 2. Обработка каждого профиля отдельно
+            adapter = ZLNAdapter()
+            integration = IntegrationService(session)
+
+            for profile in profiles:
+                log = IntegrationLog(
+                    task_id=task_id,
+                    profile_id=profile.id,
+                    status="processing",
+                    document_type=document_type,
+                    created_by_id=user_id,
+                    updated_by_id=user_id,
+                )
+                session.add(log)
+                await session.flush()
+                await session.commit()
+
+                ftp_config = profile.config.get("ftp", {})
+                if not ftp_config:
+                    log.errors = (log.errors or []) + [f"Профиль {profile.name}: нет FTP-конфигурации"]
+                    log.status = "failed"
+                    await session.commit()
+                    continue
+
+                await _log_message(session, log, f"Подключение к профилю: {profile.name} ({ftp_config.get('host', '')})", "Подключение")
+
+                ftp = FTPService(
+                    host=ftp_config["host"],
+                    username=ftp_config["username"],
+                    password=ftp_config["password"],
+                )
+
+                try:
+                    ftp.connect()
+                    await _log_message(session, log, f"Подключено: {ftp_config['host']}", "Подключено")
+
+                    out_path = ftp_config.get("out_path", "/out")
+                    files = ftp.list_files(out_path)
+                    await _log_message(session, log, f"Найдено файлов: {len(files)}", "Файлы найдены")
+
+                    log.total_rows = len(files)
+                    await session.commit()
+
+                    with tempfile.TemporaryDirectory() as tmp_dir:
+                        for filename in files:
+                            log.order_number = filename
+                            await _log_message(session, log, f"Обработка файла: {filename}", "Обработка файла")
+
+                            remote_path = f"{out_path}/{filename}"
+                            local_path = ftp.download(remote_path, tmp_dir)
+
+                            universal_doc, parse_errors = adapter.parse(local_path)
+                            if parse_errors:
+                                log.error_rows += 1
+                                for err in parse_errors:
+                                    await _log_error(session, log, f"Файл {filename}: {err}")
+                                continue
+
+                            doc_type = universal_doc.get("document_type")
+                            doc_number = universal_doc.get("document_number")
+                            log.order_number = doc_number
+
+                            if document_type and doc_type != document_type:
+                                continue
+
+                            # Проверка дубликата
+                            from app.orders.models import InboundOrder, OutboundOrder
+                            existing = None
+                            if doc_type == "porder":
+                                existing = await session.scalar(
+                                    select(InboundOrder).where(
+                                        InboundOrder.depositor_id == profile.depositor_id,
+                                        InboundOrder.number == doc_number,
+                                    )
+                                )
+                            elif doc_type == "order":
+                                existing = await session.scalar(
+                                    select(OutboundOrder).where(
+                                        OutboundOrder.depositor_id == profile.depositor_id,
+                                        OutboundOrder.number == doc_number,
+                                    )
+                                )
+
+                            if existing:
+                                log.error_rows += 1
+                                log.processed_rows += 1
+                                await _log_error(session, log, f"Файл {filename}: Заказ {doc_number} уже существует")
+                                await session.commit()
+                                continue
+
+                            # Лог по товарам
+                            for item in universal_doc.get("items", []):
+                                item_id = item.get("external_id")
+                                await _log_message(session, log, f"Поиск товара: {item_id}", f"Поиск товара: {item_id}")
+
+                            # Лог по клиенту/поставщику
+                            if doc_type == "order":
+                                customer_code = universal_doc.get("customer_code", "")
+                                await _log_message(session, log, f"Поиск клиента: {customer_code}", f"Поиск клиента: {customer_code}")
+                            elif doc_type == "porder":
+                                vendor_code = universal_doc.get("vendor_code", "")
+                                await _log_message(session, log, f"Поиск поставщика: {vendor_code}", f"Поиск поставщика: {vendor_code}")
+
+                            await _log_message(session, log, f"Создание заказа: {doc_number}", f"Создание заказа: {doc_number}")
+
+                            result, imp_errors = await integration.process_document(
+                                universal_doc=universal_doc,
+                                depositor_id=profile.depositor_id,
+                                user_id=user_id,
+                            )
+
+                            log.processed_rows += 1
+                            if imp_errors:
+                                log.error_rows += 1
+                                for err in imp_errors:
+                                    await _log_error(session, log, f"Файл {filename}: {err}")
+                            elif result:
+                                log.success_rows += 1
+                                await _log_message(session, log, f"Заказ {doc_number} создан успешно", f"Заказ создан: {doc_number}")
+                                try:
+                                    ftp.delete(remote_path)
+                                    await _log_message(session, log, f"Файл {filename} удалён с FTP")
+                                except Exception:
+                                    pass
+
+                            await session.commit()
+
+                    log.status = "completed"
+                    log.current_step = "Импорт завершен"
+                    await event_bus.emit(EventTypes.IMPORT_COMPLETED, {
+                        "_event_type": EventTypes.IMPORT_COMPLETED,
+                        "success_rows": log.success_rows,
+                        "error_rows": log.error_rows,
+                    })
+                    await _log_message(session, log, f"Импорт по профилю {profile.name} завершен. Успешно: {log.success_rows}, ошибок: {log.error_rows}", "Завершено")
+
+                except Exception as e:
+                    log.status = "failed"
+                    await _log_error(session, log, f"Критическая ошибка: {e}")
+                    await event_bus.emit(EventTypes.IMPORT_FAILED, {
+                        "_event_type": EventTypes.IMPORT_FAILED,
+                        "error": str(e),
+                    })
+                finally:
+                    ftp.disconnect()
+
+        except Exception as e:
+            log = IntegrationLog(
+                task_id=task_id,
+                status="failed",
+                document_type=document_type,
+                errors=[str(e)],
+                created_by_id=user_id,
+                updated_by_id=user_id,
+            )
+            session.add(log)
+            await session.commit()
+
+
+@router.get(
+    "/import/{task_id}/status",
+    dependencies=[Depends(require_permission("view", "integrations"))],
+)
+async def get_import_status(task_id: str, session: SessionDep) -> dict:
+    """Получить статус импорта."""
+    log = await session.scalar(
+        select(IntegrationLog).where(IntegrationLog.task_id == task_id)
+    )
+    if log is None:
+        raise NotFoundError("Задача импорта не найдена")
+
+    return _format_log(log)
+
+
+@router.get(
+    "/import/{task_id}/status/long",
+    dependencies=[Depends(require_permission("view", "integrations"))],
+)
+async def get_import_status_long(task_id: str, session: SessionDep) -> dict:
+    """Long Polling — держит до 25 сек, отвечает при изменениях."""
+    start = time.time()
+    last_messages_count = -1
+
+    while time.time() - start < 25:
+        log = await session.scalar(
+            select(IntegrationLog).where(IntegrationLog.task_id == task_id)
+        )
+        if log is None:
+            raise NotFoundError("Задача импорта не найдена")
+
+        current_count = len(log.messages or [])
+
+        if log.status in ("completed", "failed"):
+            return _format_log(log)
+
+        if current_count > last_messages_count:
+            last_messages_count = current_count
+            return _format_log(log)
+
+        await asyncio.sleep(1)
+
+    log = await session.scalar(
+        select(IntegrationLog).where(IntegrationLog.task_id == task_id)
+    )
+    if log is None:
+        raise NotFoundError("Задача импорта не найдена")
+
+    return _format_log(log)
+
+
+@router.get(
+    "/import/history",
+    dependencies=[Depends(require_permission("view", "integrations"))],
+)
+async def get_import_history(session: SessionDep) -> list[dict]:
+    """История импортов."""
+    logs = list(await session.scalars(
+        select(IntegrationLog).order_by(IntegrationLog.created_at.desc()).limit(50)
+    ))
+    return [
+        {
+            "id": log.id,
+            "task_id": log.task_id,
+            "status": log.status,
+            "document_type": log.document_type,
+            "total_rows": log.total_rows,
+            "success_rows": log.success_rows,
+            "error_rows": log.error_rows,
+            "created_at": log.created_at,
+            "created_by_id": log.created_by_id,
+        }
+        for log in logs
+    ]
+
+
+@router.get(
+    "/import/{task_id}/errors/excel",
+    dependencies=[Depends(require_permission("view", "integrations"))],
+)
+async def download_import_errors_excel(task_id: str, session: SessionDep):
+    """Скачать Excel файл с ошибками импорта."""
+    from openpyxl import Workbook
+
+    # Найти все логи по task_id
+    logs = list(await session.scalars(
+        select(IntegrationLog).where(IntegrationLog.task_id == task_id)
+    ))
+
+    if not logs:
+        raise NotFoundError("Задача импорта не найдена")
+
+    # Создать Excel
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Ошибки импорта"
+
+    # Заголовки
+    headers = ["Файл", "Ошибка", "Профиль", "Дата"]
+    ws.append(headers)
+
+    # Строки с ошибками
+    for log in logs:
+        profile_name = log.profile.name if log.profile else "Все профили"
+        for error in log.errors or []:
+            # Разбиваем ошибку: "Файл xxx.xml: Ошибка" → файл + текст
+            file_name = log.order_number or ""
+            error_text = error
+            
+            # Если ошибка содержит "Файл ...: ", разделяем
+            if error.startswith("Файл "):
+                parts = error.split(": ", 1)
+                if len(parts) == 2:
+                    file_name = parts[0].replace("Файл ", "")
+                    error_text = parts[1]
+            
+            ws.append([
+                file_name,
+                error_text,
+                profile_name,
+                log.created_at.strftime("%Y-%m-%d %H:%M:%S") if log.created_at else "",
+            ])
+
+    # Если ошибок нет — добавить строку "Ошибок нет"
+    total_errors = sum(len(log.errors or []) for log in logs)
+    if total_errors == 0:
+        ws.append(["", "Ошибок нет", "", ""])
+
+    # Сохранить в BytesIO
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+
+    filename = f"import_errors_{task_id[:8]}.xlsx"
+
+    return StreamingResponse(
+        output,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
+
+def _format_log(log: IntegrationLog) -> dict:
+    """Форматировать лог для ответа."""
+    return {
+        "task_id": log.task_id,
+        "status": log.status,
+        "document_type": log.document_type,
+        "total_rows": log.total_rows,
+        "processed_rows": log.processed_rows,
+        "success_rows": log.success_rows,
+        "error_rows": log.error_rows,
+        "messages": log.messages or [],
+        "errors": log.errors or [],
+        "current_step": log.current_step or "",
+        "order_number": log.order_number or "",
+    }
+
+
+
+========================================
+FILE: app/api/v1/integration/routes.py
+========================================
+"""API для модуля integration."""
+
+from __future__ import annotations
+
+from fastapi import APIRouter, Depends, status
+from sqlalchemy import select
+
+from app.api.deps import SessionDep, UserDep, require_permission
+from app.api.v1.integration import schemas
+from app.core.exceptions import NotFoundError
+from app.integration.models import (
+    IntegrationError,
+    IntegrationLog,
+    IntegrationProfile,
+)
+
+router = APIRouter(prefix="/integrations", tags=["integrations"])
+
+
+# ========== Профили ==========
+
+@router.get("/profiles", response_model=list[schemas.IntegrationProfileRead], dependencies=[Depends(require_permission("view", "integrations"))])
+async def list_profiles(session: SessionDep) -> list[schemas.IntegrationProfileRead]:
+    rows = list(await session.scalars(
+        select(IntegrationProfile).where()
+    ))
+    return [schemas.IntegrationProfileRead.model_validate(r) for r in rows]
+
+
+@router.get("/profiles/{profile_id}", response_model=schemas.IntegrationProfileRead, dependencies=[Depends(require_permission("view", "integrations"))])
+async def get_profile(profile_id: int, session: SessionDep) -> schemas.IntegrationProfileRead:
+    profile = await session.get(IntegrationProfile, profile_id)
+    if profile is None:
+        raise NotFoundError("Профиль не найден")
+    return schemas.IntegrationProfileRead.model_validate(profile)
+
+
+@router.post("/profiles", response_model=schemas.IntegrationProfileRead, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_permission("create", "integrations"))])
+async def create_profile(
+    body: schemas.IntegrationProfileCreate,
+    session: SessionDep,
+    user_id: UserDep,
+) -> schemas.IntegrationProfileRead:
+    profile = IntegrationProfile(
+        created_by_id=user_id,
+        updated_by_id=user_id,
+        **body.model_dump(),
+    )
+    session.add(profile)
+    await session.flush()

@@ -1,0 +1,3500 @@
+    return schemas.IntegrationProfileRead.model_validate(profile)
+
+
+@router.patch("/profiles/{profile_id}", response_model=schemas.IntegrationProfileRead, dependencies=[Depends(require_permission("update", "integrations"))])
+async def update_profile(
+    profile_id: int,
+    body: schemas.IntegrationProfileCreate,
+    session: SessionDep,
+    user_id: UserDep,
+) -> schemas.IntegrationProfileRead:
+    profile = await session.get(IntegrationProfile, profile_id)
+    if profile is None:
+        raise NotFoundError("Профиль не найден")
+    for field, value in body.model_dump(exclude_unset=True).items():
+        setattr(profile, field, value)
+    profile.updated_by_id = user_id
+    await session.flush()
+    return schemas.IntegrationProfileRead.model_validate(profile)
+
+
+@router.delete("/profiles/{profile_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_permission("delete", "integrations"))])
+async def delete_profile(profile_id: int, session: SessionDep, user_id: UserDep) -> None:
+    profile = await session.get(IntegrationProfile, profile_id)
+    if profile is None:
+        raise NotFoundError("Профиль не найден")
+    profile.soft_delete(user_id)
+    await session.flush()
+
+
+# ========== Логи ==========
+
+@router.get("/logs", response_model=list[schemas.IntegrationLogRead], dependencies=[Depends(require_permission("view", "integrations"))])
+async def list_logs(
+    session: SessionDep,
+    profile_id: int | None = None,
+) -> list[schemas.IntegrationLogRead]:
+    stmt = select(IntegrationLog).where()
+    if profile_id:
+        stmt = stmt.where(IntegrationLog.profile_id == profile_id)
+    rows = list(await session.scalars(stmt))
+    return [schemas.IntegrationLogRead.model_validate(r) for r in rows]
+
+
+@router.get("/logs/{log_id}", response_model=schemas.IntegrationLogRead, dependencies=[Depends(require_permission("view", "integrations"))])
+async def get_log(log_id: int, session: SessionDep) -> schemas.IntegrationLogRead:
+    log = await session.get(IntegrationLog, log_id)
+    if log is None:
+        raise NotFoundError("Журнал не найден")
+    return schemas.IntegrationLogRead.model_validate(log)
+
+
+# ========== Ошибки ==========
+
+@router.get("/logs/{log_id}/errors", response_model=list[schemas.IntegrationErrorRead], dependencies=[Depends(require_permission("view", "integrations"))])
+async def list_errors(log_id: int, session: SessionDep) -> list[schemas.IntegrationErrorRead]:
+    rows = list(await session.scalars(
+        select(IntegrationError).where(IntegrationError.log_id == log_id)
+    ))
+    return [schemas.IntegrationErrorRead.model_validate(r) for r in rows]
+
+
+
+========================================
+FILE: app/api/v1/integration/schemas.py
+========================================
+"""Схемы для модуля integration."""
+
+from __future__ import annotations
+
+from pydantic import BaseModel, Field
+
+from app.api.v1.base_schemas import BaseRead
+
+
+class IntegrationProfileRead(BaseRead):
+    depositor_id: int
+    name: str
+    source_type: str
+    config: dict = Field(default_factory=dict)
+
+
+class IntegrationProfileCreate(BaseModel):
+    depositor_id: int
+    name: str
+    source_type: str
+    config: dict = Field(default_factory=dict)
+
+
+class IntegrationLogRead(BaseRead):
+    profile_id: int | None = None
+    status: str
+    total_rows: int = 0
+    success_rows: int = 0
+    error_rows: int = 0
+    error_details: dict = Field(default_factory=dict)
+    file_id: int | None = None
+    task_id: str = ""
+    document_type: str | None = None
+    processed_rows: int = 0
+    messages: list = Field(default_factory=list)
+    errors: list = Field(default_factory=list)
+    current_step: str = ""
+    order_number: str = ""
+
+
+class IntegrationErrorRead(BaseRead):
+    log_id: int
+    row_number: int
+    error_message: str
+    raw_data: dict = Field(default_factory=dict)
+
+
+
+========================================
+FILE: app/api/v1/notifications/__init__.py
+========================================
+
+
+
+========================================
+FILE: app/api/v1/notifications/routes.py
+========================================
+"""API для модуля notifications."""
+
+from __future__ import annotations
+
+from fastapi import APIRouter, Depends, status
+
+from app.api.deps import SessionDep, UserDep, require_permission
+from app.api.v1.notifications import schemas
+from app.core.exceptions import NotFoundError, UnauthorizedError
+from app.notifications.services import NotificationService
+
+router = APIRouter(prefix="/notifications", tags=["notifications"])
+
+
+@router.get("", response_model=list[schemas.NotificationRead], dependencies=[Depends(require_permission("view", "notifications"))])
+async def list_notifications(
+    session: SessionDep,
+    user_id: UserDep,
+) -> list[schemas.NotificationRead]:
+    if user_id is None:
+        raise UnauthorizedError("Не авторизован")
+    service = NotificationService(session)
+    rows = await service.list_by_user(user_id)
+    return [schemas.NotificationRead.model_validate(r) for r in rows]
+
+
+@router.get("/unread", response_model=list[schemas.NotificationRead], dependencies=[Depends(require_permission("view", "notifications"))])
+async def unread_notifications(
+    session: SessionDep,
+    user_id: UserDep,
+) -> list[schemas.NotificationRead]:
+    if user_id is None:
+        raise UnauthorizedError("Не авторизован")
+    service = NotificationService(session)
+    rows = await service.get_unread(user_id)
+    return [schemas.NotificationRead.model_validate(r) for r in rows]
+
+
+@router.post("", response_model=schemas.NotificationRead, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_permission("create", "notifications"))])
+async def create_notification(
+    body: schemas.NotificationCreate,
+    session: SessionDep,
+) -> schemas.NotificationRead:
+    service = NotificationService(session)
+    notification = await service.create(
+        user_id=body.user_id,
+        title=body.title,
+        text=body.text,
+        notification_type=body.notification_type,
+        link=body.link,
+    )
+    return schemas.NotificationRead.model_validate(notification)
+
+
+@router.get(
+    "/{notification_id}",
+    response_model=schemas.NotificationRead,
+    dependencies=[Depends(require_permission("view", "notifications"))],
+)
+async def get_notification(
+    notification_id: int,
+    session: SessionDep,
+) -> schemas.NotificationRead:
+    from app.notifications.models import Notification
+    notification = await session.get(Notification, notification_id)
+    if notification is None:
+        raise NotFoundError("Уведомление не найдено")
+    return schemas.NotificationRead.model_validate(notification)
+
+
+@router.delete(
+    "/{notification_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_permission("delete", "notifications"))],
+)
+async def delete_notification(
+    notification_id: int,
+    session: SessionDep,
+    user_id: UserDep,
+) -> None:
+    from app.notifications.models import Notification
+    notification = await session.get(Notification, notification_id)
+    if notification is None:
+        raise NotFoundError("Уведомление не найдено")
+    notification.soft_delete(user_id)
+    await session.flush()
+
+
+@router.post("/{notification_id}/read", response_model=schemas.NotificationRead, dependencies=[Depends(require_permission("update", "notifications"))])
+async def mark_read(
+    notification_id: int,
+    session: SessionDep,
+) -> schemas.NotificationRead:
+    service = NotificationService(session)
+    notification = await service.mark_read(notification_id)
+    if notification is None:
+        raise NotFoundError("Уведомление не найдено")
+    return schemas.NotificationRead.model_validate(notification)
+
+
+@router.post("/mark-all-read")
+async def mark_all_read(
+    session: SessionDep,
+    user_id: UserDep,
+) -> dict:
+    if user_id is None:
+        raise UnauthorizedError("Не авторизован")
+    service = NotificationService(session)
+    count = await service.mark_all_read(user_id)
+    return {"marked": count}
+
+
+
+========================================
+FILE: app/api/v1/notifications/routes_rules.py
+========================================
+"""API для управления правилами уведомлений."""
+
+from __future__ import annotations
+
+from fastapi import APIRouter, Depends, status
+from sqlalchemy import select
+
+from app.api.deps import SessionDep, UserDep, require_permission
+from app.api.v1.notifications.schemas_rules import (
+    NotificationRuleCreate,
+    NotificationRuleRead,
+    NotificationRuleUpdate,
+)
+from app.core.exceptions import NotFoundError
+from app.notifications.models import NotificationRule
+
+router = APIRouter(prefix="/notification-rules", tags=["notification-rules"])
+
+
+@router.get(
+    "",
+    response_model=list[NotificationRuleRead],
+    dependencies=[Depends(require_permission("view", "notifications"))],
+)
+async def list_rules(session: SessionDep) -> list[NotificationRuleRead]:
+    """Список правил."""
+    rules = list(await session.scalars(select(NotificationRule)))
+    return [NotificationRuleRead.model_validate(r) for r in rules]
+
+
+@router.post(
+    "",
+    response_model=NotificationRuleRead,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_permission("create", "notifications"))],
+)
+async def create_rule(
+    body: NotificationRuleCreate,
+    session: SessionDep,
+) -> NotificationRuleRead:
+    """Создать правило."""
+    rule = NotificationRule(**body.model_dump())
+    session.add(rule)
+    await session.flush()
+    return NotificationRuleRead.model_validate(rule)
+
+
+@router.get(
+    "/{rule_id}",
+    response_model=NotificationRuleRead,
+    dependencies=[Depends(require_permission("view", "notifications"))],
+)
+async def get_rule(rule_id: int, session: SessionDep) -> NotificationRuleRead:
+    rule = await session.get(NotificationRule, rule_id)
+    if rule is None:
+        raise NotFoundError("Правило не найдено")
+    return NotificationRuleRead.model_validate(rule)
+
+
+@router.put(
+    "/{rule_id}",
+    response_model=NotificationRuleRead,
+    dependencies=[Depends(require_permission("update", "notifications"))],
+)
+async def update_rule(
+    rule_id: int,
+    body: NotificationRuleUpdate,
+    session: SessionDep,
+) -> NotificationRuleRead:
+    """Обновить правило."""
+    rule = await session.get(NotificationRule, rule_id)
+    if rule is None:
+        raise NotFoundError("Правило не найдено")
+    for field, value in body.model_dump(exclude_unset=True).items():
+        setattr(rule, field, value)
+    await session.flush()
+    return NotificationRuleRead.model_validate(rule)
+
+
+@router.delete(
+    "/{rule_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_permission("delete", "notifications"))],
+)
+async def delete_rule(rule_id: int, session: SessionDep) -> None:
+    """Удалить правило."""
+    rule = await session.get(NotificationRule, rule_id)
+    if rule is None:
+        raise NotFoundError("Правило не найдено")
+    await session.delete(rule)
+    await session.flush()
+
+
+
+========================================
+FILE: app/api/v1/notifications/schemas.py
+========================================
+"""Схемы для модуля notifications."""
+
+from __future__ import annotations
+
+from pydantic import BaseModel, Field
+
+from app.api.v1.base_schemas import BaseRead
+
+
+class NotificationRead(BaseRead):
+    user_id: int
+    title: str
+    text: str
+    notification_type: str = "system"
+    status: str = "pending"
+    link: str = ""
+    sent_at: str | None = None
+    read_at: str | None = None
+
+
+class NotificationCreate(BaseModel):
+    user_id: int
+    title: str
+    text: str
+    notification_type: str = "system"
+    link: str = ""
+
+
+
+========================================
+FILE: app/api/v1/notifications/schemas_rules.py
+========================================
+"""Схемы для правил уведомлений."""
+
+from __future__ import annotations
+
+from pydantic import BaseModel, ConfigDict, Field
+
+
+class NotificationRuleRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    event_type: str
+    channel: str
+    recipient_type: str
+    recipient_id: int | None = None
+    role_code: str | None = None
+    is_active: bool = True
+
+
+class NotificationRuleCreate(BaseModel):
+    event_type: str = Field(min_length=1, max_length=100)
+    channel: str = Field(pattern="^(app|email)$")
+    recipient_type: str = Field(pattern="^(user|role)$")
+    recipient_id: int | None = None
+    role_code: str | None = None
+    is_active: bool = True
+
+
+class NotificationRuleUpdate(BaseModel):
+    event_type: str | None = None
+    channel: str | None = None
+    recipient_type: str | None = None
+    recipient_id: int | None = None
+    role_code: str | None = None
+    is_active: bool | None = None
+
+
+
+========================================
+FILE: app/api/v1/orders/routes_inbound.py
+========================================
+"""API для входящих заказов."""
+
+from __future__ import annotations
+
+from fastapi import APIRouter, Depends, status
+from sqlalchemy import select
+from sqlalchemy.orm import selectinload
+
+from app.api.deps import SessionDep, UserDep, require_permission
+from app.api.v1.orders.schemas_detailed import InboundOrderDetailed
+from app.api.v1.orders.schemas import (
+    InboundOrderCreate,
+    InboundOrderLineCreate,
+    InboundOrderLineRead,
+    InboundOrderRead,
+    InboundOrderUpdate,
+)
+from app.core.exceptions import NotFoundError
+from app.orders.models import InboundOrder, InboundOrderLine
+
+router = APIRouter(prefix="/inbound-orders", tags=["inbound-orders"])
+
+
+@router.get("/detailed", response_model=list[InboundOrderDetailed], dependencies=[Depends(require_permission("view", "orders"))])
+async def list_inbound_orders_detailed(session: SessionDep) -> list[InboundOrderDetailed]:
+    stmt = (
+        select(InboundOrder)
+        .options(selectinload(InboundOrder.depositor))
+        .options(selectinload(InboundOrder.warehouse))
+        .options(selectinload(InboundOrder.supplier))
+    )
+    rows = list(await session.scalars(stmt))
+    return [InboundOrderDetailed.model_validate(r) for r in rows]
+
+
+@router.get("", response_model=list[InboundOrderRead], dependencies=[Depends(require_permission("view", "orders"))])
+async def list_inbound_orders(session: SessionDep) -> list[InboundOrderRead]:
+    rows = list(await session.scalars(select(InboundOrder)))
+    return [InboundOrderRead.model_validate(r) for r in rows]
+
+
+@router.post("", response_model=InboundOrderRead, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_permission("create", "orders"))])
+async def create_inbound_order(body: InboundOrderCreate, session: SessionDep, user_id: UserDep) -> InboundOrderRead:
+    order = InboundOrder(created_by_id=user_id, updated_by_id=user_id, **body.model_dump())
+    session.add(order)
+    await session.flush()
+    return InboundOrderRead.model_validate(order)
+
+
+@router.get("/{order_id}", response_model=InboundOrderRead, dependencies=[Depends(require_permission("view", "orders"))])
+async def get_inbound_order(order_id: int, session: SessionDep) -> InboundOrderRead:
+    order = await session.get(InboundOrder, order_id)
+    if order is None:
+        raise NotFoundError("Заявка не найдена")
+    return InboundOrderRead.model_validate(order)
+
+
+@router.patch("/{order_id}", response_model=InboundOrderRead, dependencies=[Depends(require_permission("update", "orders"))])
+async def update_inbound_order(order_id: int, body: InboundOrderUpdate, session: SessionDep, user_id: UserDep) -> InboundOrderRead:
+    order = await session.get(InboundOrder, order_id)
+    if order is None:
+        raise NotFoundError("Заявка не найдена")
+    for field, value in body.model_dump(exclude_unset=True).items():
+        setattr(order, field, value)
+    order.updated_by_id = user_id
+    await session.flush()
+    return InboundOrderRead.model_validate(order)
+
+
+@router.delete("/{order_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_permission("delete", "orders"))])
+async def delete_inbound_order(order_id: int, session: SessionDep, user_id: UserDep) -> None:
+    order = await session.get(InboundOrder, order_id)
+    if order is None:
+        raise NotFoundError("Заявка не найдена")
+    order.soft_delete(user_id)
+    await session.flush()
+
+
+# ========== Строки ==========
+
+@router.get("/{order_id}/lines", response_model=list[InboundOrderLineRead], dependencies=[Depends(require_permission("view", "orders"))])
+async def list_inbound_lines(order_id: int, session: SessionDep) -> list[InboundOrderLineRead]:
+    rows = list(await session.scalars(select(InboundOrderLine).where(InboundOrderLine.order_id == order_id)))
+    return [InboundOrderLineRead.model_validate(r) for r in rows]
+
+
+@router.get("/lines/{line_id}", response_model=InboundOrderLineRead, dependencies=[Depends(require_permission("view", "orders"))])
+async def get_inbound_line(line_id: int, session: SessionDep) -> InboundOrderLineRead:
+    line = await session.get(InboundOrderLine, line_id)
+    if line is None:
+        raise NotFoundError("Строка не найдена")
+    return InboundOrderLineRead.model_validate(line)
+
+
+@router.patch("/lines/{line_id}", response_model=InboundOrderLineRead, dependencies=[Depends(require_permission("update", "orders"))])
+async def update_inbound_line(line_id: int, body: InboundOrderLineCreate, session: SessionDep, user_id: UserDep) -> InboundOrderLineRead:
+    line = await session.get(InboundOrderLine, line_id)
+    if line is None:
+        raise NotFoundError("Строка не найдена")
+    for field, value in body.model_dump(exclude_unset=True, exclude={"order_id"}).items():
+        setattr(line, field, value)
+    line.updated_by_id = user_id
+    await session.flush()
+    return InboundOrderLineRead.model_validate(line)
+
+
+@router.delete("/lines/{line_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_permission("delete", "orders"))])
+async def delete_inbound_line(line_id: int, session: SessionDep, user_id: UserDep) -> None:
+    line = await session.get(InboundOrderLine, line_id)
+    if line is None:
+        raise NotFoundError("Строка не найдена")
+    line.soft_delete(user_id)
+    await session.flush()
+
+
+@router.post("/{order_id}/lines", response_model=InboundOrderLineRead, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_permission("create", "orders"))])
+async def create_inbound_line(order_id: int, body: InboundOrderLineCreate, session: SessionDep, user_id: UserDep) -> InboundOrderLineRead:
+    line = InboundOrderLine(order_id=order_id, created_by_id=user_id, updated_by_id=user_id, **body.model_dump(exclude={"order_id"}))
+    session.add(line)
+    await session.flush()
+    return InboundOrderLineRead.model_validate(line)
+
+
+
+========================================
+FILE: app/api/v1/orders/routes_outbound.py
+========================================
+"""API для исходящих заказов."""
+
+from __future__ import annotations
+
+from fastapi import APIRouter, Depends, status
+from sqlalchemy import select
+from sqlalchemy.orm import selectinload
+
+from app.api.deps import SessionDep, UserDep, require_permission
+from app.api.v1.orders.schemas_detailed import OutboundOrderDetailed
+from app.api.v1.orders.schemas import (
+    OutboundOrderCreate,
+    OutboundOrderLineCreate,
+    OutboundOrderLineRead,
+    OutboundOrderRead,
+    OutboundOrderUpdate,
+)
+from app.core.exceptions import NotFoundError
+from app.orders.models import OutboundOrder, OutboundOrderLine
+
+router = APIRouter(prefix="/outbound-orders", tags=["outbound-orders"])
+
+
+@router.get("/detailed", response_model=list[OutboundOrderDetailed], dependencies=[Depends(require_permission("view", "orders"))])
+async def list_outbound_orders_detailed(session: SessionDep) -> list[OutboundOrderDetailed]:
+    stmt = (
+        select(OutboundOrder)
+        .options(selectinload(OutboundOrder.depositor))
+        .options(selectinload(OutboundOrder.client))
+        .options(selectinload(OutboundOrder.warehouse))
+    )
+    rows = list(await session.scalars(stmt))
+    return [OutboundOrderDetailed.model_validate(r) for r in rows]
+
+
+@router.get("", response_model=list[OutboundOrderRead], dependencies=[Depends(require_permission("view", "orders"))])
+async def list_outbound_orders(session: SessionDep) -> list[OutboundOrderRead]:
+    rows = list(await session.scalars(select(OutboundOrder)))
+    return [OutboundOrderRead.model_validate(r) for r in rows]
+
+
+@router.post("", response_model=OutboundOrderRead, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_permission("create", "orders"))])
+async def create_outbound_order(body: OutboundOrderCreate, session: SessionDep, user_id: UserDep) -> OutboundOrderRead:
+    order = OutboundOrder(created_by_id=user_id, updated_by_id=user_id, **body.model_dump())
+    session.add(order)
+    await session.flush()
+    return OutboundOrderRead.model_validate(order)
+
+
+@router.get("/{order_id}", response_model=OutboundOrderRead, dependencies=[Depends(require_permission("view", "orders"))])
+async def get_outbound_order(order_id: int, session: SessionDep) -> OutboundOrderRead:
+    order = await session.get(OutboundOrder, order_id)
+    if order is None:
+        raise NotFoundError("Заявка не найдена")
+    return OutboundOrderRead.model_validate(order)
+
+
+@router.patch("/{order_id}", response_model=OutboundOrderRead, dependencies=[Depends(require_permission("update", "orders"))])
+async def update_outbound_order(order_id: int, body: OutboundOrderUpdate, session: SessionDep, user_id: UserDep) -> OutboundOrderRead:
+    order = await session.get(OutboundOrder, order_id)
+    if order is None:
+        raise NotFoundError("Заявка не найдена")
+    for field, value in body.model_dump(exclude_unset=True).items():
+        setattr(order, field, value)
+    order.updated_by_id = user_id
+    await session.flush()
+    return OutboundOrderRead.model_validate(order)
+
+
+@router.delete("/{order_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_permission("delete", "orders"))])
+async def delete_outbound_order(order_id: int, session: SessionDep, user_id: UserDep) -> None:
+    order = await session.get(OutboundOrder, order_id)
+    if order is None:
+        raise NotFoundError("Заявка не найдена")
+    order.soft_delete(user_id)
+    await session.flush()
+
+
+# ========== Строки ==========
+
+@router.get("/{order_id}/lines", response_model=list[OutboundOrderLineRead], dependencies=[Depends(require_permission("view", "orders"))])
+async def list_outbound_lines(order_id: int, session: SessionDep) -> list[OutboundOrderLineRead]:
+    rows = list(await session.scalars(select(OutboundOrderLine).where(OutboundOrderLine.order_id == order_id)))
+    return [OutboundOrderLineRead.model_validate(r) for r in rows]
+
+
+@router.get("/lines/{line_id}", response_model=OutboundOrderLineRead, dependencies=[Depends(require_permission("view", "orders"))])
+async def get_outbound_line(line_id: int, session: SessionDep) -> OutboundOrderLineRead:
+    line = await session.get(OutboundOrderLine, line_id)
+    if line is None:
+        raise NotFoundError("Строка не найдена")
+    return OutboundOrderLineRead.model_validate(line)
+
+
+@router.patch("/lines/{line_id}", response_model=OutboundOrderLineRead, dependencies=[Depends(require_permission("update", "orders"))])
+async def update_outbound_line(line_id: int, body: OutboundOrderLineCreate, session: SessionDep, user_id: UserDep) -> OutboundOrderLineRead:
+    line = await session.get(OutboundOrderLine, line_id)
+    if line is None:
+        raise NotFoundError("Строка не найдена")
+    for field, value in body.model_dump(exclude_unset=True, exclude={"order_id"}).items():
+        setattr(line, field, value)
+    line.updated_by_id = user_id
+    await session.flush()
+    return OutboundOrderLineRead.model_validate(line)
+
+
+@router.delete("/lines/{line_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_permission("delete", "orders"))])
+async def delete_outbound_line(line_id: int, session: SessionDep, user_id: UserDep) -> None:
+    line = await session.get(OutboundOrderLine, line_id)
+    if line is None:
+        raise NotFoundError("Строка не найдена")
+    line.soft_delete(user_id)
+    await session.flush()
+
+
+@router.post("/{order_id}/lines", response_model=OutboundOrderLineRead, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_permission("create", "orders"))])
+async def create_outbound_line(order_id: int, body: OutboundOrderLineCreate, session: SessionDep, user_id: UserDep) -> OutboundOrderLineRead:
+    line = OutboundOrderLine(order_id=order_id, created_by_id=user_id, updated_by_id=user_id, **body.model_dump(exclude={"order_id"}))
+    session.add(line)
+    await session.flush()
+    return OutboundOrderLineRead.model_validate(line)
+
+
+
+========================================
+FILE: app/api/v1/orders/routes_return.py
+========================================
+"""API для возвратов."""
+
+from __future__ import annotations
+
+from fastapi import APIRouter, Depends, status
+from sqlalchemy import select
+
+from app.api.deps import SessionDep, UserDep, require_permission
+from app.api.v1.orders.schemas import (
+    ReturnOrderCreate,
+    ReturnOrderLineCreate,
+    ReturnOrderLineRead,
+    ReturnOrderRead,
+    ReturnOrderUpdate,
+)
+from app.core.exceptions import NotFoundError
+from app.orders.models import ReturnOrder, ReturnOrderLine
+
+router = APIRouter(prefix="/return-orders", tags=["return-orders"])
+
+
+@router.get("", response_model=list[ReturnOrderRead], dependencies=[Depends(require_permission("view", "orders"))])
+async def list_return_orders(session: SessionDep) -> list[ReturnOrderRead]:
+    rows = list(await session.scalars(select(ReturnOrder)))
+    return [ReturnOrderRead.model_validate(r) for r in rows]
+
+
+@router.post("", response_model=ReturnOrderRead, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_permission("create", "orders"))])
+async def create_return_order(body: ReturnOrderCreate, session: SessionDep, user_id: UserDep) -> ReturnOrderRead:
+    order = ReturnOrder(created_by_id=user_id, updated_by_id=user_id, **body.model_dump())
+    session.add(order)
+    await session.flush()
+    return ReturnOrderRead.model_validate(order)
+
+
+@router.get("/{order_id}", response_model=ReturnOrderRead, dependencies=[Depends(require_permission("view", "orders"))])
+async def get_return_order(order_id: int, session: SessionDep) -> ReturnOrderRead:
+    order = await session.get(ReturnOrder, order_id)
+    if order is None:
+        raise NotFoundError("Возврат не найден")
+    return ReturnOrderRead.model_validate(order)
+
+
+@router.patch("/{order_id}", response_model=ReturnOrderRead, dependencies=[Depends(require_permission("update", "orders"))])
+async def update_return_order(order_id: int, body: ReturnOrderUpdate, session: SessionDep, user_id: UserDep) -> ReturnOrderRead:
+    order = await session.get(ReturnOrder, order_id)
+    if order is None:
+        raise NotFoundError("Возврат не найден")
+    for field, value in body.model_dump(exclude_unset=True).items():
+        setattr(order, field, value)
+    order.updated_by_id = user_id
+    await session.flush()
+    return ReturnOrderRead.model_validate(order)
+
+
+@router.delete("/{order_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_permission("delete", "orders"))])
+async def delete_return_order(order_id: int, session: SessionDep, user_id: UserDep) -> None:
+    order = await session.get(ReturnOrder, order_id)
+    if order is None:
+        raise NotFoundError("Возврат не найден")
+    order.soft_delete(user_id)
+    await session.flush()
+
+
+# ========== Строки ==========
+
+@router.get("/{order_id}/lines", response_model=list[ReturnOrderLineRead], dependencies=[Depends(require_permission("view", "orders"))])
+async def list_return_lines(order_id: int, session: SessionDep) -> list[ReturnOrderLineRead]:
+    rows = list(await session.scalars(select(ReturnOrderLine).where(ReturnOrderLine.return_order_id == order_id)))
+    return [ReturnOrderLineRead.model_validate(r) for r in rows]
+
+
+@router.get("/lines/{line_id}", response_model=ReturnOrderLineRead, dependencies=[Depends(require_permission("view", "orders"))])
+async def get_return_line(line_id: int, session: SessionDep) -> ReturnOrderLineRead:
+    line = await session.get(ReturnOrderLine, line_id)
+    if line is None:
+        raise NotFoundError("Строка не найдена")
+    return ReturnOrderLineRead.model_validate(line)
+
+
+@router.patch("/lines/{line_id}", response_model=ReturnOrderLineRead, dependencies=[Depends(require_permission("update", "orders"))])
+async def update_return_line(line_id: int, body: ReturnOrderLineCreate, session: SessionDep, user_id: UserDep) -> ReturnOrderLineRead:
+    line = await session.get(ReturnOrderLine, line_id)
+    if line is None:
+        raise NotFoundError("Строка не найдена")
+    for field, value in body.model_dump(exclude_unset=True, exclude={"return_order_id"}).items():
+        setattr(line, field, value)
+    line.updated_by_id = user_id
+    await session.flush()
+    return ReturnOrderLineRead.model_validate(line)
+
+
+@router.delete("/lines/{line_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_permission("delete", "orders"))])
+async def delete_return_line(line_id: int, session: SessionDep, user_id: UserDep) -> None:
+    line = await session.get(ReturnOrderLine, line_id)
+    if line is None:
+        raise NotFoundError("Строка не найдена")
+    line.soft_delete(user_id)
+    await session.flush()
+
+
+@router.post("/{order_id}/lines", response_model=ReturnOrderLineRead, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_permission("create", "orders"))])
+async def create_return_line(order_id: int, body: ReturnOrderLineCreate, session: SessionDep, user_id: UserDep) -> ReturnOrderLineRead:
+    line = ReturnOrderLine(return_order_id=order_id, created_by_id=user_id, updated_by_id=user_id, **body.model_dump(exclude={"return_order_id"}))
+    session.add(line)
+    await session.flush()
+    return ReturnOrderLineRead.model_validate(line)
+
+
+
+========================================
+FILE: app/api/v1/orders/schemas_detailed.py
+========================================
+"""Детальные схемы заказов с вложенными объектами."""
+
+from __future__ import annotations
+
+from datetime import date
+from app.api.v1.base_schemas import BaseRead
+from app.api.v1.parties.schemas import DepositorRead, ClientRead
+from app.api.v1.warehouse.schemas import WarehouseRead
+
+
+class InboundOrderDetailed(BaseRead):
+    """Приходный заказ с поставщиком и складом."""
+
+    depositor_id: int
+    warehouse_id: int | None = None
+    number: str
+    supplier_code: str = ""
+    order_date: date
+    planned_date: date | None = None
+    status: str = "new"
+    has_shortage: bool = False
+
+    # Вложенные
+    depositor: DepositorRead | None = None
+    supplier: ClientRead | None = None
+    warehouse: WarehouseRead | None = None
+
+
+class OutboundOrderDetailed(BaseRead):
+    """Расходный заказ с клиентом, поклажедателем, маршрутом."""
+
+    depositor_id: int
+    warehouse_id: int | None = None
+    number: str
+    customer_code: str = ""
+    customer_name: str = ""
+    delivery_address_name: str = ""
+    order_date: date
+    shipping_date: date | None = None
+    needs_delivery: bool = False
+    status: str = "new"
+    delivery_status: str | None = None
+
+    # Вложенные
+    depositor: DepositorRead | None = None
+    client: ClientRead | None = None
+    warehouse: WarehouseRead | None = None
+
+
+
+========================================
+FILE: app/api/v1/orders/schemas.py
+========================================
+"""Схемы для заказов."""
+
+from __future__ import annotations
+
+from datetime import date
+from decimal import Decimal
+
+from pydantic import BaseModel, Field
+
+from app.api.v1.base_schemas import BaseRead
+
+
+class InboundOrderRead(BaseRead):
+    depositor_id: int
+    warehouse_id: int | None = None
+    number: str
+    supplier_code: str = ""
+    order_date: date
+    planned_date: date | None = None
+    notes: str = ""
+    status: str = "new"
+    pordrsp_exported: bool = False
+    recadv_exported: bool = False
+    has_shortage: bool = False
+
+
+class InboundOrderCreate(BaseModel):
+    depositor_id: int
+    warehouse_id: int | None = None
+    number: str = Field(min_length=1, max_length=100)
+    supplier_code: str = ""
+    order_date: date
+    planned_date: date | None = None
+    notes: str = ""
+
+
+class InboundOrderUpdate(BaseModel):
+    warehouse_id: int | None = None
+    supplier_code: str | None = None
+    planned_date: date | None = None
+    notes: str | None = None
+    status: str | None = None
+
+
+class InboundOrderLineRead(BaseRead):
+    order_id: int
+    product_id: int | None = None
+    quantity: Decimal
+    batch_number: str = ""
+    manufacture_date: date | None = None
+    serial_numbers: list = Field(default_factory=list)
+
+
+class InboundOrderLineCreate(BaseModel):
+    order_id: int
+    product_id: int | None = None
+    quantity: Decimal
+    batch_number: str = ""
+    manufacture_date: date | None = None
+    serial_numbers: list = Field(default_factory=list)
+
+
+class OutboundOrderRead(BaseRead):
+    depositor_id: int
+    warehouse_id: int | None = None
+    number: str
+    customer_code: str = ""
+    customer_name: str = ""
+    delivery_address_name: str = ""
+    order_date: date
+    shipping_date: date | None = None
+    needs_delivery: bool = False
+    delivery_only: bool = False
+    places_count: int | None = None
+    declared_weight: Decimal | None = None
+    delivery_contact: str = ""
+    notes: str = ""
+    status: str = "new"
+    ordrsp_exported: bool = False
+    desadv_exported: bool = False
+    zone_id: int | None = None
+    document_number: str = ""
+    is_printed: bool = False
+    uuid: str = ""
+    delivery_status: str | None = None
+
+
+class OutboundOrderCreate(BaseModel):
+    depositor_id: int
+    warehouse_id: int | None = None
+    number: str = Field(min_length=1, max_length=100)
+    customer_code: str = ""
+    customer_name: str = ""
+    delivery_address_name: str = ""
+    order_date: date
+    shipping_date: date | None = None
+    needs_delivery: bool = False
+    delivery_only: bool = False
+    places_count: int | None = None
+    declared_weight: Decimal | None = None
+    delivery_contact: str = ""
+    notes: str = ""
+
+
+class OutboundOrderUpdate(BaseModel):
+    warehouse_id: int | None = None
+    customer_name: str | None = None
+    delivery_address_name: str | None = None
+    shipping_date: date | None = None
+    needs_delivery: bool | None = None
+    delivery_contact: str | None = None
+    notes: str | None = None
+    status: str | None = None
+    delivery_status: str | None = None
+
+
+class OutboundOrderLineRead(BaseRead):
+    order_id: int
+    product_id: int | None = None
+    quantity: Decimal
+    location_id: int | None = None
+    batch_number: str = ""
+    manufacture_date: date | None = None
+    serial_numbers: list = Field(default_factory=list)
+
+
+class OutboundOrderLineCreate(BaseModel):
+    order_id: int
+    product_id: int | None = None
+    quantity: Decimal
+    location_id: int | None = None
+    batch_number: str = ""
+    manufacture_date: date | None = None
+    serial_numbers: list = Field(default_factory=list)
+
+
+class ReturnOrderRead(BaseRead):
+    outbound_order_id: int
+    inbound_order_id: int | None = None
+    depositor_id: int
+    warehouse_id: int | None = None
+    customer_code: str = ""
+    customer_name: str = ""
+    return_date: date
+    return_type: str = "partial"
+    status: str = "new"
+    notes: str = ""
+
+
+class ReturnOrderCreate(BaseModel):
+    outbound_order_id: int
+    inbound_order_id: int | None = None
+    depositor_id: int
+    warehouse_id: int | None = None
+    customer_code: str = ""
+    customer_name: str = ""
+    return_date: date
+    return_type: str = "partial"
+    notes: str = ""
+
+
+class ReturnOrderUpdate(BaseModel):
+    inbound_order_id: int | None = None
+    status: str | None = None
+    notes: str | None = None
+
+
+class ReturnOrderLineRead(BaseRead):
+    return_order_id: int
+    outbound_order_line_id: int | None = None
+    product_id: int
+    qty_returned: Decimal
+    batch_number: str = ""
+    manufacture_date: date | None = None
+    reason: str = ""
+
+
+class ReturnOrderLineCreate(BaseModel):
+    return_order_id: int
+    outbound_order_line_id: int | None = None
+    product_id: int
+    qty_returned: Decimal
+    batch_number: str = ""
+    manufacture_date: date | None = None
+    reason: str = ""
+
+
+
+========================================
+FILE: app/api/v1/parties/__init__.py
+========================================
+
+
+
+========================================
+FILE: app/api/v1/parties/routes_carriers_keepers.py
+========================================
+"""API для перевозчиков и хранителей."""
+
+from __future__ import annotations
+
+from fastapi import APIRouter, Depends, status
+from sqlalchemy import select
+
+from app.api.deps import SessionDep, UserDep, require_permission
+from app.api.v1.parties.schemas import (
+    CarrierCreate,
+    CarrierRead,
+    KeeperCreate,
+    KeeperRead,
+)
+from app.core.exceptions import ConflictError, NotFoundError
+from app.parties.models import Carrier, Keeper
+
+router = APIRouter(tags=["carriers-keepers"])
+
+
+# ========== Перевозчики ==========
+
+@router.get(
+    "/carriers",
+    response_model=list[CarrierRead],
+    dependencies=[Depends(require_permission("view", "carriers"))],
+)
+async def list_carriers(session: SessionDep) -> list[CarrierRead]:
+    rows = list(await session.scalars(select(Carrier)))
+    return [CarrierRead.model_validate(r) for r in rows]
+
+
+@router.post(
+    "/carriers",
+    response_model=CarrierRead,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_permission("create", "carriers"))],
+)
+async def create_carrier(
+    body: CarrierCreate,
+    session: SessionDep,
+    user_id: UserDep,
+) -> CarrierRead:
+    existing = await session.scalar(
+        select(Carrier).where(Carrier.legal_entity_id == body.legal_entity_id)
+    )
+    if existing:
+        raise ConflictError("Перевозчик с таким юрлицом уже существует")
+
+    carrier = Carrier(
+        legal_entity_id=body.legal_entity_id,
+        created_by_id=user_id,
+        updated_by_id=user_id,
+    )
+    session.add(carrier)
+    await session.flush()
+    return CarrierRead.model_validate(carrier)
+
+
+@router.get(
+    "/carriers/{carrier_id}",
+    response_model=CarrierRead,
+    dependencies=[Depends(require_permission("view", "carriers"))],
+)
+async def get_carrier(carrier_id: int, session: SessionDep) -> CarrierRead:
+    carrier = await session.get(Carrier, carrier_id)
+    if carrier is None:
+        raise NotFoundError("Перевозчик не найден")
+    return CarrierRead.model_validate(carrier)
+
+
+@router.patch(
+    "/carriers/{carrier_id}",
+    response_model=CarrierRead,
+    dependencies=[Depends(require_permission("update", "carriers"))],
+)
+async def update_carrier(
+    carrier_id: int,
+    body: CarrierCreate,
+    session: SessionDep,
+    user_id: UserDep,
+) -> CarrierRead:
+    carrier = await session.get(Carrier, carrier_id)
+    if carrier is None:
+        raise NotFoundError("Перевозчик не найден")
+    carrier.legal_entity_id = body.legal_entity_id
+    carrier.updated_by_id = user_id
+    await session.flush()
+    return CarrierRead.model_validate(carrier)
+
+
+@router.delete(
+    "/carriers/{carrier_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_permission("delete", "carriers"))],
+)
+async def delete_carrier(carrier_id: int, session: SessionDep, user_id: UserDep) -> None:
+    carrier = await session.get(Carrier, carrier_id)
+    if carrier is None:
+        raise NotFoundError("Перевозчик не найден")
+    carrier.soft_delete(user_id)
+    await session.flush()
+
+
+# ========== Хранители ==========
+
+@router.get(
+    "/keepers",
+    response_model=list[KeeperRead],
+    dependencies=[Depends(require_permission("view", "keepers"))],
+)
+async def list_keepers(session: SessionDep) -> list[KeeperRead]:
+    rows = list(await session.scalars(select(Keeper)))
+    return [KeeperRead.model_validate(r) for r in rows]
+
+
+@router.post(
+    "/keepers",
+    response_model=KeeperRead,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_permission("create", "keepers"))],
+)
+async def create_keeper(
+    body: KeeperCreate,
+    session: SessionDep,
+    user_id: UserDep,
+) -> KeeperRead:
+    existing = await session.scalar(
+        select(Keeper).where(Keeper.legal_entity_id == body.legal_entity_id)
+    )
+    if existing:
+        raise ConflictError("Хранитель с таким юрлицом уже существует")
+
+    keeper = Keeper(
+        legal_entity_id=body.legal_entity_id,
+        created_by_id=user_id,
+        updated_by_id=user_id,
+    )
+    session.add(keeper)
+    await session.flush()
+    return KeeperRead.model_validate(keeper)
+
+
+@router.get(
+    "/keepers/{keeper_id}",
+    response_model=KeeperRead,
+    dependencies=[Depends(require_permission("view", "keepers"))],
+)
+async def get_keeper(keeper_id: int, session: SessionDep) -> KeeperRead:
+    keeper = await session.get(Keeper, keeper_id)
+    if keeper is None:
+        raise NotFoundError("Хранитель не найден")
+    return KeeperRead.model_validate(keeper)
+
+
+@router.patch(
+    "/keepers/{keeper_id}",
+    response_model=KeeperRead,
+    dependencies=[Depends(require_permission("update", "keepers"))],
+)
+async def update_keeper(
+    keeper_id: int,
+    body: KeeperCreate,
+    session: SessionDep,
+    user_id: UserDep,
+) -> KeeperRead:
+    keeper = await session.get(Keeper, keeper_id)
+    if keeper is None:
+        raise NotFoundError("Хранитель не найден")
+    keeper.legal_entity_id = body.legal_entity_id
+    keeper.updated_by_id = user_id
+    await session.flush()
+    return KeeperRead.model_validate(keeper)
+
+
+@router.delete(
+    "/keepers/{keeper_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_permission("delete", "keepers"))],
+)
+async def delete_keeper(keeper_id: int, session: SessionDep, user_id: UserDep) -> None:
+    keeper = await session.get(Keeper, keeper_id)
+    if keeper is None:
+        raise NotFoundError("Хранитель не найден")
+    keeper.soft_delete(user_id)
+    await session.flush()
+
+
+
+========================================
+FILE: app/api/v1/parties/routes_delivery_zones.py
+========================================
+"""API для зон доставки."""
+
+from __future__ import annotations
+
+from fastapi import APIRouter, Depends, status
+from sqlalchemy import select
+
+from app.api.deps import SessionDep, UserDep, require_permission
+from app.api.v1.parties.schemas import DeliveryZoneCreate, DeliveryZoneRead
+from app.core.exceptions import ConflictError, NotFoundError
+from app.parties.models import DeliveryZone
+
+router = APIRouter(prefix="/delivery-zones", tags=["delivery-zones"])
+
+
+@router.get(
+    "",
+    response_model=list[DeliveryZoneRead],
+    dependencies=[Depends(require_permission("view", "addresses"))],
+)
+async def list_delivery_zones(session: SessionDep) -> list[DeliveryZoneRead]:
+    """Список зон доставки."""
+    zones = list(await session.scalars(select(DeliveryZone)))
+    return [DeliveryZoneRead.model_validate(z) for z in zones]
+
+
+@router.post(
+    "",
+    response_model=DeliveryZoneRead,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_permission("create", "addresses"))],
+)
+async def create_delivery_zone(
+    body: DeliveryZoneCreate,
+    session: SessionDep,
+    user_id: UserDep,
+) -> DeliveryZoneRead:
+    """Создать зону доставки."""
+    existing = await session.scalar(
+        select(DeliveryZone).where(DeliveryZone.name == body.name)
+    )
+    if existing:
+        raise ConflictError(f"Зона с названием {body.name} уже существует")
+
+    zone = DeliveryZone(
+        name=body.name,
+        created_by_id=user_id,
+        updated_by_id=user_id,
+    )
+    session.add(zone)
+    await session.flush()
+    return DeliveryZoneRead.model_validate(zone)
+
+
+@router.get(
+    "/{zone_id}",
+    response_model=DeliveryZoneRead,
+    dependencies=[Depends(require_permission("view", "addresses"))],
+)
+async def get_delivery_zone(zone_id: int, session: SessionDep) -> DeliveryZoneRead:
+    """Получить зону доставки."""
+    zone = await session.get(DeliveryZone, zone_id)
+    if zone is None:
+        raise NotFoundError("Зона доставки не найдена")
+    return DeliveryZoneRead.model_validate(zone)
+
+
+@router.patch(
+    "/{zone_id}",
+    response_model=DeliveryZoneRead,
+    dependencies=[Depends(require_permission("update", "addresses"))],
+)
+async def update_delivery_zone(
+    zone_id: int,
+    body: DeliveryZoneCreate,
+    session: SessionDep,
+    user_id: UserDep,
+) -> DeliveryZoneRead:
+    """Обновить зону доставки."""
+    zone = await session.get(DeliveryZone, zone_id)
+    if zone is None:
+        raise NotFoundError("Зона доставки не найдена")
+    zone.name = body.name
+    zone.updated_by_id = user_id
+    await session.flush()
+    return DeliveryZoneRead.model_validate(zone)
+
+
+@router.delete(
+    "/{zone_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_permission("delete", "addresses"))],
+)
+async def delete_delivery_zone(zone_id: int, session: SessionDep, user_id: UserDep) -> None:
+    """Удалить зону доставки."""
+    zone = await session.get(DeliveryZone, zone_id)
+    if zone is None:
+        raise NotFoundError("Зона доставки не найдена")
+    zone.soft_delete(user_id)
+    await session.flush()
+
+
+
+========================================
+FILE: app/api/v1/parties/routes.py
+========================================
+"""API для модуля parties."""
+
+from __future__ import annotations
+
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, Query, status
+from sqlalchemy import select
+
+from app.api.deps import SessionDep, UserDep, require_permission
+from app.api.v1.parties import schemas
+from app.core.exceptions import BadRequestError, ConflictError, NotFoundError
+from app.parties.models import (
+    Address,
+    Depositor,
+    LegalEntity,
+    RawAddress,
+    Tariff,
+    TariffDocument,
+)
+from app.parties.repository import (
+    AddressRepository,
+    ClientRepository,
+    ContractRepository,
+    DepositorRepository,
+    LegalEntityRepository,
+    TariffRepository,
+)
+from app.parties.services import (
+    AddressService,
+    ClientService,
+    ContractService,
+    DepositorService,
+    LegalEntityService,
+    TariffService,
+)
+
+router = APIRouter(prefix="/parties", tags=["parties"])
+
+
+# ========== Адреса ==========
+
+@router.get("/addresses", response_model=list[schemas.AddressRead], dependencies=[Depends(require_permission("view", "addresses"))])
+async def list_addresses(session: SessionDep) -> list[schemas.AddressRead]:
+    service = AddressService(AddressRepository(session))
+    rows = await service.list_all()
+    return [schemas.AddressRead.model_validate(r) for r in rows]
+
+
+@router.post("/addresses/resolve", response_model=schemas.AddressRead, dependencies=[Depends(require_permission("create", "addresses"))])
+async def resolve_address(
+    body: schemas.AddressResolve,
+    session: SessionDep,
+    user_id: UserDep,
+) -> schemas.AddressRead:
+    service = AddressService(AddressRepository(session))
+    address = await service.get_or_create(body.raw_text, body.source, user_id)
+    return schemas.AddressRead.model_validate(address)
+
+
+@router.get("/addresses/{address_id}", response_model=schemas.AddressRead, dependencies=[Depends(require_permission("view", "addresses"))])
+async def get_address(address_id: int, session: SessionDep) -> schemas.AddressRead:
+    service = AddressService(AddressRepository(session))
+    row = await service.get_by_id(address_id)
+    if row is None:
+        raise NotFoundError("Адрес не найден")
+    return schemas.AddressRead.model_validate(row)
+
+
+@router.patch("/addresses/{address_id}", response_model=schemas.AddressRead, dependencies=[Depends(require_permission("update", "addresses"))])
+async def update_address(
+    address_id: int,
+    body: schemas.AddressUpdate,
+    session: SessionDep,
+    user_id: UserDep,
+) -> schemas.AddressRead:
+    service = AddressService(AddressRepository(session))
+    address = await service.update(address_id, user_id, body.model_dump(exclude_unset=True))
+    if address is None:
+        raise NotFoundError("Адрес не найден")
+    return schemas.AddressRead.model_validate(address)
+
+
+@router.delete("/addresses/{address_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_permission("delete", "addresses"))])
+async def delete_address(
+    address_id: int,
+    session: SessionDep,
+    user_id: UserDep,
+) -> None:
+    service = AddressService(AddressRepository(session))
+    ok = await service.soft_delete(address_id, user_id)
+    if not ok:
+        raise NotFoundError("Адрес не найден")
+
+
+# ========== Алиасы (сырые адреса) ==========
+
+@router.get("/aliases", response_model=list[schemas.RawAddressRead], dependencies=[Depends(require_permission("view", "addresses"))])
+async def list_aliases(
+    session: SessionDep,
+    limit: int = 1000,
+    offset: int = 0,
+) -> list[schemas.RawAddressRead]:
+    stmt = (
+        select(RawAddress)
+        .where()
+        .order_by(RawAddress.id.desc())
+        .limit(limit)
+        .offset(offset)
+    )
+    rows = list(await session.scalars(stmt))
+    result = []
+    for r in rows:
+        address = await session.get(Address, r.normalized_address_id)
+        result.append(
+            schemas.RawAddressRead(
+                id=r.id,
+                is_active=r.is_active,
+                is_deleted=r.is_deleted,
+                created_at=r.created_at,
+                updated_at=r.updated_at,
+                created_by_id=r.created_by_id,
+                updated_by_id=r.updated_by_id,
+                deleted_at=r.deleted_at,
+                deleted_by_id=r.deleted_by_id,
+                raw_text=r.raw_text,
+                hash=r.hash,
+                normalized_address_id=r.normalized_address_id,
+                source=r.source,
+                full_address=address.full_address if address else None,
+            )
+        )
+    return result
+
+
+@router.post(
+    "/aliases",
+    response_model=schemas.RawAddressRead,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_permission("create", "addresses"))],
+)
+async def create_alias(
+    body: schemas.AliasCreate,
+    session: SessionDep,
+    user_id: UserDep,
+) -> schemas.RawAddressRead:
+    service = AddressService(AddressRepository(session))
+    address = await service.get_or_create(body.raw_text, body.source, user_id)
+
+    raw = await session.scalar(
+        select(RawAddress).where(RawAddress.raw_text == body.raw_text)
+    )
+
+    return schemas.RawAddressRead(
+        id=raw.id,
+        is_active=raw.is_active,
+        is_deleted=raw.is_deleted,
+        created_at=raw.created_at,
+        updated_at=raw.updated_at,
+        created_by_id=raw.created_by_id,
+        updated_by_id=raw.updated_by_id,
+        deleted_at=raw.deleted_at,
+        deleted_by_id=raw.deleted_by_id,
+        raw_text=raw.raw_text,
+        hash=raw.hash,
+        normalized_address_id=raw.normalized_address_id,
+        source=raw.source,
+        full_address=address.full_address,
+    )
+
+
+@router.get("/aliases/{alias_id}", response_model=schemas.RawAddressRead, dependencies=[Depends(require_permission("view", "addresses"))])
+async def get_alias(alias_id: int, session: SessionDep) -> schemas.RawAddressRead:
+    raw = await session.get(RawAddress, alias_id)
+    if raw is None or raw.is_deleted:
+        raise NotFoundError("Вариант ввода не найден")
+    return schemas.RawAddressRead(
+        id=raw.id,
+        is_active=raw.is_active,
+        is_deleted=raw.is_deleted,
+        created_at=raw.created_at,
+        updated_at=raw.updated_at,
+        created_by_id=raw.created_by_id,
+        updated_by_id=raw.updated_by_id,
+        deleted_at=raw.deleted_at,
+        deleted_by_id=raw.deleted_by_id,
+        raw_text=raw.raw_text,
+        hash=raw.hash,
+        normalized_address_id=raw.normalized_address_id,
+        source=raw.source,
+    )
+
+
+@router.patch(
+    "/aliases/{alias_id}",
+    response_model=schemas.RawAddressRead,
+    dependencies=[Depends(require_permission("update", "addresses"))],
+)
+async def update_alias(
+    alias_id: int,
+    body: schemas.AliasUpdate,
+    session: SessionDep,
+    user_id: UserDep,
+) -> schemas.RawAddressRead:
+    raw = await session.get(RawAddress, alias_id)
+    if raw is None or raw.is_deleted:
+        raise NotFoundError("Вариант ввода не найден")
+
+    if body.raw_text is not None:
+        raw.raw_text = body.raw_text
+        # Пересчитываем hash
+        raw.hash = AddressService.get_hash(body.raw_text)
+    if body.source is not None:
+        raw.source = body.source
+    if body.normalized_address_id is not None:
+        raw.normalized_address_id = body.normalized_address_id
+
+    raw.updated_by_id = user_id
+    await session.flush()
+
+    address = await session.get(Address, raw.normalized_address_id)
+    return schemas.RawAddressRead(
+        id=raw.id,
+        raw_text=raw.raw_text,
+        hash=raw.hash,
+        normalized_address_id=raw.normalized_address_id,
+        source=raw.source,
+        full_address=address.full_address if address else None,
+    )
+
+
+@router.delete("/aliases/{alias_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_permission("delete", "addresses"))])
+async def delete_alias(alias_id: int, session: SessionDep, user_id: UserDep) -> None:
+    raw = await session.get(RawAddress, alias_id)
+    if raw is None or raw.is_deleted:
+        raise NotFoundError("Вариант ввода не найден")
+    raw.soft_delete(user_id)
+    await session.flush()
+
+
+# ========== Юрлица ==========
+
+@router.get("/legal-entities", response_model=list[schemas.LegalEntityRead], dependencies=[Depends(require_permission("view", "legal_entities"))])
+async def list_legal_entities(session: SessionDep) -> list[schemas.LegalEntityRead]:
+    service = LegalEntityService(LegalEntityRepository(session))
+    rows = await service.list_all()
+    return [schemas.LegalEntityRead.model_validate(r) for r in rows]
+
+
+@router.post("/legal-entities", response_model=schemas.LegalEntityRead, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_permission("create", "legal_entities"))])
+async def create_legal_entity(
+    body: schemas.LegalEntityCreate,
+    session: SessionDep,
+    user_id: UserDep,
+) -> schemas.LegalEntityRead:
+    service = LegalEntityService(LegalEntityRepository(session))
+    try:
+        row = await service.create(user_id, **body.model_dump())
+    except ValueError as e:
+        raise ConflictError(str(e)) from e
+    return schemas.LegalEntityRead.model_validate(row)
+
+
+@router.patch("/legal-entities/{entity_id}", response_model=schemas.LegalEntityRead, dependencies=[Depends(require_permission("update", "legal_entities"))])
+async def update_legal_entity(
+    entity_id: int,
+    body: schemas.LegalEntityUpdate,
+    session: SessionDep,
+    user_id: UserDep,
+) -> schemas.LegalEntityRead:
+    service = LegalEntityService(LegalEntityRepository(session))
+    row = await service.update(entity_id, user_id, **body.model_dump(exclude_unset=True))
+    if row is None:
+        raise NotFoundError("Юрлицо не найдено")
+    return schemas.LegalEntityRead.model_validate(row)
+
+
+@router.delete("/legal-entities/{entity_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_permission("delete", "legal_entities"))])
+async def delete_legal_entity(entity_id: int, session: SessionDep, user_id: UserDep) -> None:
+    service = LegalEntityService(LegalEntityRepository(session))
+    ok = await service.soft_delete(entity_id, user_id)
+    if not ok:
+        raise NotFoundError("Юрлицо не найдено")
+
+
+@router.get("/legal-entities/{entity_id}", response_model=schemas.LegalEntityRead, dependencies=[Depends(require_permission("view", "legal_entities"))])
+async def get_legal_entity(entity_id: int, session: SessionDep) -> schemas.LegalEntityRead:
+    service = LegalEntityService(LegalEntityRepository(session))
+    row = await service.get_by_id(entity_id)
+    if row is None:
+        raise NotFoundError("Юрлицо не найдено")
+    return schemas.LegalEntityRead.model_validate(row)
+
+
+# ========== Поклажедатели ==========
+
+@router.get("/depositors", response_model=list[schemas.DepositorRead], dependencies=[Depends(require_permission("view", "depositors"))])
+async def list_depositors(session: SessionDep) -> list[schemas.DepositorRead]:
+    service = DepositorService(DepositorRepository(session))
+    rows = await service.list_all()
+    result = []
+    for r in rows:
+        le = await session.get(LegalEntity, r.legal_entity_id)
+        result.append(
+            schemas.DepositorRead(
+                id=r.id,
+                legal_entity_id=r.legal_entity_id,
+                code=r.code,
+                legal_entity_name=le.name if le else "",
+            )
+        )
+    return result
+
+
+@router.post("/depositors", response_model=schemas.DepositorRead, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_permission("create", "depositors"))])
+async def create_depositor(
+    body: schemas.DepositorCreate,
+    session: SessionDep,
+    user_id: UserDep,
+) -> schemas.DepositorRead:
+    service = DepositorService(DepositorRepository(session))
+    try:
+        row = await service.create(body.legal_entity_id, body.code, user_id)
+    except ValueError as e:
+        raise ConflictError(str(e)) from e
+    return schemas.DepositorRead.model_validate(row)
+
+
+@router.get("/depositors/{depositor_id}", response_model=schemas.DepositorRead, dependencies=[Depends(require_permission("view", "depositors"))])
+async def get_depositor(depositor_id: int, session: SessionDep) -> schemas.DepositorRead:
+    service = DepositorService(DepositorRepository(session))
+    row = await service.get_by_id(depositor_id)
+    if row is None:
+        raise NotFoundError("Поклажедатель не найден")
+    return schemas.DepositorRead.model_validate(row)
+
+
+@router.patch("/depositors/{depositor_id}", response_model=schemas.DepositorRead, dependencies=[Depends(require_permission("update", "depositors"))])
+async def update_depositor(
+    depositor_id: int,
+    body: schemas.DepositorUpdate,
+    session: SessionDep,
+    user_id: UserDep,
+) -> schemas.DepositorRead:
+    row = await session.get(Depositor, depositor_id)
+    if row is None:
+        raise NotFoundError("Поклажедатель не найден")
+    for field, value in body.model_dump(exclude_unset=True).items():
+        setattr(row, field, value)
+    row.updated_by_id = user_id
+    await session.flush()
+    return schemas.DepositorRead.model_validate(row)
+
+
+@router.delete("/depositors/{depositor_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_permission("delete", "depositors"))])
+async def delete_depositor(depositor_id: int, session: SessionDep, user_id: UserDep) -> None:
+    row = await session.get(Depositor, depositor_id)
+    if row is None:
+        raise NotFoundError("Поклажедатель не найден")
+    row.soft_delete(user_id)
+    await session.flush()
+
+
+# ========== Клиенты ==========
+
+@router.get("/clients", response_model=list[schemas.ClientRead], dependencies=[Depends(require_permission("view", "clients"))])
+async def list_clients(
+    session: SessionDep,
+    depositor_id: Annotated[int | None, Query(ge=1)] = None,
+) -> list[schemas.ClientRead]:
+    repo = ClientRepository(session)
+    if depositor_id:
+        rows = await repo.list_by_depositor(depositor_id)
+    else:
+        rows = await repo.list_all()
+    return [schemas.ClientRead.model_validate(r) for r in rows]
+
+
+@router.post("/clients", response_model=schemas.ClientRead, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_permission("create", "clients"))])
+async def create_client(
+    body: schemas.ClientCreate,
+    session: SessionDep,
+    user_id: UserDep,
+) -> schemas.ClientRead:
+    service = ClientService(ClientRepository(session))
+    try:
+        row = await service.create(user_id, **body.model_dump())
+    except ValueError as e:
+        raise ConflictError(str(e)) from e
+    return schemas.ClientRead.model_validate(row)
+
+
+@router.get("/clients/{client_id}", response_model=schemas.ClientRead, dependencies=[Depends(require_permission("view", "clients"))])
+async def get_client(client_id: int, session: SessionDep) -> schemas.ClientRead:
+    service = ClientService(ClientRepository(session))
+    row = await service.get_by_id(client_id)
+    if row is None:
+        raise NotFoundError("Клиент не найден")
+    return schemas.ClientRead.model_validate(row)
+
+
+@router.patch("/clients/{client_id}", response_model=schemas.ClientRead, dependencies=[Depends(require_permission("update", "clients"))])
+async def update_client(
+    client_id: int,
+    body: schemas.ClientUpdate,
+    session: SessionDep,
+    user_id: UserDep,
+) -> schemas.ClientRead:
+    service = ClientService(ClientRepository(session))
+    row = await service.update(client_id, user_id, **body.model_dump(exclude_unset=True))
+    if row is None:
+        raise NotFoundError("Клиент не найден")
+    return schemas.ClientRead.model_validate(row)
+
+
+@router.delete("/clients/{client_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_permission("delete", "clients"))])
+async def delete_client(client_id: int, session: SessionDep, user_id: UserDep) -> None:
+    service = ClientService(ClientRepository(session))
+    ok = await service.soft_delete(client_id, user_id)
+    if not ok:
+        raise NotFoundError("Клиент не найден")
+
+
+# ========== Договоры ==========
+
+@router.get("/contracts", response_model=list[schemas.ContractRead], dependencies=[Depends(require_permission("view", "contracts"))])
+async def list_contracts(session: SessionDep) -> list[schemas.ContractRead]:
+    repo = ContractRepository(session)
+    rows = await repo.list_all()
+    return [schemas.ContractRead.model_validate(r) for r in rows]
+
+
+@router.post("/contracts", response_model=schemas.ContractRead, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_permission("create", "contracts"))])
+async def create_contract(
+    body: schemas.ContractCreate,
+    session: SessionDep,
+    user_id: UserDep,
+) -> schemas.ContractRead:
+    service = ContractService(ContractRepository(session))
+    try:
+        row = await service.create(user_id, **body.model_dump())
+    except ValueError as e:
+        raise BadRequestError(str(e)) from e
+    return schemas.ContractRead.model_validate(row)
+
+
+@router.get("/contracts/{contract_id}", response_model=schemas.ContractRead, dependencies=[Depends(require_permission("view", "contracts"))])
+async def get_contract(contract_id: int, session: SessionDep) -> schemas.ContractRead:
+    service = ContractService(ContractRepository(session))
+    row = await service.get_by_id(contract_id)
+    if row is None:
+        raise NotFoundError("Договор не найден")
+    return schemas.ContractRead.model_validate(row)
+
+
+@router.patch("/contracts/{contract_id}", response_model=schemas.ContractRead, dependencies=[Depends(require_permission("update", "contracts"))])
+async def update_contract(
+    contract_id: int,
+    body: schemas.ContractUpdate,
+    session: SessionDep,
+    user_id: UserDep,
+) -> schemas.ContractRead:
+    service = ContractService(ContractRepository(session))
+    row = await service.update(contract_id, user_id, **body.model_dump(exclude_unset=True))
+    if row is None:
+        raise NotFoundError("Договор не найден")
+    return schemas.ContractRead.model_validate(row)
+
+
+@router.delete("/contracts/{contract_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_permission("delete", "contracts"))])
+async def delete_contract(contract_id: int, session: SessionDep, user_id: UserDep) -> None:
+    service = ContractService(ContractRepository(session))
+    ok = await service.soft_delete(contract_id, user_id)
+    if not ok:
+        raise NotFoundError("Договор не найден")
+
+
+# ========== Тарифы ==========
+
+@router.get("/tariff-documents", response_model=list[schemas.TariffDocumentRead], dependencies=[Depends(require_permission("view", "tariffs"))])
+async def list_tariff_documents(session: SessionDep) -> list[schemas.TariffDocumentRead]:
+    rows = list(await session.scalars(select(TariffDocument).where()))
+    return [schemas.TariffDocumentRead.model_validate(r) for r in rows]
+
+
+@router.get("/tariff-documents/{doc_id}", response_model=schemas.TariffDocumentRead, dependencies=[Depends(require_permission("view", "tariffs"))])
+async def get_tariff_document(doc_id: int, session: SessionDep) -> schemas.TariffDocumentRead:
+    service = TariffService(TariffRepository(session))
+    doc = await service.get_document(doc_id)
+    if doc is None:
+        raise NotFoundError("Тарифный документ не найден")
+    return schemas.TariffDocumentRead.model_validate(doc)
+
+
+@router.patch("/tariff-documents/{doc_id}", response_model=schemas.TariffDocumentRead, dependencies=[Depends(require_permission("update", "tariffs"))])
+async def update_tariff_document(
+    doc_id: int,
+    body: schemas.TariffDocumentUpdate,
+    session: SessionDep,
+    user_id: UserDep,
+) -> schemas.TariffDocumentRead:
+    doc = await session.get(TariffDocument, doc_id)
+    if doc is None:
+        raise NotFoundError("Тарифный документ не найден")
+    for field, value in body.model_dump(exclude_unset=True).items():
+        setattr(doc, field, value)
+    doc.updated_by_id = user_id
+    await session.flush()
+    return schemas.TariffDocumentRead.model_validate(doc)
+
+
+@router.delete("/tariff-documents/{doc_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_permission("delete", "tariffs"))])
+async def delete_tariff_document(doc_id: int, session: SessionDep, user_id: UserDep) -> None:
+    doc = await session.get(TariffDocument, doc_id)
+    if doc is None:
+        raise NotFoundError("Тарифный документ не найден")
+    doc.soft_delete(user_id)
+    await session.flush()
+
+
+@router.post("/tariff-documents", response_model=schemas.TariffDocumentRead, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_permission("create", "tariffs"))])
+async def create_tariff_document(
+    body: schemas.TariffDocumentCreate,
+    session: SessionDep,
+    user_id: UserDep,
+) -> schemas.TariffDocumentRead:
+    service = TariffService(TariffRepository(session))
+    try:
+        row = await service.create_document(user_id, **body.model_dump())
+    except ValueError as e:
+        raise BadRequestError(str(e)) from e
+    return schemas.TariffDocumentRead.model_validate(row)
+
+
+@router.get("/tariffs", response_model=list[schemas.TariffRead], dependencies=[Depends(require_permission("view", "tariffs"))])
+async def list_tariffs(session: SessionDep, document_id: int | None = None) -> list[schemas.TariffRead]:
+    stmt = select(Tariff).where()
+    if document_id:
+        stmt = stmt.where(Tariff.document_id == document_id)
+    rows = list(await session.scalars(stmt))
+    return [schemas.TariffRead.model_validate(r) for r in rows]
+
+
+@router.get("/tariffs/{tariff_id}", response_model=schemas.TariffRead, dependencies=[Depends(require_permission("view", "tariffs"))])
+async def get_tariff(tariff_id: int, session: SessionDep) -> schemas.TariffRead:
+    tariff = await session.get(Tariff, tariff_id)
+    if tariff is None:
+        raise NotFoundError("Тариф не найден")
+    return schemas.TariffRead.model_validate(tariff)
+
+
+@router.patch("/tariffs/{tariff_id}", response_model=schemas.TariffRead, dependencies=[Depends(require_permission("update", "tariffs"))])
+async def update_tariff(
+    tariff_id: int,
+    body: schemas.TariffUpdate,
+    session: SessionDep,
+    user_id: UserDep,
+) -> schemas.TariffRead:
+    tariff = await session.get(Tariff, tariff_id)
+    if tariff is None:
+        raise NotFoundError("Тариф не найден")
+    for field, value in body.model_dump(exclude_unset=True).items():
+        setattr(tariff, field, value)
+    tariff.updated_by_id = user_id
+    await session.flush()
+    return schemas.TariffRead.model_validate(tariff)
+
+
+@router.delete("/tariffs/{tariff_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_permission("delete", "tariffs"))])
+async def delete_tariff(tariff_id: int, session: SessionDep, user_id: UserDep) -> None:
+    tariff = await session.get(Tariff, tariff_id)
+    if tariff is None:
+        raise NotFoundError("Тариф не найден")
+    tariff.soft_delete(user_id)
+    await session.flush()
+
+
+@router.post("/tariffs", response_model=schemas.TariffRead, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_permission("create", "tariffs"))])
+async def create_tariff(
+    body: schemas.TariffCreate,
+    session: SessionDep,
+    user_id: UserDep,
+) -> schemas.TariffRead:
+    service = TariffService(TariffRepository(session))
+    try:
+        row = await service.create_tariff(user_id, **body.model_dump())
+    except ValueError as e:
+        raise BadRequestError(str(e)) from e
+    return schemas.TariffRead.model_validate(row)
+
+
+
+========================================
+FILE: app/api/v1/parties/schemas.py
+========================================
+"""Схемы для модуля parties."""
+
+from __future__ import annotations
+
+from datetime import date
+from decimal import Decimal
+
+from pydantic import BaseModel, Field
+
+from app.api.v1.base_schemas import BaseRead
+
+
+class DeliveryZoneRead(BaseRead):
+    name: str
+
+
+class DeliveryZoneCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
+
+
+class AddressRead(BaseRead):
+    full_address: str
+    region: str = ""
+    city: str = ""
+    street: str = ""
+    house: str = ""
+    building: str = ""
+    structure: str = ""
+    flat: str = ""
+    fias_id: str = ""
+    latitude: float | None = None
+    longitude: float | None = None
+    postal_code: str = ""
+    delivery_zone_id: int | None = None
+
+
+class AddressResolve(BaseModel):
+    raw_text: str = Field(min_length=1)
+    source: str = ""
+
+
+class AddressUpdate(BaseModel):
+    full_address: str | None = None
+    region: str | None = None
+    city: str | None = None
+    street: str | None = None
+    house: str | None = None
+    building: str | None = None
+    structure: str | None = None
+    flat: str | None = None
+    fias_id: str | None = None
+    latitude: float | None = None
+    longitude: float | None = None
+    postal_code: str | None = None
+    delivery_zone_id: int | None = None
+
+
+class LegalEntityRead(BaseRead):
+    name: str
+    legal_name: str = ""
+    inn: str = ""
+    kpp: str = ""
+    ogrn: str = ""
+    legal_address_id: int | None = None
+    actual_address_id: int | None = None
+    phone: str = ""
+    email: str = ""
+    edo_uuid: str | None = None
+
+
+class LegalEntityCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
+    legal_name: str = ""
+    inn: str = Field(max_length=12)
+    kpp: str = Field(max_length=9)
+    ogrn: str = Field(max_length=15)
+    legal_address_id: int | None = None
+    actual_address_id: int | None = None
+    phone: str = ""
+    email: str = ""
+    edo_uuid: str | None = None
+
+
+class LegalEntityUpdate(BaseModel):
+    name: str | None = None
+    legal_name: str | None = None
+    inn: str | None = None
+    kpp: str | None = None
+    ogrn: str | None = None
+    legal_address_id: int | None = None
+    actual_address_id: int | None = None
+    phone: str | None = None
+    email: str | None = None
+    edo_uuid: str | None = None
+
+
+class CarrierRead(BaseRead):
+    legal_entity_id: int
+
+
+class CarrierCreate(BaseModel):
+    legal_entity_id: int
+
+
+class KeeperRead(BaseRead):
+    legal_entity_id: int
+
+
+class KeeperCreate(BaseModel):
+    legal_entity_id: int
+
+
+class DepositorRead(BaseRead):
+    legal_entity_id: int
+    code: str = ""
+    legal_entity_name: str = ""
+
+
+class DepositorCreate(BaseModel):
+    legal_entity_id: int
+    code: str = ""
+
+
+class DepositorUpdate(BaseModel):
+    code: str | None = None
+    legal_entity_id: int | None = None
+
+
+class ClientRead(BaseRead):
+    depositor_id: int
+    code: str
+    name: str
+    legal_name: str = ""
+    inn: str = ""
+    kpp: str = ""
+    legal_address_id: int | None = None
+    delivery_address_id: int | None = None
+    is_edo: bool = False
+
+
+class ClientCreate(BaseModel):
+    depositor_id: int
+    code: str = Field(min_length=1, max_length=50)
+    name: str = Field(min_length=1, max_length=255)
+    legal_name: str = ""
+    inn: str = ""
+    kpp: str = ""
+    legal_address_id: int | None = None
+    delivery_address_id: int | None = None
+    is_edo: bool = False
+
+
+class ClientUpdate(BaseModel):
+    name: str | None = None
+    legal_name: str | None = None
+    inn: str | None = None
+    kpp: str | None = None
+    legal_address_id: int | None = None
+    delivery_address_id: int | None = None
+    is_edo: bool | None = None
+
+
+
+class ContractRead(BaseRead):
+    number: str
+    customer_id: int
+    executor_id: int
+    contract_type: str
+    start_date: date
+    end_date: date | None = None
+    status: str = "active"
+    terms: dict = Field(default_factory=dict)
+
+
+class ContractCreate(BaseModel):
+    number: str = Field(min_length=1, max_length=50)
+    customer_id: int
+    executor_id: int
+    contract_type: str
+    start_date: date
+    end_date: date | None = None
+    terms: dict = Field(default_factory=dict)
+
+
+class ContractUpdate(BaseModel):
+    number: str | None = None
+    end_date: date | None = None
+    status: str | None = None
+    terms: dict | None = None
+
+
+class TariffDocumentRead(BaseRead):
+    contract_id: int
+    document_type: str
+    number: str
+    date: date
+    valid_from: date
+    valid_until: date | None = None
+    currency: str = "RUB"
+    vat_rate: str = "20"
+
+
+class TariffDocumentCreate(BaseModel):
+    contract_id: int
+    document_type: str
+    number: str
+    date: date
+    valid_from: date
+    valid_until: date | None = None
+    currency: str = "RUB"
+    vat_rate: str = "20"
+
+
+class TariffDocumentUpdate(BaseModel):
+    number: str | None = None
+    document_date: date | None = None
+    valid_from: date | None = None
+    valid_until: date | None = None
+    currency: str | None = None
+    vat_rate: str | None = None
+
+
+class TariffRead(BaseRead):
+    document_id: int
+    service_group: str
+    name: str
+    description: str = ""
+    unit: str
+    price: Decimal
+
+
+class TariffCreate(BaseModel):
+    document_id: int
+    service_group: str
+    name: str
+    description: str = ""
+    unit: str
+    price: Decimal
+
+
+class TariffUpdate(BaseModel):
+    name: str | None = None
+    description: str | None = None
+    unit: str | None = None
+    price: Decimal | None = None
+    service_group: str | None = None
+
+
+class AliasCreate(BaseModel):
+    raw_text: str = Field(min_length=1)
+    source: str = ""
+
+
+class AliasUpdate(BaseModel):
+    raw_text: str | None = None
+    source: str | None = None
+    normalized_address_id: int | None = None
+
+
+class RawAddressRead(BaseRead):
+    raw_text: str
+    hash: str
+    normalized_address_id: int
+    source: str = ""
+    full_address: str | None = None
+
+
+
+========================================
+FILE: app/api/v1/router.py
+========================================
+"""Главный роутер API v1."""
+
+from fastapi import APIRouter
+
+from app.api.v1.accounts.routes import router as accounts_router
+from app.api.v1.accounts.routes_list import router as list_settings_router
+from app.api.v1.delivery.routes import router as delivery_router
+from app.api.v1.delivery.routes_deviations_lines import router as deviations_lines_router
+from app.api.v1.documents.routes import router as documents_router
+from app.files.routes import router as files_router
+from app.api.v1.integration.routes import router as integration_router
+from app.api.v1.integration.routes_import import router as import_router
+from app.api.v1.notifications.routes import router as notifications_router
+from app.api.v1.orders.routes_inbound import router as inbound_orders_router
+from app.api.v1.orders.routes_outbound import router as outbound_orders_router
+from app.api.v1.orders.routes_return import router as return_orders_router
+from app.api.v1.notifications.routes_rules import router as notification_rules_router
+from app.api.v1.parties.routes import router as parties_router
+from app.api.v1.parties.routes_delivery_zones import router as delivery_zones_router
+from app.api.v1.parties.routes_carriers_keepers import router as carriers_keepers_router
+from app.api.v1.warehouse.routes import router as warehouse_router
+from app.api.v1.warehouse.routes_topology import router as warehouse_topology_router
+from app.api.v1.warehouse.routes_references import router as warehouse_references_router
+
+api_router = APIRouter(prefix="/api/v1")
+
+api_router.include_router(accounts_router)
+api_router.include_router(list_settings_router)
+api_router.include_router(parties_router)
+api_router.include_router(delivery_zones_router)
+api_router.include_router(carriers_keepers_router)
+api_router.include_router(warehouse_router)
+api_router.include_router(warehouse_topology_router)
+api_router.include_router(warehouse_references_router)
+api_router.include_router(documents_router)
+api_router.include_router(delivery_router)
+api_router.include_router(deviations_lines_router)
+api_router.include_router(notifications_router)
+api_router.include_router(inbound_orders_router)
+api_router.include_router(outbound_orders_router)
+api_router.include_router(return_orders_router)
+api_router.include_router(notification_rules_router)
+api_router.include_router(integration_router)
+api_router.include_router(import_router)
+api_router.include_router(files_router)
+
+
+
+========================================
+FILE: app/api/v1/warehouse/__init__.py
+========================================
+
+
+
+========================================
+FILE: app/api/v1/warehouse/routes.py
+========================================
+"""API для модуля warehouse."""
+
+from __future__ import annotations
+
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, status
+from sqlalchemy import select
+
+from app.api.deps import SessionDep, UserDep, require_permission
+from app.api.v1.warehouse import schemas
+from app.core.exceptions import BadRequestError, ConflictError, NotFoundError
+from app.warehouse.models import Batch, LPN, Product, Task
+from app.warehouse.services import (
+    BatchService,
+    LPNService,
+    PlacementService,
+    ProductService,
+    StockService,
+    TaskService,
+)
+
+router = APIRouter(prefix="/warehouse", tags=["warehouse"])
+
+
+# ========== Товары ==========
+
+@router.get("/products", response_model=list[schemas.ProductRead], dependencies=[Depends(require_permission("view", "products"))])
+async def list_products(
+    session: SessionDep,
+    depositor_id: int | None = None,
+) -> list[schemas.ProductRead]:
+    service = ProductService(session)
+    if depositor_id:
+        rows = await service.list_by_depositor(depositor_id)
+    else:
+        rows = list(await session.scalars(select(Product).where()))
+    return [schemas.ProductRead.model_validate(r) for r in rows]
+
+
+@router.post("/products", response_model=schemas.ProductRead, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_permission("create", "products"))])
+async def create_product(
+    body: schemas.ProductCreate,
+    session: SessionDep,
+    user_id: UserDep,
+) -> schemas.ProductRead:
+    service = ProductService(session)
+    try:
+        row = await service.create(user_id=user_id, **body.model_dump())
+    except ValueError as e:
+        raise ConflictError(str(e)) from e
+    return schemas.ProductRead.model_validate(row)
+
+
+@router.patch("/products/{product_id}", response_model=schemas.ProductRead, dependencies=[Depends(require_permission("update", "products"))])
+async def update_product(
+    product_id: int,
+    body: schemas.ProductCreate,
+    session: SessionDep,
+    user_id: UserDep,
+) -> schemas.ProductRead:
+    product = await session.get(Product, product_id)
+    if product is None:
+        raise NotFoundError("Товар не найден")
+    for field, value in body.model_dump(exclude_unset=True).items():
+        setattr(product, field, value)
+    product.updated_by_id = user_id
+    await session.flush()
+    return schemas.ProductRead.model_validate(product)
+
+
+@router.get("/products/{product_id}", response_model=schemas.ProductRead, dependencies=[Depends(require_permission("view", "products"))])
+async def get_product(product_id: int, session: SessionDep) -> schemas.ProductRead:
+    service = ProductService(session)
+    product = await service.get_by_id(product_id)
+    if product is None:
+        raise NotFoundError("Товар не найден")
+    return schemas.ProductRead.model_validate(product)
+
+
+@router.delete("/products/{product_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_permission("delete", "products"))])
+async def delete_product(product_id: int, session: SessionDep, user_id: UserDep) -> None:
+    service = ProductService(session)
+    ok = await service.soft_delete(product_id, user_id)
+    if not ok:
+        raise NotFoundError("Товар не найден")
+
+
+# ========== Партии ==========
+
+@router.post("/batches", response_model=schemas.BatchRead, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_permission("create", "batches"))])
+async def create_batch(
+    body: schemas.BatchCreate,
+    session: SessionDep,
+    user_id: UserDep,
+) -> schemas.BatchRead:
+    service = BatchService(session)
+    try:
+        row = await service.create(user_id=user_id, **body.model_dump())
+    except ValueError as e:
+        raise ConflictError(str(e)) from e
+    return schemas.BatchRead.model_validate(row)
+
+
+@router.get("/batches", response_model=list[schemas.BatchRead], dependencies=[Depends(require_permission("view", "batches"))])
+async def list_batches(session: SessionDep, product_id: int | None = None) -> list[schemas.BatchRead]:
+    service = BatchService(session)
+    if product_id:
+        rows = await service.list_by_product(product_id)
+    else:
+        rows = list(await session.scalars(select(Batch).where()))
+    return [schemas.BatchRead.model_validate(r) for r in rows]
+
+
+@router.patch(
+    "/batches/{batch_id}",
+    response_model=schemas.BatchRead,
+    dependencies=[Depends(require_permission("update", "batches"))],
+)
+async def update_batch(
+    batch_id: int,
+    body: schemas.BatchCreate,
+    session: SessionDep,
+    user_id: UserDep,
+) -> schemas.BatchRead:
+    batch = await session.get(Batch, batch_id)
+    if batch is None:
+        raise NotFoundError("Партия не найдена")
+    for field, value in body.model_dump(exclude_unset=True).items():
+        setattr(batch, field, value)
+    batch.updated_by_id = user_id
+    await session.flush()
+    return schemas.BatchRead.model_validate(batch)
+
+
+@router.get("/batches/{batch_id}", response_model=schemas.BatchRead, dependencies=[Depends(require_permission("view", "batches"))])
+async def get_batch(batch_id: int, session: SessionDep) -> schemas.BatchRead:
+    service = BatchService(session)
+    batch = await service.get_by_id(batch_id)
+    if batch is None:
+        raise NotFoundError("Партия не найдена")
+    return schemas.BatchRead.model_validate(batch)
+
+
+@router.delete("/batches/{batch_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_permission("delete", "batches"))])
+async def delete_batch(batch_id: int, session: SessionDep, user_id: UserDep) -> None:
+    batch = await session.get(Batch, batch_id)
+    if batch is None:
+        raise NotFoundError("Партия не найдена")
+    batch.soft_delete(user_id)
+    await session.flush()
+
+
+# ========== LPN ==========
+
+@router.post("/lpns", response_model=schemas.LPNRead, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_permission("create", "lpns"))])
+async def create_lpn(
+    body: schemas.LPNCreate,
+    session: SessionDep,
+    user_id: UserDep,
+) -> schemas.LPNRead:
+    service = LPNService(session)
+    row = await service.create(user_id=user_id, status=body.status)
+    return schemas.LPNRead.model_validate(row)
+
+
+@router.get("/lpns", response_model=list[schemas.LPNRead], dependencies=[Depends(require_permission("view", "lpns"))])
+async def list_lpns(session: SessionDep) -> list[schemas.LPNRead]:
+    rows = list(await session.scalars(select(LPN).where()))
+    return [schemas.LPNRead.model_validate(r) for r in rows]
+
+
+@router.patch(
+    "/lpns/{lpn_id}",
+    response_model=schemas.LPNRead,
+    dependencies=[Depends(require_permission("update", "lpns"))],
+)
+async def update_lpn(
+    lpn_id: int,
+    body: schemas.LPNCreate,
+    session: SessionDep,
+    user_id: UserDep,
+) -> schemas.LPNRead:
+    lpn = await session.get(LPN, lpn_id)
+    if lpn is None:
+        raise NotFoundError("LPN не найдена")
+    lpn.status = body.status
+    lpn.updated_by_id = user_id
+    await session.flush()
+    return schemas.LPNRead.model_validate(lpn)
+
+
+@router.get("/lpns/{lpn_id}", response_model=schemas.LPNRead, dependencies=[Depends(require_permission("view", "lpns"))])
+async def get_lpn(lpn_id: int, session: SessionDep) -> schemas.LPNRead:
+    lpn = await session.get(LPN, lpn_id)
+    if lpn is None:
+        raise NotFoundError("LPN не найдена")
+    return schemas.LPNRead.model_validate(lpn)
+
+
+@router.delete("/lpns/{lpn_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_permission("delete", "lpns"))])
+async def delete_lpn(lpn_id: int, session: SessionDep, user_id: UserDep) -> None:
+    lpn = await session.get(LPN, lpn_id)
+    if lpn is None:
+        raise NotFoundError("LPN не найдена")
+    lpn.soft_delete(user_id)
+    await session.flush()
+
+
+# ========== Остатки ==========
+
+@router.get(
+    "/stock",
+    dependencies=[Depends(require_permission("view", "stock"))],
+)
+async def list_stock(
+    session: SessionDep,
+    product_id: int | None = None,
+    location_id: int | None = None,
+):
+    from sqlalchemy import select as sa_select
+    from app.warehouse.models import StockBalance
+
+    stmt = sa_select(StockBalance)
+    if product_id:
+        stmt = stmt.where(StockBalance.product_id == product_id)
+    if location_id:
+        stmt = stmt.where(StockBalance.location_id == location_id)
+    rows = list(await session.scalars(stmt))
+    return [schemas.StockBalanceRead.model_validate(r) for r in rows]
+
+
+@router.get(
+    "/stock/{stock_id}",
+    response_model=schemas.StockBalanceRead,
+    dependencies=[Depends(require_permission("view", "stock"))],
+)
+async def get_stock(
+    stock_id: int,
+    session: SessionDep,
+) -> schemas.StockBalanceRead:
+    from app.warehouse.models import StockBalance
+    stock = await session.get(StockBalance, stock_id)
+    if stock is None:
+        raise NotFoundError("Остаток не найден")
+    return schemas.StockBalanceRead.model_validate(stock)
+
+
+@router.post("/stock/add", response_model=schemas.StockBalanceRead, dependencies=[Depends(require_permission("create", "stock"))])
+async def add_stock(
+    body: schemas.StockAdd,
+    session: SessionDep,
+    user_id: UserDep,
+) -> schemas.StockBalanceRead:
+    service = StockService(session)
+    try:
+        balance = await service.add_stock(user_id=user_id, **body.model_dump())
+    except ValueError as e:
+        raise BadRequestError(str(e)) from e
+    return schemas.StockBalanceRead.model_validate(balance)
+
+
+@router.post("/stock/remove", response_model=schemas.StockBalanceRead, dependencies=[Depends(require_permission("delete", "stock"))])
+async def remove_stock(
+    body: schemas.StockRemove,
+    session: SessionDep,
+    user_id: UserDep,
+) -> schemas.StockBalanceRead:
+    service = StockService(session)
+    try:
+        balance = await service.remove_stock(user_id=user_id, **body.model_dump())
+    except ValueError as e:
+        raise BadRequestError(str(e)) from e
+    return schemas.StockBalanceRead.model_validate(balance)
+
+
+@router.post("/stock/move", response_model=schemas.StockBalanceRead, dependencies=[Depends(require_permission("update", "stock"))])
+async def move_stock(
+    body: schemas.StockMove,
+    session: SessionDep,
+    user_id: UserDep,
+) -> schemas.StockBalanceRead:
+    service = StockService(session)
+    try:
+        balance = await service.move_stock(user_id=user_id, **body.model_dump())
+    except ValueError as e:
+        raise BadRequestError(str(e)) from e
+    return schemas.StockBalanceRead.model_validate(balance)
+
+
+# ========== Задания ==========
+
+@router.post("/tasks", response_model=schemas.TaskRead, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_permission("create", "tasks"))])
+async def create_task(
+    body: schemas.TaskCreate,
+    session: SessionDep,
+    user_id: UserDep,
+) -> schemas.TaskRead:
+    service = TaskService(session)
+    task = await service.create(user_id=user_id, **body.model_dump())
+    return schemas.TaskRead.model_validate(task)
+
+
+@router.post("/tasks/{task_id}/lines", status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_permission("update", "tasks"))])
+async def add_task_line(
+    task_id: int,
+    body: schemas.TaskLineAdd,
+    session: SessionDep,
+    user_id: UserDep,
+) -> dict:
+    service = TaskService(session)
+    line = await service.add_line(user_id=user_id, task_id=task_id, **body.model_dump())
+    return {"id": line.id}
+
+
+@router.post("/tasks/{task_id}/start", response_model=schemas.TaskRead, dependencies=[Depends(require_permission("execute", "tasks"))])
+async def start_task(
+    task_id: int,
+    session: SessionDep,
+    user_id: UserDep,
+) -> schemas.TaskRead:
+    service = TaskService(session)
+    task = await service.start(user_id=user_id, task_id=task_id)
+    if task is None:
+        raise NotFoundError("Задание не найдено")
+    return schemas.TaskRead.model_validate(task)
+
+
+@router.get("/tasks", response_model=list[schemas.TaskRead], dependencies=[Depends(require_permission("view", "tasks"))])
+async def list_tasks(session: SessionDep) -> list[schemas.TaskRead]:
+    rows = list(await session.scalars(select(Task).where()))
+    return [schemas.TaskRead.model_validate(r) for r in rows]
+
+
+@router.get("/tasks/{task_id}", response_model=schemas.TaskRead, dependencies=[Depends(require_permission("view", "tasks"))])
+async def get_task(task_id: int, session: SessionDep) -> schemas.TaskRead:
+    task = await session.get(Task, task_id)
+    if task is None:
+        raise NotFoundError("Задание не найдено")
+    return schemas.TaskRead.model_validate(task)
+
+
+@router.delete("/tasks/{task_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_permission("delete", "tasks"))])
+async def delete_task(task_id: int, session: SessionDep, user_id: UserDep) -> None:
+    task = await session.get(Task, task_id)
+    if task is None:
+        raise NotFoundError("Задание не найдено")
+    task.soft_delete(user_id)
+    await session.flush()
+
+
+@router.post("/task-lines/{line_id}/complete", dependencies=[Depends(require_permission("execute", "tasks"))])
+async def complete_task_line(
+    line_id: int,
+    body: schemas.TaskLineComplete,
+    session: SessionDep,
+    user_id: UserDep,
+) -> dict:
+    service = TaskService(session)
+    try:
+        line = await service.complete_line(
+            user_id=user_id,
+            task_line_id=line_id,
+            **body.model_dump(),
+        )
+    except ValueError as e:
+        raise BadRequestError(str(e)) from e
+    return {"id": line.id, "fact_qty": line.fact_qty}
+
+
+@router.post("/tasks/{task_id}/complete", response_model=schemas.TaskRead, dependencies=[Depends(require_permission("complete", "tasks"))])
+async def complete_task(
+    task_id: int,
+    body: schemas.TaskComplete,
+    session: SessionDep,
+    user_id: UserDep,
+) -> schemas.TaskRead:
+    service = TaskService(session)
+    try:
+        task = await service.complete(user_id=user_id, task_id=task_id, force=body.force)
+    except ValueError as e:
+        raise BadRequestError(str(e)) from e
+    return schemas.TaskRead.model_validate(task)
+
+
+
+========================================
+FILE: app/api/v1/warehouse/routes_references.py
+========================================
+"""API для справочников склада: группы, упаковки, связи товар-ячейка, движения."""
+
+from __future__ import annotations
+
+from fastapi import APIRouter, Depends, status
+from sqlalchemy import select
+
+from app.api.deps import SessionDep, UserDep, require_permission
+from app.core.exceptions import ConflictError, NotFoundError
+from app.warehouse.models import (
+    ProductGroup,
+    Package,
+    ProductLocation,
+    StockMovement,
+)
+
+router = APIRouter(prefix="/warehouse", tags=["warehouse-references"])
+
+
+# ========== Группы товаров ==========
+
+@router.get("/product-groups", dependencies=[Depends(require_permission("view", "products"))])
+async def list_product_groups(session: SessionDep):
+    rows = list(await session.scalars(select(ProductGroup)))
+    return [
+        {
+            "id": g.id,
+            "name": g.name,
+            "is_active": g.is_active,
+            "is_deleted": g.is_deleted,
+            "created_at": g.created_at,
+            "updated_at": g.updated_at,
+        }
+        for g in rows
+    ]
+
+
+@router.post("/product-groups", status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_permission("create", "products"))])
+async def create_product_group(body: dict, session: SessionDep, user_id: UserDep):
+    existing = await session.scalar(
+        select(ProductGroup).where(ProductGroup.name == body["name"])
+    )
+    if existing:
+        raise ConflictError(f"Группа {body['name']} уже существует")
+
+    group = ProductGroup(
+        name=body["name"],
+        created_by_id=user_id,
+        updated_by_id=user_id,
+    )
+    session.add(group)
+    await session.flush()
+    return {"id": group.id}
+
+
+@router.get("/product-groups/{group_id}", dependencies=[Depends(require_permission("view", "products"))])
+async def get_product_group(group_id: int, session: SessionDep):
+    group = await session.get(ProductGroup, group_id)
+    if group is None:
+        raise NotFoundError("Группа не найдена")
+    return {
+        "id": group.id,
+        "name": group.name,
+        "is_active": group.is_active,
+        "is_deleted": group.is_deleted,
+        "created_at": group.created_at,
+        "updated_at": group.updated_at,
+    }
+
+
+@router.patch("/product-groups/{group_id}", dependencies=[Depends(require_permission("update", "products"))])
+async def update_product_group(group_id: int, body: dict, session: SessionDep, user_id: UserDep):
+    group = await session.get(ProductGroup, group_id)
+    if group is None:
+        raise NotFoundError("Группа не найдена")
+    group.name = body.get("name", group.name)
+    group.updated_by_id = user_id
+    await session.flush()
+    return {"id": group.id}
+
+
+@router.delete("/product-groups/{group_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_permission("delete", "products"))])
+async def delete_product_group(group_id: int, session: SessionDep, user_id: UserDep):
+    group = await session.get(ProductGroup, group_id)
+    if group is None:
+        raise NotFoundError("Группа не найдена")
+    group.soft_delete(user_id)
+    await session.flush()
+
+
+# ========== Упаковки ==========
+
+@router.get("/packages", dependencies=[Depends(require_permission("view", "products"))])
+async def list_packages(session: SessionDep, product_id: int | None = None):
+    stmt = select(Package)
+    if product_id:
+        stmt = stmt.where(Package.product_id == product_id)
+    rows = list(await session.scalars(stmt))
+    return [
+        {
+            "id": p.id,
+            "product_id": p.product_id,
+            "name": p.name,
+            "quantity": p.quantity,
+            "barcode": p.barcode,
+            "weight": p.weight,
+            "width": p.width,
+            "height": p.height,
+            "depth": p.depth,
+            "is_base_unit": p.is_base_unit,
+            "is_active": p.is_active,
+            "is_deleted": p.is_deleted,
+            "created_at": p.created_at,
+            "updated_at": p.updated_at,
+        }
+        for p in rows
+    ]
+
+
+@router.post("/packages", status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_permission("create", "products"))])
+async def create_package(body: dict, session: SessionDep, user_id: UserDep):
+    package = Package(
+        product_id=body["product_id"],
+        name=body["name"],
+        quantity=body.get("quantity", 1),
+        barcode=body.get("barcode"),
+        weight=body.get("weight"),
+        width=body.get("width"),
+        height=body.get("height"),
+        depth=body.get("depth"),
+        is_base_unit=body.get("is_base_unit", False),
+        created_by_id=user_id,
+        updated_by_id=user_id,
+    )
+    session.add(package)
+    await session.flush()
+    return {"id": package.id}
+
+
+@router.get("/packages/{package_id}", dependencies=[Depends(require_permission("view", "products"))])
+async def get_package(package_id: int, session: SessionDep):
+    p = await session.get(Package, package_id)
+    if p is None:
+        raise NotFoundError("Упаковка не найдена")
+    return {
+        "id": p.id,
+        "product_id": p.product_id,
+        "name": p.name,
+        "quantity": p.quantity,
+        "barcode": p.barcode,
+        "weight": p.weight,
+        "width": p.width,
+        "height": p.height,
+        "depth": p.depth,
+        "is_base_unit": p.is_base_unit,
+        "is_active": p.is_active,
+        "is_deleted": p.is_deleted,
+        "created_at": p.created_at,
+        "updated_at": p.updated_at,
+    }
+
+
+@router.patch("/packages/{package_id}", dependencies=[Depends(require_permission("update", "products"))])
+async def update_package(package_id: int, body: dict, session: SessionDep, user_id: UserDep):
+    p = await session.get(Package, package_id)
+    if p is None:
+        raise NotFoundError("Упаковка не найдена")
+    for field in ["name", "quantity", "barcode", "weight", "width", "height", "depth", "is_base_unit"]:
+        if field in body:
+            setattr(p, field, body[field])
+    p.updated_by_id = user_id
+    await session.flush()
+    return {"id": p.id}
+
+
+@router.delete("/packages/{package_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_permission("delete", "products"))])
+async def delete_package(package_id: int, session: SessionDep, user_id: UserDep):
+    p = await session.get(Package, package_id)
+    if p is None:
+        raise NotFoundError("Упаковка не найдена")
+    p.soft_delete(user_id)
+    await session.flush()
+
+
+# ========== Связи товар-ячейка ==========
+
+@router.get("/product-locations", dependencies=[Depends(require_permission("view", "products"))])
+async def list_product_locations(session: SessionDep):
+    rows = list(await session.scalars(select(ProductLocation)))
+    return [
+        {
+            "id": pl.id,
+            "product_id": pl.product_id,
+            "location_id": pl.location_id,
+            "is_active": pl.is_active,
+            "is_deleted": pl.is_deleted,
+            "created_at": pl.created_at,
+            "updated_at": pl.updated_at,
+        }
+        for pl in rows
+    ]
+
+
+@router.post("/product-locations", status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_permission("create", "products"))])
+async def create_product_location(body: dict, session: SessionDep, user_id: UserDep):
+    pl = ProductLocation(
+        product_id=body["product_id"],
+        location_id=body["location_id"],
+        created_by_id=user_id,
+        updated_by_id=user_id,
+    )
+    session.add(pl)
+    await session.flush()
+    return {"id": pl.id}
+
+
+@router.get("/product-locations/{pl_id}", dependencies=[Depends(require_permission("view", "products"))])
+async def get_product_location(pl_id: int, session: SessionDep):
+    pl = await session.get(ProductLocation, pl_id)
+    if pl is None:
+        raise NotFoundError("Связь не найдена")
+    return {
+        "id": pl.id,
+        "product_id": pl.product_id,
+        "location_id": pl.location_id,
+        "is_active": pl.is_active,
+        "is_deleted": pl.is_deleted,
+        "created_at": pl.created_at,
+        "updated_at": pl.updated_at,
+    }
+
+
+@router.patch("/product-locations/{pl_id}", dependencies=[Depends(require_permission("update", "products"))])
+async def update_product_location(pl_id: int, body: dict, session: SessionDep, user_id: UserDep):
+    pl = await session.get(ProductLocation, pl_id)
+    if pl is None:
+        raise NotFoundError("Связь не найдена")
+    for field in ["product_id", "location_id"]:
+        if field in body:
+            setattr(pl, field, body[field])
+    pl.updated_by_id = user_id
+    await session.flush()
+    return {"id": pl.id}
+
+
+@router.delete("/product-locations/{pl_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_permission("delete", "products"))])
+async def delete_product_location(pl_id: int, session: SessionDep, user_id: UserDep):
+    pl = await session.get(ProductLocation, pl_id)
+    if pl is None:
+        raise NotFoundError("Связь не найдена")
+    pl.soft_delete(user_id)
+    await session.flush()
+
+
+# ========== Движения остатков ==========
+
+@router.get("/stock-movements", dependencies=[Depends(require_permission("view", "stock"))])
+async def list_stock_movements(session: SessionDep, product_id: int | None = None):
+    stmt = select(StockMovement)
+    if product_id:
+        stmt = stmt.where(StockMovement.product_id == product_id)
+    rows = list(await session.scalars(stmt))
+    return [
+        {
+            "id": sm.id,
+            "product_id": sm.product_id,
+            "document_id": sm.document_id,
+            "location_id": sm.location_id,
+            "lpn_id": sm.lpn_id,
+            "batch_id": sm.batch_id,
+            "direction": sm.direction,
+            "quantity": sm.quantity,
+            "is_active": sm.is_active,
+            "is_deleted": sm.is_deleted,
+            "created_at": sm.created_at,
+            "updated_at": sm.updated_at,
+        }
+        for sm in rows
+    ]
+
+
+@router.post("/stock-movements", status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_permission("create", "stock"))])
+async def create_stock_movement(body: dict, session: SessionDep, user_id: UserDep):
+    sm = StockMovement(
+        product_id=body["product_id"],
+        document_id=body.get("document_id"),
+        location_id=body["location_id"],
+        lpn_id=body.get("lpn_id"),
+        batch_id=body["batch_id"],
+        direction=body["direction"],
+        quantity=body["quantity"],
+        created_by_id=user_id,
+        updated_by_id=user_id,
+    )
+    session.add(sm)
+    await session.flush()
+    return {"id": sm.id}
+
+
+@router.get("/stock-movements/{sm_id}", dependencies=[Depends(require_permission("view", "stock"))])
+async def get_stock_movement(sm_id: int, session: SessionDep):
+    sm = await session.get(StockMovement, sm_id)
+    if sm is None:
+        raise NotFoundError("Движение не найдено")
+    return {
+        "id": sm.id,
+        "product_id": sm.product_id,
+        "document_id": sm.document_id,
+        "location_id": sm.location_id,
+        "lpn_id": sm.lpn_id,
+        "batch_id": sm.batch_id,
+        "direction": sm.direction,
+        "quantity": sm.quantity,
+        "is_active": sm.is_active,
+        "is_deleted": sm.is_deleted,
+        "created_at": sm.created_at,
+        "updated_at": sm.updated_at,
+    }
+
+
+@router.patch("/stock-movements/{sm_id}", dependencies=[Depends(require_permission("update", "stock"))])
+async def update_stock_movement(sm_id: int, body: dict, session: SessionDep, user_id: UserDep):
+    sm = await session.get(StockMovement, sm_id)
+    if sm is None:
+        raise NotFoundError("Движение не найдено")
+    for field in ["quantity", "direction"]:
+        if field in body:
+            setattr(sm, field, body[field])
+    sm.updated_by_id = user_id
+    await session.flush()
+    return {"id": sm.id}
+
+
+@router.delete("/stock-movements/{sm_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_permission("delete", "stock"))])
+async def delete_stock_movement(sm_id: int, session: SessionDep, user_id: UserDep):
+    sm = await session.get(StockMovement, sm_id)
+    if sm is None:
+        raise NotFoundError("Движение не найдено")
+    sm.soft_delete(user_id)
+    await session.flush()
+
+
+
+========================================
+FILE: app/api/v1/warehouse/routes_topology.py
+========================================
+"""API для топологии склада."""
+
+from __future__ import annotations
+
+from fastapi import APIRouter, Depends, status
+from sqlalchemy import select
+
+from app.api.deps import SessionDep, UserDep, require_permission
+from app.api.v1.warehouse.schemas import (
+    LocationCreate,
+    LocationRead,
+    RowCreate,
+    RowRead,
+    VirtualWarehouseCreate,
+    VirtualWarehouseRead,
+    WarehouseCreate,
+    WarehouseRead,
+    ZoneCreate,
+    ZoneRead,
+)
+from app.core.exceptions import NotFoundError
+from app.warehouse.models import Location, Row, VirtualWarehouse, Warehouse, Zone
+
+router = APIRouter(prefix="/warehouse/topology", tags=["warehouse-topology"])
+
+
+# ========== Склады ==========
+
+@router.get("/warehouses", response_model=list[WarehouseRead], dependencies=[Depends(require_permission("view", "warehouse"))])
+async def list_warehouses(session: SessionDep) -> list[WarehouseRead]:
+    rows = list(await session.scalars(select(Warehouse)))
+    return [WarehouseRead.model_validate(r) for r in rows]
+
+
+@router.post("/warehouses", response_model=WarehouseRead, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_permission("create", "warehouse"))])
+async def create_warehouse(body: WarehouseCreate, session: SessionDep, user_id: UserDep) -> WarehouseRead:
+    wh = Warehouse(created_by_id=user_id, updated_by_id=user_id, **body.model_dump())
+    session.add(wh)
+    await session.flush()
+    return WarehouseRead.model_validate(wh)
+
+
+@router.get("/warehouses/{warehouse_id}", response_model=WarehouseRead, dependencies=[Depends(require_permission("view", "warehouse"))])
+async def get_warehouse(warehouse_id: int, session: SessionDep) -> WarehouseRead:
+    wh = await session.get(Warehouse, warehouse_id)
+    if wh is None:
+        raise NotFoundError("Склад не найден")
+    return WarehouseRead.model_validate(wh)
+
+
+@router.patch("/warehouses/{warehouse_id}", response_model=WarehouseRead, dependencies=[Depends(require_permission("update", "warehouse"))])
+async def update_warehouse(warehouse_id: int, body: WarehouseCreate, session: SessionDep, user_id: UserDep) -> WarehouseRead:
+    wh = await session.get(Warehouse, warehouse_id)
+    if wh is None:
+        raise NotFoundError("Склад не найден")
+    for field, value in body.model_dump(exclude_unset=True).items():
+        setattr(wh, field, value)
+    wh.updated_by_id = user_id
+    await session.flush()
+    return WarehouseRead.model_validate(wh)
+
+
+@router.delete("/warehouses/{warehouse_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_permission("delete", "warehouse"))])
+async def delete_warehouse(warehouse_id: int, session: SessionDep, user_id: UserDep) -> None:
+    wh = await session.get(Warehouse, warehouse_id)
+    if wh is None:
+        raise NotFoundError("Склад не найден")
+    wh.soft_delete(user_id)
+    await session.flush()
+
+
+# ========== Виртуальные склады ==========
+
+@router.get("/virtual-warehouses", response_model=list[VirtualWarehouseRead], dependencies=[Depends(require_permission("view", "warehouse"))])
+async def list_virtual_warehouses(session: SessionDep) -> list[VirtualWarehouseRead]:
+    rows = list(await session.scalars(select(VirtualWarehouse)))
+    return [VirtualWarehouseRead.model_validate(r) for r in rows]
+
+
+@router.post("/virtual-warehouses", response_model=VirtualWarehouseRead, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_permission("create", "warehouse"))])
+async def create_virtual_warehouse(body: VirtualWarehouseCreate, session: SessionDep, user_id: UserDep) -> VirtualWarehouseRead:
+    vw = VirtualWarehouse(created_by_id=user_id, updated_by_id=user_id, **body.model_dump())
+    session.add(vw)
+    await session.flush()
+    return VirtualWarehouseRead.model_validate(vw)
+
+
+@router.get("/virtual-warehouses/{vw_id}", response_model=VirtualWarehouseRead, dependencies=[Depends(require_permission("view", "warehouse"))])
+async def get_virtual_warehouse(vw_id: int, session: SessionDep) -> VirtualWarehouseRead:
+    vw = await session.get(VirtualWarehouse, vw_id)
+    if vw is None:
+        raise NotFoundError("Виртуальный склад не найден")
+    return VirtualWarehouseRead.model_validate(vw)
+
+
+@router.patch("/virtual-warehouses/{vw_id}", response_model=VirtualWarehouseRead, dependencies=[Depends(require_permission("update", "warehouse"))])
+async def update_virtual_warehouse(vw_id: int, body: VirtualWarehouseCreate, session: SessionDep, user_id: UserDep) -> VirtualWarehouseRead:
+    vw = await session.get(VirtualWarehouse, vw_id)
+    if vw is None:
+        raise NotFoundError("Виртуальный склад не найден")
+    for field, value in body.model_dump(exclude_unset=True).items():
+        setattr(vw, field, value)
+    vw.updated_by_id = user_id
+    await session.flush()
+    return VirtualWarehouseRead.model_validate(vw)
+
+
+@router.delete("/virtual-warehouses/{vw_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_permission("delete", "warehouse"))])
+async def delete_virtual_warehouse(vw_id: int, session: SessionDep, user_id: UserDep) -> None:
+    vw = await session.get(VirtualWarehouse, vw_id)
+    if vw is None:
+        raise NotFoundError("Виртуальный склад не найден")
+    vw.soft_delete(user_id)
+    await session.flush()
+
+
+# ========== Зоны ==========
+
+@router.get("/zones", response_model=list[ZoneRead], dependencies=[Depends(require_permission("view", "warehouse"))])
+async def list_zones(session: SessionDep) -> list[ZoneRead]:
+    rows = list(await session.scalars(select(Zone)))
+    return [ZoneRead.model_validate(r) for r in rows]
+
+
+@router.post("/zones", response_model=ZoneRead, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_permission("create", "warehouse"))])
+async def create_zone(body: ZoneCreate, session: SessionDep, user_id: UserDep) -> ZoneRead:
+    zone = Zone(created_by_id=user_id, updated_by_id=user_id, **body.model_dump())
+    session.add(zone)
+    await session.flush()
+    return ZoneRead.model_validate(zone)
+
+
+@router.get("/zones/{zone_id}", response_model=ZoneRead, dependencies=[Depends(require_permission("view", "warehouse"))])
+async def get_zone(zone_id: int, session: SessionDep) -> ZoneRead:
+    zone = await session.get(Zone, zone_id)
+    if zone is None:
+        raise NotFoundError("Зона не найдена")
+    return ZoneRead.model_validate(zone)
+
+
+@router.patch("/zones/{zone_id}", response_model=ZoneRead, dependencies=[Depends(require_permission("update", "warehouse"))])
+async def update_zone(zone_id: int, body: ZoneCreate, session: SessionDep, user_id: UserDep) -> ZoneRead:
+    zone = await session.get(Zone, zone_id)
+    if zone is None:
+        raise NotFoundError("Зона не найдена")
+    for field, value in body.model_dump(exclude_unset=True).items():
+        setattr(zone, field, value)
+    zone.updated_by_id = user_id
+    await session.flush()
+    return ZoneRead.model_validate(zone)
+
+
+@router.delete("/zones/{zone_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_permission("delete", "warehouse"))])
+async def delete_zone(zone_id: int, session: SessionDep, user_id: UserDep) -> None:
+    zone = await session.get(Zone, zone_id)
+    if zone is None:
+        raise NotFoundError("Зона не найдена")
+    zone.soft_delete(user_id)
+    await session.flush()
+
+
+# ========== Ряды ==========
+
+@router.get("/rows", response_model=list[RowRead], dependencies=[Depends(require_permission("view", "warehouse"))])
+async def list_rows(session: SessionDep) -> list[RowRead]:
+    rows = list(await session.scalars(select(Row)))
+    return [RowRead.model_validate(r) for r in rows]
+
+
+@router.post("/rows", response_model=RowRead, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_permission("create", "warehouse"))])
+async def create_row(body: RowCreate, session: SessionDep, user_id: UserDep) -> RowRead:
+    row = Row(created_by_id=user_id, updated_by_id=user_id, **body.model_dump())
+    session.add(row)
+    await session.flush()
+    return RowRead.model_validate(row)
+
+
+@router.get("/rows/{row_id}", response_model=RowRead, dependencies=[Depends(require_permission("view", "warehouse"))])
+async def get_row(row_id: int, session: SessionDep) -> RowRead:
+    row = await session.get(Row, row_id)
+    if row is None:
+        raise NotFoundError("Ряд не найден")
+    return RowRead.model_validate(row)
+
+
+@router.patch("/rows/{row_id}", response_model=RowRead, dependencies=[Depends(require_permission("update", "warehouse"))])
+async def update_row(row_id: int, body: RowCreate, session: SessionDep, user_id: UserDep) -> RowRead:
+    row = await session.get(Row, row_id)
+    if row is None:
+        raise NotFoundError("Ряд не найден")
+    for field, value in body.model_dump(exclude_unset=True).items():
+        setattr(row, field, value)
+    row.updated_by_id = user_id
+    await session.flush()
+    return RowRead.model_validate(row)
+
+
+@router.delete("/rows/{row_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_permission("delete", "warehouse"))])
+async def delete_row(row_id: int, session: SessionDep, user_id: UserDep) -> None:
+    row = await session.get(Row, row_id)
+    if row is None:
+        raise NotFoundError("Ряд не найден")
+    row.soft_delete(user_id)
+    await session.flush()
+
+
+# ========== Ячейки ==========
+
+@router.get("/locations", response_model=list[LocationRead], dependencies=[Depends(require_permission("view", "warehouse"))])
+async def list_locations(session: SessionDep) -> list[LocationRead]:
+    rows = list(await session.scalars(select(Location)))
+    return [LocationRead.model_validate(r) for r in rows]
+
+
+@router.post("/locations", response_model=LocationRead, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_permission("create", "warehouse"))])
+async def create_location(body: LocationCreate, session: SessionDep, user_id: UserDep) -> LocationRead:
+    loc = Location(created_by_id=user_id, updated_by_id=user_id, **body.model_dump())
+    session.add(loc)
+    await session.flush()
+    return LocationRead.model_validate(loc)
+
+
+@router.get("/locations/{location_id}", response_model=LocationRead, dependencies=[Depends(require_permission("view", "warehouse"))])
+async def get_location(location_id: int, session: SessionDep) -> LocationRead:
+    loc = await session.get(Location, location_id)
+    if loc is None:
+        raise NotFoundError("Ячейка не найдена")
+    return LocationRead.model_validate(loc)
+
+
+@router.patch("/locations/{location_id}", response_model=LocationRead, dependencies=[Depends(require_permission("update", "warehouse"))])
+async def update_location(location_id: int, body: LocationCreate, session: SessionDep, user_id: UserDep) -> LocationRead:
+    loc = await session.get(Location, location_id)
+    if loc is None:
+        raise NotFoundError("Ячейка не найдена")
+    for field, value in body.model_dump(exclude_unset=True).items():
+        setattr(loc, field, value)
+    loc.updated_by_id = user_id
+    await session.flush()
+    return LocationRead.model_validate(loc)
+
+
+@router.delete("/locations/{location_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_permission("delete", "warehouse"))])
+async def delete_location(location_id: int, session: SessionDep, user_id: UserDep) -> None:
+    loc = await session.get(Location, location_id)
+    if loc is None:
+        raise NotFoundError("Ячейка не найдена")
+    loc.soft_delete(user_id)
+    await session.flush()
+
+
+
+========================================
+FILE: app/api/v1/warehouse/schemas.py
+========================================
+"""Схемы для модуля warehouse."""
+
+from __future__ import annotations
+
+from datetime import date
+from decimal import Decimal
+
+from pydantic import BaseModel, Field
+
+from app.api.v1.base_schemas import BaseRead
+
+
+class WarehouseRead(BaseRead):
+    name: str
+    address_id: int | None = None
+
+
+class WarehouseCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
+    address_id: int | None = None
+
+
+class ZoneRead(BaseRead):
+    warehouse_id: int
+    name: str
+    zone_type: str
+
+
+class ZoneCreate(BaseModel):
+    warehouse_id: int
+    name: str
+    zone_type: str
+
+
+class LocationRead(BaseRead):
+    row_id: int
+    position: int
+    level: int = 1
+    max_weight: float | None = None
+    max_volume: float | None = None
+
+
+class VirtualWarehouseRead(BaseRead):
+    depositor_id: int
+    warehouse_id: int
+    code: str
+    name: str
+
+
+class VirtualWarehouseCreate(BaseModel):
+    depositor_id: int
+    warehouse_id: int
+    code: str = Field(min_length=1, max_length=50)
+    name: str = Field(min_length=1, max_length=255)
+
+
+class RowRead(BaseRead):
+    zone_id: int
+    code: str
+    row_type: str
+
+
+class RowCreate(BaseModel):
+    zone_id: int
+    code: str = Field(min_length=1, max_length=10)
+    row_type: str = Field(min_length=1, max_length=20)
+
+
+class LocationCreate(BaseModel):
+    row_id: int
+    position: int
+    level: int = 1
+    max_weight: float | None = None
+    max_volume: float | None = None
+
+
+class ProductRead(BaseRead):
+    depositor_id: int
+    external_id: str
+    sku: str = ""
+    name: str
+    legal_name: str = ""
+    weight: Decimal
+    volume: Decimal
+    price: Decimal | None = None
+    shelf_life_days: int | None = None
+    min_shelf_life_days: int | None = None
+    is_marked: bool = False
+    is_serial_tracked: bool = False
+    is_batch_tracked: bool = False
+    is_expiration_tracked: bool = False
+    temperature_requirements: str = ""
+
+
+class ProductCreate(BaseModel):
+    depositor_id: int
+    external_id: str = Field(min_length=1, max_length=255)
+    name: str = Field(min_length=1, max_length=255)
+    sku: str = ""
+    legal_name: str = ""
+    weight: Decimal = Decimal("0")
+    volume: Decimal = Decimal("0")
+    price: Decimal | None = None
+    shelf_life_days: int | None = None
+    min_shelf_life_days: int | None = None
+    is_marked: bool = False
+    is_serial_tracked: bool = False
+    is_batch_tracked: bool = False
+    is_expiration_tracked: bool = False
+    temperature_requirements: str = ""
+
+
+class BatchRead(BaseRead):
+    product_id: int
+    batch_number: str
+    production_date: date | None = None
+    expiration_date: date | None = None
+
+
+class BatchCreate(BaseModel):
+    product_id: int
+    batch_number: str | None = None
+    production_date: date | None = None
+    expiration_date: date | None = None
+
+
+class LPNRead(BaseRead):
+    number: str
+    status: str
+
+
+class LPNCreate(BaseModel):
+    status: str = "created"
+
+
+class StockBalanceRead(BaseRead):
+    product_id: int
+    location_id: int
+    lpn_id: int | None = None
+    batch_id: int
+    quantity: Decimal
+    reserved_quantity: Decimal = Decimal("0")
+
+
+class StockAdd(BaseModel):
+    product_id: int
+    location_id: int
+    quantity: Decimal
+    lpn_id: int | None = None
+    batch_id: int | None = None
+    document_id: int | None = None
+
+
+class StockRemove(BaseModel):
+    product_id: int
+    location_id: int
+    quantity: Decimal
+    lpn_id: int | None = None
+    batch_id: int | None = None
+    document_id: int | None = None
+
+
+class StockMove(BaseModel):
+    product_id: int
+    from_location_id: int
+    to_location_id: int
+    quantity: Decimal
+    lpn_id: int | None = None
+    batch_id: int | None = None
+    document_id: int | None = None
+
+
+class TaskRead(BaseRead):
+    task_type: str
+    document_id: int | None = None
+    assignee_id: int | None = None
+    status: str
+
+
+class TaskCreate(BaseModel):
+    task_type: str
+    document_id: int | None = None
+    assignee_id: int | None = None
+
+
+class TaskLineAdd(BaseModel):
+    task_id: int
+    product_id: int
+    plan_qty: int = 0
+    from_location_id: int | None = None
+    to_location_id: int | None = None
+    lpn_id: int | None = None
+    batch_id: int | None = None
+
+
+class TaskComplete(BaseModel):
+    force: bool = False
+
+
+class TaskLineComplete(BaseModel):
+    fact_qty: int
+    location_id: int | None = None
+    to_location_id: int | None = None
+    batch_id: int | None = None
+
+
+
+========================================
+FILE: app/core/config.py
+========================================
+"""Конфигурация приложения."""
+
+from functools import lru_cache
+
+from pydantic import Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
+
+    database_url: str = Field(..., description="SQLAlchemy URL для подключения к БД")
+
+    jwt_secret_key: str = Field(..., description="Секрет JWT")
+    jwt_algorithm: str = Field(default="HS256")
+    access_token_expire_minutes: int = Field(default=1440)
+
+    dadata_token: str | None = Field(default=None)
+    dadata_secret: str | None = Field(default=None)
+
+    geosuggest_api_key: str | None = Field(default=None)
+
+    cors_origins: list[str] = Field(
+        default=["http://127.0.0.1:5173", "http://localhost:5173"],
+        description="Разрешенные origins для CORS",
+    )
+
+    log_level: str = Field(default="INFO")
+    debug_sql: bool = Field(default=False)
+    app_log_file_path: str = Field(default="logs/app.log")
+    error_log_file_path: str = Field(default="logs/error.log")
+    sql_log_file_path: str = Field(default="logs/sql.log")
+
+
+@lru_cache
+def get_settings() -> Settings:
+    return Settings()
+
+
+
+========================================
+FILE: app/core/context.py
+========================================
+"""Контекст текущего пользователя."""
+
+from __future__ import annotations
+
+from contextvars import ContextVar
+
+# Текущий пользователь (user_id)

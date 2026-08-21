@@ -8,6 +8,7 @@ from decimal import Decimal
 from pydantic import BaseModel
 
 from app.api.v1.base_schemas import BaseRead
+from app.documents.document_types import DocumentType
 
 
 class DocumentRead(BaseRead):
@@ -24,7 +25,7 @@ class DocumentRead(BaseRead):
 
 
 class DocumentCreate(BaseModel):
-    document_type: str
+    document_type: DocumentType
     warehouse_id: int
     document_number: str
     document_date: date | None = None

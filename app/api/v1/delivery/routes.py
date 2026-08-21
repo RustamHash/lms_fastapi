@@ -12,6 +12,7 @@ from app.delivery.models import DeliveryOrder, Driver, Route, Vehicle
 from app.infrastructure.events import event_bus
 from app.infrastructure.events.event_types import EventTypes
 from app.delivery.services import DeliveryOrderService
+from app.delivery.repository import DeliveryOrderRepository, DriverRepository, VehicleRepository, RouteRepository
 
 router = APIRouter(prefix="/delivery", tags=["delivery"])
 
@@ -23,7 +24,7 @@ router = APIRouter(prefix="/delivery", tags=["delivery"])
 async def list_orders(
     session: SessionDep,
 ) -> list[schemas.DeliveryOrderRead]:
-    service = DeliveryOrderService(session)
+    service = DeliveryOrderService(DeliveryOrderRepository(session))
     rows = await service.list_all()
     return [schemas.DeliveryOrderRead.model_validate(r) for r in rows]
 
@@ -38,14 +39,14 @@ async def create_order(
     session: SessionDep,
     user_id: UserDep,
 ) -> schemas.DeliveryOrderRead:
-    service = DeliveryOrderService(session)
+    service = DeliveryOrderService(DeliveryOrderRepository(session))
     order = await service.create(user_id=user_id, **body.model_dump())
     return schemas.DeliveryOrderRead.model_validate(order)
 
 
 @router.get("/orders/{order_id}", response_model=schemas.DeliveryOrderRead, dependencies=[Depends(require_permission("view", "delivery"))])
 async def get_order(order_id: int, session: SessionDep) -> schemas.DeliveryOrderRead:
-    service = DeliveryOrderService(session)
+    service = DeliveryOrderService(DeliveryOrderRepository(session))
     order = await service.get_by_id(order_id)
     if order is None:
         raise NotFoundError("Заказ не найден")
@@ -58,7 +59,7 @@ async def get_order(order_id: int, session: SessionDep) -> schemas.DeliveryOrder
     dependencies=[Depends(require_permission("delete", "delivery"))],
 )
 async def delete_order(order_id: int, session: SessionDep, user_id: UserDep) -> None:
-    order = await session.get(DeliveryOrder, order_id)
+    order = await DeliveryOrderRepository(session).get_by_id(order_id)
     if order is None:
         raise NotFoundError("Заказ не найден")
     order.soft_delete(user_id)
@@ -72,7 +73,7 @@ async def update_order_status(
     session: SessionDep,
     user_id: UserDep,
 ) -> schemas.DeliveryOrderRead:
-    service = DeliveryOrderService(session)
+    service = DeliveryOrderService(DeliveryOrderRepository(session))
     order = await service.set_status(
         user_id=user_id,
         order_id=order_id,
@@ -88,9 +89,8 @@ async def update_order_status(
 
 @router.get("/drivers", response_model=list[schemas.DriverRead], dependencies=[Depends(require_permission("view", "drivers"))])
 async def list_drivers(session: SessionDep) -> list[schemas.DriverRead]:
-    rows = list(
-        await session.scalars(select(Driver).where())
-    )
+    repo = DriverRepository(session)
+    rows = await repo.list_all()
     return [schemas.DriverRead.model_validate(r) for r in rows]
 
 
@@ -103,8 +103,6 @@ async def create_driver(
     user_id: UserDep,
 ) -> schemas.DriverRead:
     driver = Driver(
-        created_by_id=user_id,
-        updated_by_id=user_id,
         **body.model_dump(),
     )
     session.add(driver)
@@ -114,7 +112,7 @@ async def create_driver(
 
 @router.get("/drivers/{driver_id}", response_model=schemas.DriverRead, dependencies=[Depends(require_permission("view", "drivers"))])
 async def get_driver(driver_id: int, session: SessionDep) -> schemas.DriverRead:
-    driver = await session.get(Driver, driver_id)
+    driver = await DriverRepository(session).get_by_id(driver_id)
     if driver is None:
         raise NotFoundError("Водитель не найден")
     return schemas.DriverRead.model_validate(driver)
@@ -127,7 +125,7 @@ async def update_driver(
     session: SessionDep,
     user_id: UserDep,
 ) -> schemas.DriverRead:
-    driver = await session.get(Driver, driver_id)
+    driver = await DriverRepository(session).get_by_id(driver_id)
     if driver is None:
         raise NotFoundError("Водитель не найден")
     for field, value in body.model_dump(exclude_unset=True).items():
@@ -139,7 +137,7 @@ async def update_driver(
 
 @router.delete("/drivers/{driver_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_permission("delete", "drivers"))])
 async def delete_driver(driver_id: int, session: SessionDep, user_id: UserDep) -> None:
-    driver = await session.get(Driver, driver_id)
+    driver = await DriverRepository(session).get_by_id(driver_id)
     if driver is None:
         raise NotFoundError("Водитель не найден")
     driver.soft_delete(user_id)
@@ -151,9 +149,8 @@ async def delete_driver(driver_id: int, session: SessionDep, user_id: UserDep) -
 
 @router.get("/vehicles", response_model=list[schemas.VehicleRead], dependencies=[Depends(require_permission("view", "vehicles"))])
 async def list_vehicles(session: SessionDep) -> list[schemas.VehicleRead]:
-    rows = list(
-        await session.scalars(select(Vehicle).where())
-    )
+    repo = VehicleRepository(session)
+    rows = await repo.list_all()
     return [schemas.VehicleRead.model_validate(r) for r in rows]
 
 
@@ -166,8 +163,6 @@ async def create_vehicle(
     user_id: UserDep,
 ) -> schemas.VehicleRead:
     vehicle = Vehicle(
-        created_by_id=user_id,
-        updated_by_id=user_id,
         **body.model_dump(),
     )
     session.add(vehicle)
@@ -177,7 +172,7 @@ async def create_vehicle(
 
 @router.get("/vehicles/{vehicle_id}", response_model=schemas.VehicleRead, dependencies=[Depends(require_permission("view", "vehicles"))])
 async def get_vehicle(vehicle_id: int, session: SessionDep) -> schemas.VehicleRead:
-    vehicle = await session.get(Vehicle, vehicle_id)
+    vehicle = await VehicleRepository(session).get_by_id(vehicle_id)
     if vehicle is None:
         raise NotFoundError("Автомобиль не найден")
     return schemas.VehicleRead.model_validate(vehicle)
@@ -190,7 +185,7 @@ async def update_vehicle(
     session: SessionDep,
     user_id: UserDep,
 ) -> schemas.VehicleRead:
-    vehicle = await session.get(Vehicle, vehicle_id)
+    vehicle = await VehicleRepository(session).get_by_id(vehicle_id)
     if vehicle is None:
         raise NotFoundError("Автомобиль не найден")
     for field, value in body.model_dump(exclude_unset=True).items():
@@ -204,7 +199,7 @@ async def update_vehicle(
 async def delete_vehicle(
     vehicle_id: int, session: SessionDep, user_id: UserDep
 ) -> None:
-    vehicle = await session.get(Vehicle, vehicle_id)
+    vehicle = await VehicleRepository(session).get_by_id(vehicle_id)
     if vehicle is None:
         raise NotFoundError("Автомобиль не найден")
     vehicle.soft_delete(user_id)
@@ -216,7 +211,8 @@ async def delete_vehicle(
 
 @router.get("/routes", response_model=list[schemas.RouteRead], dependencies=[Depends(require_permission("view", "routes"))])
 async def list_routes(session: SessionDep) -> list[schemas.RouteRead]:
-    rows = list(await session.scalars(select(Route).where()))
+    repo = RouteRepository(session)
+    rows = await repo.list_all()
     return [schemas.RouteRead.model_validate(r) for r in rows]
 
 
@@ -229,8 +225,6 @@ async def create_route(
     user_id: UserDep,
 ) -> schemas.RouteRead:
     route = Route(
-        created_by_id=user_id,
-        updated_by_id=user_id,
         **body.model_dump(),
     )
     session.add(route)
@@ -240,7 +234,7 @@ async def create_route(
 
 @router.get("/routes/{route_id}", response_model=schemas.RouteRead, dependencies=[Depends(require_permission("view", "routes"))])
 async def get_route(route_id: int, session: SessionDep) -> schemas.RouteRead:
-    route = await session.get(Route, route_id)
+    route = await RouteRepository(session).get_by_id(route_id)
     if route is None:
         raise NotFoundError("Маршрут не найден")
     return schemas.RouteRead.model_validate(route)
@@ -253,7 +247,7 @@ async def update_route(
     session: SessionDep,
     user_id: UserDep,
 ) -> schemas.RouteRead:
-    route = await session.get(Route, route_id)
+    route = await RouteRepository(session).get_by_id(route_id)
     if route is None:
         raise NotFoundError("Маршрут не найден")
     for field, value in body.model_dump(exclude_unset=True).items():
@@ -265,7 +259,7 @@ async def update_route(
 
 @router.delete("/routes/{route_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_permission("delete", "routes"))])
 async def delete_route(route_id: int, session: SessionDep, user_id: UserDep) -> None:
-    route = await session.get(Route, route_id)
+    route = await RouteRepository(session).get_by_id(route_id)
     if route is None:
         raise NotFoundError("Маршрут не найден")
     route.soft_delete(user_id)

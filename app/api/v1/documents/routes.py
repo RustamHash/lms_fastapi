@@ -9,6 +9,7 @@ from app.api.v1.documents import schemas
 from app.core.exceptions import BadRequestError, NotFoundError
 from app.documents.models import Document
 from app.documents.services import DocumentService
+from app.documents.repository import DocumentLineRepository, DocumentRepository
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
@@ -18,7 +19,7 @@ async def list_documents(
     session: SessionDep,
     document_type: str | None = None,
 ) -> list[schemas.DocumentRead]:
-    service = DocumentService(session)
+    service = DocumentService(DocumentRepository(session), DocumentLineRepository(session))
     if document_type:
         rows = await service.list_by_type(document_type)
     else:
@@ -32,14 +33,14 @@ async def create_document(
     session: SessionDep,
     user_id: UserDep,
 ) -> schemas.DocumentRead:
-    service = DocumentService(session)
+    service = DocumentService(DocumentRepository(session), DocumentLineRepository(session))
     doc = await service.create(user_id=user_id, **body.model_dump())
     return schemas.DocumentRead.model_validate(doc)
 
 
 @router.get("/{document_id}", response_model=schemas.DocumentRead, dependencies=[Depends(require_permission("view", "documents"))])
 async def get_document(document_id: int, session: SessionDep) -> schemas.DocumentRead:
-    service = DocumentService(session)
+    service = DocumentService(DocumentRepository(session), DocumentLineRepository(session))
     doc = await service.get_by_id(document_id)
     if doc is None:
         raise NotFoundError("Документ не найден")
@@ -53,7 +54,7 @@ async def add_line(
     session: SessionDep,
     user_id: UserDep,
 ) -> schemas.DocumentLineRead:
-    service = DocumentService(session)
+    service = DocumentService(DocumentRepository(session), DocumentLineRepository(session))
     try:
         line = await service.add_line(
             user_id=user_id,
@@ -76,18 +77,13 @@ async def list_document_lines(
     document_id: int,
     session: SessionDep,
 ) -> list[schemas.DocumentLineRead]:
-    from sqlalchemy import select as sa_select
-    from app.documents.models import DocumentLine
-
-    rows = list(await session.scalars(
-        sa_select(DocumentLine).where(DocumentLine.document_id == document_id)
-    ))
+    rows = await DocumentLineRepository(session).list_by_document(document_id)
     return [schemas.DocumentLineRead.model_validate(r) for r in rows]
 
 
 @router.delete("/{document_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_permission("delete", "documents"))])
 async def delete_document(document_id: int, session: SessionDep, user_id: UserDep) -> None:
-    doc = await session.get(Document, document_id)
+    doc = await DocumentRepository(session).get_by_id(document_id)
     if doc is None:
         raise NotFoundError("Документ не найден")
     doc.soft_delete(user_id)
@@ -104,7 +100,7 @@ async def get_document_line(
     session: SessionDep,
 ) -> schemas.DocumentLineRead:
     from app.documents.models import DocumentLine
-    line = await session.get(DocumentLine, line_id)
+    line = await DocumentLineRepository(session).get_by_id(line_id)
     if line is None:
         raise NotFoundError("Строка документа не найдена")
     return schemas.DocumentLineRead.model_validate(line)
@@ -122,7 +118,7 @@ async def update_document_line(
     user_id: UserDep,
 ) -> schemas.DocumentLineRead:
     from app.documents.models import DocumentLine
-    line = await session.get(DocumentLine, line_id)
+    line = await DocumentLineRepository(session).get_by_id(line_id)
     if line is None:
         raise NotFoundError("Строка документа не найдена")
     for field, value in body.model_dump(exclude_unset=True).items():
@@ -143,7 +139,7 @@ async def delete_document_line(
     user_id: UserDep,
 ) -> None:
     from app.documents.models import DocumentLine
-    line = await session.get(DocumentLine, line_id)
+    line = await DocumentLineRepository(session).get_by_id(line_id)
     if line is None:
         raise NotFoundError("Строка документа не найдена")
     line.soft_delete(user_id)
@@ -157,7 +153,7 @@ async def update_status(
     session: SessionDep,
     user_id: UserDep,
 ) -> schemas.DocumentRead:
-    service = DocumentService(session)
+    service = DocumentService(DocumentRepository(session), DocumentLineRepository(session))
     doc = await service.set_status(
         user_id=user_id,
         document_id=document_id,

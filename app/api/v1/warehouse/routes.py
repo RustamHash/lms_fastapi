@@ -11,6 +11,14 @@ from app.api.deps import SessionDep, UserDep, require_permission
 from app.api.v1.warehouse import schemas
 from app.core.exceptions import BadRequestError, ConflictError, NotFoundError
 from app.warehouse.models import Batch, LPN, Product, Task
+from app.warehouse.repository import (
+    BatchRepository,
+    LPNRepository,
+    ProductRepository,
+    StockRepository,
+    TaskLineRepository,
+    TaskRepository,
+)
 from app.warehouse.services import (
     BatchService,
     LPNService,
@@ -30,11 +38,12 @@ async def list_products(
     session: SessionDep,
     depositor_id: int | None = None,
 ) -> list[schemas.ProductRead]:
-    service = ProductService(session)
+    service = ProductService(ProductRepository(session))
     if depositor_id:
         rows = await service.list_by_depositor(depositor_id)
     else:
-        rows = list(await session.scalars(select(Product).where()))
+        repo = ProductRepository(session)
+    rows = await repo.list_all()
     return [schemas.ProductRead.model_validate(r) for r in rows]
 
 
@@ -44,7 +53,7 @@ async def create_product(
     session: SessionDep,
     user_id: UserDep,
 ) -> schemas.ProductRead:
-    service = ProductService(session)
+    service = ProductService(ProductRepository(session))
     try:
         row = await service.create(user_id=user_id, **body.model_dump())
     except ValueError as e:
@@ -59,7 +68,7 @@ async def update_product(
     session: SessionDep,
     user_id: UserDep,
 ) -> schemas.ProductRead:
-    product = await session.get(Product, product_id)
+    product = await ProductRepository(session).get_by_id(product_id)
     if product is None:
         raise NotFoundError("Товар не найден")
     for field, value in body.model_dump(exclude_unset=True).items():
@@ -71,7 +80,7 @@ async def update_product(
 
 @router.get("/products/{product_id}", response_model=schemas.ProductRead, dependencies=[Depends(require_permission("view", "products"))])
 async def get_product(product_id: int, session: SessionDep) -> schemas.ProductRead:
-    service = ProductService(session)
+    service = ProductService(ProductRepository(session))
     product = await service.get_by_id(product_id)
     if product is None:
         raise NotFoundError("Товар не найден")
@@ -80,7 +89,7 @@ async def get_product(product_id: int, session: SessionDep) -> schemas.ProductRe
 
 @router.delete("/products/{product_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_permission("delete", "products"))])
 async def delete_product(product_id: int, session: SessionDep, user_id: UserDep) -> None:
-    service = ProductService(session)
+    service = ProductService(ProductRepository(session))
     ok = await service.soft_delete(product_id, user_id)
     if not ok:
         raise NotFoundError("Товар не найден")
@@ -94,7 +103,7 @@ async def create_batch(
     session: SessionDep,
     user_id: UserDep,
 ) -> schemas.BatchRead:
-    service = BatchService(session)
+    service = BatchService(BatchRepository(session))
     try:
         row = await service.create(user_id=user_id, **body.model_dump())
     except ValueError as e:
@@ -104,11 +113,12 @@ async def create_batch(
 
 @router.get("/batches", response_model=list[schemas.BatchRead], dependencies=[Depends(require_permission("view", "batches"))])
 async def list_batches(session: SessionDep, product_id: int | None = None) -> list[schemas.BatchRead]:
-    service = BatchService(session)
+    service = BatchService(BatchRepository(session))
     if product_id:
         rows = await service.list_by_product(product_id)
     else:
-        rows = list(await session.scalars(select(Batch).where()))
+        repo = BatchRepository(session)
+    rows = await repo.list_all()
     return [schemas.BatchRead.model_validate(r) for r in rows]
 
 
@@ -123,7 +133,7 @@ async def update_batch(
     session: SessionDep,
     user_id: UserDep,
 ) -> schemas.BatchRead:
-    batch = await session.get(Batch, batch_id)
+    batch = await BatchRepository(session).get_by_id(batch_id)
     if batch is None:
         raise NotFoundError("Партия не найдена")
     for field, value in body.model_dump(exclude_unset=True).items():
@@ -135,7 +145,7 @@ async def update_batch(
 
 @router.get("/batches/{batch_id}", response_model=schemas.BatchRead, dependencies=[Depends(require_permission("view", "batches"))])
 async def get_batch(batch_id: int, session: SessionDep) -> schemas.BatchRead:
-    service = BatchService(session)
+    service = BatchService(BatchRepository(session))
     batch = await service.get_by_id(batch_id)
     if batch is None:
         raise NotFoundError("Партия не найдена")
@@ -144,7 +154,7 @@ async def get_batch(batch_id: int, session: SessionDep) -> schemas.BatchRead:
 
 @router.delete("/batches/{batch_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_permission("delete", "batches"))])
 async def delete_batch(batch_id: int, session: SessionDep, user_id: UserDep) -> None:
-    batch = await session.get(Batch, batch_id)
+    batch = await BatchRepository(session).get_by_id(batch_id)
     if batch is None:
         raise NotFoundError("Партия не найдена")
     batch.soft_delete(user_id)
@@ -159,14 +169,15 @@ async def create_lpn(
     session: SessionDep,
     user_id: UserDep,
 ) -> schemas.LPNRead:
-    service = LPNService(session)
+    service = LPNService(LPNRepository(session))
     row = await service.create(user_id=user_id, status=body.status)
     return schemas.LPNRead.model_validate(row)
 
 
 @router.get("/lpns", response_model=list[schemas.LPNRead], dependencies=[Depends(require_permission("view", "lpns"))])
 async def list_lpns(session: SessionDep) -> list[schemas.LPNRead]:
-    rows = list(await session.scalars(select(LPN).where()))
+    repo = LPNRepository(session)
+    rows = await repo.list_all()
     return [schemas.LPNRead.model_validate(r) for r in rows]
 
 
@@ -181,7 +192,7 @@ async def update_lpn(
     session: SessionDep,
     user_id: UserDep,
 ) -> schemas.LPNRead:
-    lpn = await session.get(LPN, lpn_id)
+    lpn = await LPNRepository(session).get_by_id(lpn_id)
     if lpn is None:
         raise NotFoundError("LPN не найдена")
     lpn.status = body.status
@@ -192,7 +203,7 @@ async def update_lpn(
 
 @router.get("/lpns/{lpn_id}", response_model=schemas.LPNRead, dependencies=[Depends(require_permission("view", "lpns"))])
 async def get_lpn(lpn_id: int, session: SessionDep) -> schemas.LPNRead:
-    lpn = await session.get(LPN, lpn_id)
+    lpn = await LPNRepository(session).get_by_id(lpn_id)
     if lpn is None:
         raise NotFoundError("LPN не найдена")
     return schemas.LPNRead.model_validate(lpn)
@@ -200,7 +211,7 @@ async def get_lpn(lpn_id: int, session: SessionDep) -> schemas.LPNRead:
 
 @router.delete("/lpns/{lpn_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_permission("delete", "lpns"))])
 async def delete_lpn(lpn_id: int, session: SessionDep, user_id: UserDep) -> None:
-    lpn = await session.get(LPN, lpn_id)
+    lpn = await LPNRepository(session).get_by_id(lpn_id)
     if lpn is None:
         raise NotFoundError("LPN не найдена")
     lpn.soft_delete(user_id)
@@ -221,12 +232,7 @@ async def list_stock(
     from sqlalchemy import select as sa_select
     from app.warehouse.models import StockBalance
 
-    stmt = sa_select(StockBalance)
-    if product_id:
-        stmt = stmt.where(StockBalance.product_id == product_id)
-    if location_id:
-        stmt = stmt.where(StockBalance.location_id == location_id)
-    rows = list(await session.scalars(stmt))
+    rows = await StockRepository(session).list_balances()
     return [schemas.StockBalanceRead.model_validate(r) for r in rows]
 
 
@@ -240,7 +246,7 @@ async def get_stock(
     session: SessionDep,
 ) -> schemas.StockBalanceRead:
     from app.warehouse.models import StockBalance
-    stock = await session.get(StockBalance, stock_id)
+    stock = await StockRepository(session).get_balance_by_id(stock_id)
     if stock is None:
         raise NotFoundError("Остаток не найден")
     return schemas.StockBalanceRead.model_validate(stock)
@@ -252,7 +258,7 @@ async def add_stock(
     session: SessionDep,
     user_id: UserDep,
 ) -> schemas.StockBalanceRead:
-    service = StockService(session)
+    service = StockService(StockRepository(session))
     try:
         balance = await service.add_stock(user_id=user_id, **body.model_dump())
     except ValueError as e:
@@ -266,7 +272,7 @@ async def remove_stock(
     session: SessionDep,
     user_id: UserDep,
 ) -> schemas.StockBalanceRead:
-    service = StockService(session)
+    service = StockService(StockRepository(session))
     try:
         balance = await service.remove_stock(user_id=user_id, **body.model_dump())
     except ValueError as e:
@@ -280,7 +286,7 @@ async def move_stock(
     session: SessionDep,
     user_id: UserDep,
 ) -> schemas.StockBalanceRead:
-    service = StockService(session)
+    service = StockService(StockRepository(session))
     try:
         balance = await service.move_stock(user_id=user_id, **body.model_dump())
     except ValueError as e:
@@ -296,9 +302,57 @@ async def create_task(
     session: SessionDep,
     user_id: UserDep,
 ) -> schemas.TaskRead:
-    service = TaskService(session)
+    service = TaskService(TaskRepository(session), TaskLineRepository(session), StockService(StockRepository(session)))
     task = await service.create(user_id=user_id, **body.model_dump())
     return schemas.TaskRead.model_validate(task)
+
+
+@router.post(
+    "/tasks/from-document",
+    response_model=schemas.TaskRead,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_permission("create", "tasks"))],
+)
+async def create_task_from_document(
+    body: dict,
+    session: SessionDep,
+    user_id: UserDep,
+) -> schemas.TaskRead:
+    service = TaskService(TaskRepository(session), TaskLineRepository(session), StockService(StockRepository(session)))
+    try:
+        task = await service.create_from_document(
+            user_id=user_id,
+            document_id=body["document_id"],
+            task_type=body["task_type"],
+            assignee_id=body.get("assignee_id"),
+            warehouse_id=body["warehouse_id"],
+        )
+    except ValueError as e:
+        raise BadRequestError(str(e)) from e
+    return schemas.TaskRead.model_validate(task)
+
+
+@router.post(
+    "/tasks/picking-with-fefo",
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_permission("create", "tasks"))],
+)
+async def create_picking_task(
+    body: dict,
+    session: SessionDep,
+    user_id: UserDep,
+) -> dict:
+    service = TaskService(TaskRepository(session), TaskLineRepository(session), StockService(StockRepository(session)))
+    try:
+        result = await service.create_picking_with_fefo(
+            user_id=user_id,
+            document_id=body["document_id"],
+            assignee_id=body.get("assignee_id"),
+            warehouse_id=body["warehouse_id"],
+        )
+    except ValueError as e:
+        raise BadRequestError(str(e)) from e
+    return result
 
 
 @router.post("/tasks/{task_id}/lines", status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_permission("update", "tasks"))])
@@ -308,7 +362,7 @@ async def add_task_line(
     session: SessionDep,
     user_id: UserDep,
 ) -> dict:
-    service = TaskService(session)
+    service = TaskService(TaskRepository(session), TaskLineRepository(session), StockService(StockRepository(session)))
     line = await service.add_line(user_id=user_id, task_id=task_id, **body.model_dump())
     return {"id": line.id}
 
@@ -319,7 +373,7 @@ async def start_task(
     session: SessionDep,
     user_id: UserDep,
 ) -> schemas.TaskRead:
-    service = TaskService(session)
+    service = TaskService(TaskRepository(session), TaskLineRepository(session), StockService(StockRepository(session)))
     task = await service.start(user_id=user_id, task_id=task_id)
     if task is None:
         raise NotFoundError("Задание не найдено")
@@ -328,13 +382,14 @@ async def start_task(
 
 @router.get("/tasks", response_model=list[schemas.TaskRead], dependencies=[Depends(require_permission("view", "tasks"))])
 async def list_tasks(session: SessionDep) -> list[schemas.TaskRead]:
-    rows = list(await session.scalars(select(Task).where()))
+    repo = TaskRepository(session)
+    rows = await repo.list_all()
     return [schemas.TaskRead.model_validate(r) for r in rows]
 
 
 @router.get("/tasks/{task_id}", response_model=schemas.TaskRead, dependencies=[Depends(require_permission("view", "tasks"))])
 async def get_task(task_id: int, session: SessionDep) -> schemas.TaskRead:
-    task = await session.get(Task, task_id)
+    task = await TaskRepository(session).get_by_id(task_id)
     if task is None:
         raise NotFoundError("Задание не найдено")
     return schemas.TaskRead.model_validate(task)
@@ -342,7 +397,7 @@ async def get_task(task_id: int, session: SessionDep) -> schemas.TaskRead:
 
 @router.delete("/tasks/{task_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_permission("delete", "tasks"))])
 async def delete_task(task_id: int, session: SessionDep, user_id: UserDep) -> None:
-    task = await session.get(Task, task_id)
+    task = await TaskRepository(session).get_by_id(task_id)
     if task is None:
         raise NotFoundError("Задание не найдено")
     task.soft_delete(user_id)
@@ -356,7 +411,7 @@ async def complete_task_line(
     session: SessionDep,
     user_id: UserDep,
 ) -> dict:
-    service = TaskService(session)
+    service = TaskService(TaskRepository(session), TaskLineRepository(session), StockService(StockRepository(session)))
     try:
         line = await service.complete_line(
             user_id=user_id,
@@ -375,7 +430,7 @@ async def complete_task(
     session: SessionDep,
     user_id: UserDep,
 ) -> schemas.TaskRead:
-    service = TaskService(session)
+    service = TaskService(TaskRepository(session), TaskLineRepository(session), StockService(StockRepository(session)))
     try:
         task = await service.complete(user_id=user_id, task_id=task_id, force=body.force)
     except ValueError as e:

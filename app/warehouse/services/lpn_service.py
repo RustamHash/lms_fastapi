@@ -2,38 +2,32 @@
 
 from __future__ import annotations
 
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+import uuid
 
-from app.warehouse.models import LPN
+from app.warehouse.repository import LPNRepository
 
 
 class LPNService:
-    def __init__(self, session: AsyncSession) -> None:
-        self._s = session
+    def __init__(self, repo: LPNRepository) -> None:
+        self._repo = repo
 
-    async def create(self, *, user_id: int, status: str = "created") -> LPN:
-        lpn = LPN(
+    async def create(self, *, user_id: int, status: str = "created"):
+        # Генерируем номер
+        number = f"LPN{uuid.uuid4().hex[:12].upper()}"
+
+        return await self._repo.create(
+            number=number,
             status=status,
-            created_by_id=user_id,
-            updated_by_id=user_id,
         )
-        self._s.add(lpn)
-        await self._s.flush()
-        return lpn
 
-    async def get_by_number(self, number: str) -> LPN | None:
-        stmt = select(LPN).where(LPN.number == number)
-        return await self._s.scalar(stmt)
+    async def get_by_number(self, number: str):
+        return await self._repo.get_by_number(number)
 
-    async def set_status(self, *, user_id: int, lpn: LPN, status: str) -> LPN:
-        lpn.status = status
-        lpn.updated_by_id = user_id
-        await self._s.flush()
-        return lpn
+    async def set_status(self, *, user_id: int, lpn_id: int, status: str):
+        return await self._repo.update(lpn_id, status=status)
 
-    async def close(self, *, user_id: int, lpn: LPN) -> LPN:
-        return await self.set_status(user_id=user_id, lpn=lpn, status="closed")
+    async def close(self, *, user_id: int, lpn_id: int):
+        return await self.set_status(user_id=user_id, lpn_id=lpn_id, status="closed")
 
-    async def ship(self, *, user_id: int, lpn: LPN) -> LPN:
-        return await self.set_status(user_id=user_id, lpn=lpn, status="shipped")
+    async def ship(self, *, user_id: int, lpn_id: int):
+        return await self.set_status(user_id=user_id, lpn_id=lpn_id, status="shipped")

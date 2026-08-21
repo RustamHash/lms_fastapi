@@ -52,7 +52,7 @@ async def upload_file(
 @router.get("", response_model=list[schemas.FileRead], dependencies=[Depends(require_permission("view", "files"))])
 async def list_files(session: SessionDep) -> list[schemas.FileRead]:
     rows = list(await session.scalars(
-        select(FileModel).where()
+        select(FileModel)
     ))
     return [schemas.FileRead.model_validate(r) for r in rows]
 

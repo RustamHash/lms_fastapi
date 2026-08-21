@@ -48,8 +48,6 @@ class AddressService:
                 hash=address_hash,
                 normalized_address_id=address.id,
                 source=source,
-                created_by_id=user_id,
-                updated_by_id=user_id,
             )
             return address
 
@@ -90,8 +88,6 @@ class AddressService:
                     hash=address_hash,
                     normalized_address_id=address.id,
                     source=source,
-                    created_by_id=user_id,
-                    updated_by_id=user_id,
                 )
                 return address
 
@@ -103,8 +99,6 @@ class AddressService:
                 hash=address_hash,
                 normalized_address_id=address.id,
                 source=source,
-                created_by_id=user_id,
-                updated_by_id=user_id,
             )
             return address
 
@@ -121,8 +115,6 @@ class AddressService:
             longitude=longitude,
             postal_code=postal_code,
             delivery_zone_id=None,
-            created_by_id=user_id,
-            updated_by_id=user_id,
         )
 
         # 7. Создаём сырой адрес с привязкой
@@ -131,8 +123,6 @@ class AddressService:
             hash=address_hash,
             normalized_address_id=address.id,
             source=source,
-            created_by_id=user_id,
-            updated_by_id=user_id,
         )
 
         return address

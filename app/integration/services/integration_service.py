@@ -8,11 +8,17 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.orders.models import InboundOrder, InboundOrderLine, OutboundOrder, OutboundOrderLine
+from app.delivery.models import DeliveryOrder
+from app.delivery.repository import DeliveryOrderRepository
+from app.delivery.services import DeliveryOrderService
+from app.documents.services.document_service import DocumentService
+from app.documents.repository import DocumentLineRepository, DocumentRepository
 from app.integration.adapters import ZLNAdapter
 from app.parties.models import Client
 from app.warehouse.models import VirtualWarehouse
 from app.parties.services import AddressService, ClientService
 from app.parties.repository import AddressRepository, ClientRepository
+from app.warehouse.repository import ProductRepository
 from app.warehouse.services import ProductService
 
 logger = logging.getLogger(__name__)
@@ -37,6 +43,9 @@ class IntegrationService:
         doc_number = universal_doc.get("document_number", "")
 
         try:
+            # Начало транзакции (savepoint)
+            savepoint = await self._s.begin_nested()
+
             # 0. Проверка дубликата
             if doc_type == "porder":
                 existing = await self._s.scalar(
@@ -60,7 +69,7 @@ class IntegrationService:
                 return None, [f"Заказ {doc_number} уже существует"]
 
             # 1. Товары — для всех типов
-            product_service = ProductService(self._s)
+            product_service = ProductService(ProductRepository(self._s))
             for item in universal_doc.get("items", []):
                 try:
                     await product_service.get_or_create(
@@ -97,14 +106,18 @@ class IntegrationService:
             return order, []
 
         except Exception as e:
+            await savepoint.rollback()
             logger.error("Ошибка импорта: %s", e)
             return None, [f"Ошибка: {e}"]
 
-    async def _get_or_create_warehouse(self, depositor_id: int, vw_code: str) -> tuple[int, int | None]:
-        """Найти виртуальный склад, вернуть (warehouse_id, vw_id)."""
+    async def _get_or_create_warehouse(
+        self, depositor_id: int, vw_code: str, user_id: int | None = None
+    ) -> tuple[int, int | None]:
+        """Найти или создать виртуальный склад, вернуть (warehouse_id, vw_id)."""
         from app.warehouse.models import Warehouse
 
         if vw_code:
+            # Ищем виртуальный склад
             stmt = select(VirtualWarehouse).where(
                 VirtualWarehouse.depositor_id == depositor_id,
                 VirtualWarehouse.code == vw_code,
@@ -113,12 +126,25 @@ class IntegrationService:
             if vw:
                 return vw.warehouse_id, vw.id
 
-        # Первый склад
-        stmt = select(Warehouse).limit(1)
-        warehouse = await self._s.scalar(stmt)
-        if warehouse is None:
-            raise ValueError("Склад не найден")
-        return warehouse.id, None
+            # Не нашли — создаем
+            warehouse = await self._s.scalar(select(Warehouse).limit(1))
+            if warehouse is None:
+                raise ValueError("Склад не найден")
+
+            vw = VirtualWarehouse(
+                depositor_id=depositor_id,
+                warehouse_id=warehouse.id,
+                code=vw_code,
+                name=vw_code,
+                created_by_id=user_id,
+                updated_by_id=user_id,
+            )
+            self._s.add(vw)
+            await self._s.flush()
+            return vw.warehouse_id, vw.id
+
+        # Без кода — ошибка, заказ не создаем
+        raise ValueError("Виртуальный склад не указан (LOC)")
 
     async def _create_inbound_order(
         self,
@@ -155,7 +181,7 @@ class IntegrationService:
 
         # 3. Найти склад
         warehouse_id, vw_id = await self._get_or_create_warehouse(
-            depositor_id, doc.get("virtual_warehouse_code", "")
+            depositor_id, doc.get("virtual_warehouse_code", ""), user_id
         )
 
         # 4. Создать заказ
@@ -167,8 +193,6 @@ class IntegrationService:
             supplier_id=supplier.id if supplier else None,
             order_date=doc.get("document_date") or doc.get("delivery_date"),
             planned_date=doc.get("delivery_date"),
-            created_by_id=user_id,
-            updated_by_id=user_id,
         )
         self._s.add(order)
         await self._s.flush()
@@ -190,8 +214,6 @@ class IntegrationService:
                 order_id=order.id,
                 product_id=product.id,
                 quantity=line["quantity"],
-                created_by_id=user_id,
-                updated_by_id=user_id,
             )
             self._s.add(order_line)
 
@@ -240,7 +262,7 @@ class IntegrationService:
 
         # 4. Найти склад
         warehouse_id, vw_id = await self._get_or_create_warehouse(
-            depositor_id, doc.get("virtual_warehouse_code", "")
+            depositor_id, doc.get("virtual_warehouse_code", ""), user_id
         )
 
         # 5. Создать заказ
@@ -255,8 +277,6 @@ class IntegrationService:
             order_date=doc.get("document_date") or doc.get("delivery_date"),
             shipping_date=doc.get("delivery_date"),
             needs_delivery=doc.get("is_delivery", False),
-            created_by_id=user_id,
-            updated_by_id=user_id,
         )
         self._s.add(order)
         await self._s.flush()
@@ -278,12 +298,30 @@ class IntegrationService:
                 order_id=order.id,
                 product_id=product.id,
                 quantity=line["quantity"],
-                created_by_id=user_id,
-                updated_by_id=user_id,
             )
             self._s.add(order_line)
 
         await self._s.flush()
+
+        # Если нужна доставка — создать заявку на доставку
+        if order.needs_delivery:
+            delivery_order = DeliveryOrder(
+                number=order.number,
+                contract_id=None,
+                document_id=None,
+                outbound_order_id=order.id,
+                contact_person=order.delivery_contact or "",
+                phone="",
+                delivery_date=order.shipping_date,
+                status="created",
+                is_edo=False,
+                comment="",
+                created_by_id=user_id,
+                updated_by_id=user_id,
+            )
+            self._s.add(delivery_order)
+            await self._s.flush()
+
         return order
 
 

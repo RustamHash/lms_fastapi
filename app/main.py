@@ -11,10 +11,15 @@ from app.notifications.services.dispatcher import setup_notification_dispatcher
 
 settings = get_settings()
 setup_logging(settings)
-# Подписка на события (диспетчер уведомлений)
 setup_notification_dispatcher(None)
 
 app = FastAPI(title="LMS FastAPI")
+
+# Middleware
+setup_middleware(app, settings)
+
+# Роутер
+app.include_router(api_router)
 
 
 @app.on_event("startup")
@@ -24,8 +29,6 @@ async def startup_event():
 
     async with async_session_factory() as session:
         await init_db(session)
-setup_middleware(app, settings)
-app.include_router(api_router)
 
 
 from fastapi.staticfiles import StaticFiles

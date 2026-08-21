@@ -8,6 +8,7 @@ from sqlalchemy import select
 from app.api.deps import SessionDep, UserDep, require_permission
 from app.core.exceptions import NotFoundError
 from app.delivery.models import DeliveryDeviation, RouteLine
+from app.delivery.repository import DeviationRepository, RouteLineRepository
 from app.infrastructure.events import event_bus
 from app.infrastructure.events.event_types import EventTypes
 
@@ -25,10 +26,7 @@ async def list_deviations(
     session: SessionDep,
     delivery_order_id: int | None = None,
 ) -> list[dict]:
-    stmt = select(DeliveryDeviation)
-    if delivery_order_id:
-        stmt = stmt.where(DeliveryDeviation.delivery_order_id == delivery_order_id)
-    rows = list(await session.scalars(stmt))
+    rows = await DeviationRepository(session).list_by_order(delivery_order_id) if delivery_order_id else await DeviationRepository(session).list_all()
     return [
         {
             "id": d.id,
@@ -65,8 +63,6 @@ async def create_deviation(
         deviation_type=body["deviation_type"],
         quantity=body.get("quantity", 0),
         description=body.get("description", ""),
-        created_by_id=user_id,
-        updated_by_id=user_id,
     )
     session.add(deviation)
     await session.flush()
@@ -79,7 +75,7 @@ async def create_deviation(
     dependencies=[Depends(require_permission("view", "delivery"))],
 )
 async def get_deviation(deviation_id: int, session: SessionDep) -> dict:
-    d = await session.get(DeliveryDeviation, deviation_id)
+    d = await DeviationRepository(session).get_by_id(deviation_id)
     if d is None:
         raise NotFoundError("Отклонение не найдено")
     return {
@@ -110,7 +106,7 @@ async def update_deviation(
     session: SessionDep,
     user_id: UserDep,
 ) -> dict:
-    d = await session.get(DeliveryDeviation, deviation_id)
+    d = await DeviationRepository(session).get_by_id(deviation_id)
     if d is None:
         raise NotFoundError("Отклонение не найдено")
     for field in ["deviation_type", "quantity", "description"]:
@@ -131,7 +127,7 @@ async def delete_deviation(
     session: SessionDep,
     user_id: UserDep,
 ) -> None:
-    d = await session.get(DeliveryDeviation, deviation_id)
+    d = await DeviationRepository(session).get_by_id(deviation_id)
     if d is None:
         raise NotFoundError("Отклонение не найдено")
     d.soft_delete(user_id)
@@ -149,10 +145,7 @@ async def list_route_lines(
     session: SessionDep,
     route_id: int | None = None,
 ) -> list[dict]:
-    stmt = select(RouteLine)
-    if route_id:
-        stmt = stmt.where(RouteLine.route_id == route_id)
-    rows = list(await session.scalars(stmt))
+    rows = await RouteLineRepository(session).list_by_route(route_id) if route_id else await RouteLineRepository(session).list_all()
     return [
         {
             "id": rl.id,
@@ -193,8 +186,6 @@ async def create_route_line(
         planned_time=body.get("planned_time"),
         actual_time=body.get("actual_time"),
         status=body.get("status", "pending"),
-        created_by_id=user_id,
-        updated_by_id=user_id,
     )
     session.add(rl)
     await session.flush()
@@ -216,7 +207,7 @@ async def create_route_line(
     dependencies=[Depends(require_permission("view", "routes"))],
 )
 async def get_route_line(line_id: int, session: SessionDep) -> dict:
-    rl = await session.get(RouteLine, line_id)
+    rl = await RouteLineRepository(session).get_by_id(line_id)
     if rl is None:
         raise NotFoundError("Строка маршрута не найдена")
     return {
@@ -249,7 +240,7 @@ async def update_route_line(
     session: SessionDep,
     user_id: UserDep,
 ) -> dict:
-    rl = await session.get(RouteLine, line_id)
+    rl = await RouteLineRepository(session).get_by_id(line_id)
     if rl is None:
         raise NotFoundError("Строка маршрута не найдена")
     for field in ["order", "planned_time", "actual_time", "status"]:
@@ -270,7 +261,7 @@ async def delete_route_line(
     session: SessionDep,
     user_id: UserDep,
 ) -> None:
-    rl = await session.get(RouteLine, line_id)
+    rl = await RouteLineRepository(session).get_by_id(line_id)
     if rl is None:
         raise NotFoundError("Строка маршрута не найдена")
     rl.soft_delete(user_id)

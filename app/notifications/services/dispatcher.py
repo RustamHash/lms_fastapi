@@ -11,6 +11,7 @@ from app.infrastructure.events import event_bus
 from app.infrastructure.events.event_types import EventTypes
 from app.notifications.adapters import AppAdapter, EmailAdapter
 from app.notifications.models import NotificationRule
+from app.notifications.repository import NotificationRuleRepository
 
 logger = logging.getLogger(__name__)
 
@@ -34,11 +35,8 @@ class NotificationDispatcher:
             self._app_adapter = AppAdapter(session)
 
             # Найти активные правила для события
-            stmt = select(NotificationRule).where(
-                NotificationRule.event_type == event_type,
-                NotificationRule.is_active.is_(True),
-            )
-            rules = list(await session.scalars(stmt))
+            rule_repo = NotificationRuleRepository(session)
+            rules = await rule_repo.list_active_by_event(event_type)
 
             for rule in rules:
                 recipients = await self._get_recipients(rule)

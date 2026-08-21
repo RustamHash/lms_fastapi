@@ -19,8 +19,6 @@ class TariffService:
             raise ValueError("Номер обязателен")
 
         return await self._repo.insert_document(
-            created_by_id=user_id,
-            updated_by_id=user_id,
             **kwargs,
         )
 
@@ -33,8 +31,6 @@ class TariffService:
             raise ValueError("Цена обязательна и не может быть отрицательной")
 
         return await self._repo.insert_tariff(
-            created_by_id=user_id,
-            updated_by_id=user_id,
             **kwargs,
         )
 

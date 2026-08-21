@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, status
-from sqlalchemy import select
 
 from app.api.deps import SessionDep, UserDep, require_permission
 from app.api.v1.orders.schemas import (
@@ -14,20 +13,21 @@ from app.api.v1.orders.schemas import (
     ReturnOrderUpdate,
 )
 from app.core.exceptions import NotFoundError
-from app.orders.models import ReturnOrder, ReturnOrderLine
+from app.orders.repository import ReturnOrderLineRepository, ReturnOrderRepository
 
 router = APIRouter(prefix="/return-orders", tags=["return-orders"])
 
 
 @router.get("", response_model=list[ReturnOrderRead], dependencies=[Depends(require_permission("view", "orders"))])
 async def list_return_orders(session: SessionDep) -> list[ReturnOrderRead]:
-    rows = list(await session.scalars(select(ReturnOrder)))
+    repo = ReturnOrderRepository(session)
+    rows = await repo.list_all()
     return [ReturnOrderRead.model_validate(r) for r in rows]
 
 
 @router.post("", response_model=ReturnOrderRead, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_permission("create", "orders"))])
 async def create_return_order(body: ReturnOrderCreate, session: SessionDep, user_id: UserDep) -> ReturnOrderRead:
-    order = ReturnOrder(created_by_id=user_id, updated_by_id=user_id, **body.model_dump())
+    order = ReturnOrder(created_by_id=user_id, **body.model_dump())
     session.add(order)
     await session.flush()
     return ReturnOrderRead.model_validate(order)
@@ -35,7 +35,7 @@ async def create_return_order(body: ReturnOrderCreate, session: SessionDep, user
 
 @router.get("/{order_id}", response_model=ReturnOrderRead, dependencies=[Depends(require_permission("view", "orders"))])
 async def get_return_order(order_id: int, session: SessionDep) -> ReturnOrderRead:
-    order = await session.get(ReturnOrder, order_id)
+    order = await ReturnOrderRepository(session).get_by_id(order_id)
     if order is None:
         raise NotFoundError("Возврат не найден")
     return ReturnOrderRead.model_validate(order)
@@ -43,7 +43,7 @@ async def get_return_order(order_id: int, session: SessionDep) -> ReturnOrderRea
 
 @router.patch("/{order_id}", response_model=ReturnOrderRead, dependencies=[Depends(require_permission("update", "orders"))])
 async def update_return_order(order_id: int, body: ReturnOrderUpdate, session: SessionDep, user_id: UserDep) -> ReturnOrderRead:
-    order = await session.get(ReturnOrder, order_id)
+    order = await ReturnOrderRepository(session).get_by_id(order_id)
     if order is None:
         raise NotFoundError("Возврат не найден")
     for field, value in body.model_dump(exclude_unset=True).items():
@@ -55,7 +55,7 @@ async def update_return_order(order_id: int, body: ReturnOrderUpdate, session: S
 
 @router.delete("/{order_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_permission("delete", "orders"))])
 async def delete_return_order(order_id: int, session: SessionDep, user_id: UserDep) -> None:
-    order = await session.get(ReturnOrder, order_id)
+    order = await ReturnOrderRepository(session).get_by_id(order_id)
     if order is None:
         raise NotFoundError("Возврат не найден")
     order.soft_delete(user_id)
@@ -66,13 +66,13 @@ async def delete_return_order(order_id: int, session: SessionDep, user_id: UserD
 
 @router.get("/{order_id}/lines", response_model=list[ReturnOrderLineRead], dependencies=[Depends(require_permission("view", "orders"))])
 async def list_return_lines(order_id: int, session: SessionDep) -> list[ReturnOrderLineRead]:
-    rows = list(await session.scalars(select(ReturnOrderLine).where(ReturnOrderLine.return_order_id == order_id)))
+    rows = await ReturnOrderLineRepository(session).list_by_order(order_id)
     return [ReturnOrderLineRead.model_validate(r) for r in rows]
 
 
 @router.get("/lines/{line_id}", response_model=ReturnOrderLineRead, dependencies=[Depends(require_permission("view", "orders"))])
 async def get_return_line(line_id: int, session: SessionDep) -> ReturnOrderLineRead:
-    line = await session.get(ReturnOrderLine, line_id)
+    line = await ReturnOrderLineRepository(session).get_by_id(line_id)
     if line is None:
         raise NotFoundError("Строка не найдена")
     return ReturnOrderLineRead.model_validate(line)
@@ -80,7 +80,7 @@ async def get_return_line(line_id: int, session: SessionDep) -> ReturnOrderLineR
 
 @router.patch("/lines/{line_id}", response_model=ReturnOrderLineRead, dependencies=[Depends(require_permission("update", "orders"))])
 async def update_return_line(line_id: int, body: ReturnOrderLineCreate, session: SessionDep, user_id: UserDep) -> ReturnOrderLineRead:
-    line = await session.get(ReturnOrderLine, line_id)
+    line = await ReturnOrderLineRepository(session).get_by_id(line_id)
     if line is None:
         raise NotFoundError("Строка не найдена")
     for field, value in body.model_dump(exclude_unset=True, exclude={"return_order_id"}).items():
@@ -92,7 +92,7 @@ async def update_return_line(line_id: int, body: ReturnOrderLineCreate, session:
 
 @router.delete("/lines/{line_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_permission("delete", "orders"))])
 async def delete_return_line(line_id: int, session: SessionDep, user_id: UserDep) -> None:
-    line = await session.get(ReturnOrderLine, line_id)
+    line = await ReturnOrderLineRepository(session).get_by_id(line_id)
     if line is None:
         raise NotFoundError("Строка не найдена")
     line.soft_delete(user_id)
@@ -101,7 +101,7 @@ async def delete_return_line(line_id: int, session: SessionDep, user_id: UserDep
 
 @router.post("/{order_id}/lines", response_model=ReturnOrderLineRead, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_permission("create", "orders"))])
 async def create_return_line(order_id: int, body: ReturnOrderLineCreate, session: SessionDep, user_id: UserDep) -> ReturnOrderLineRead:
-    line = ReturnOrderLine(return_order_id=order_id, created_by_id=user_id, updated_by_id=user_id, **body.model_dump(exclude={"return_order_id"}))
+    line = ReturnOrderLine(return_order_id=order_id, **body.model_dump(exclude={"return_order_id"}))
     session.add(line)
     await session.flush()
     return ReturnOrderLineRead.model_validate(line)

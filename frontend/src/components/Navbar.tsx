@@ -47,11 +47,11 @@ const MENU_GROUPS: MenuGroup[] = [
   },
   {
     label: 'Документы',
-    to: '/documents',
+    to: '/documents-hub',
   },
   {
     label: 'Доставка',
-    to: '/delivery/orders',
+    to: '/delivery',
     items: [
       { to: '/delivery/orders', label: 'Заказы' },
       { to: '/reference/drivers', label: 'Водители' },

@@ -31,3 +31,9 @@ class AuditService:
 
     async def list_by_user(self, user_id: int, limit: int = 100) -> list[Audit]:
         return await self._repo.list_by_user(user_id, limit)
+
+    async def list_all(self, limit: int = 100) -> list[Audit]:
+        return await self._repo.list_all(limit)
+
+    async def get_by_id(self, audit_id: int) -> Audit | None:
+        return await self._repo.get_by_id(audit_id)

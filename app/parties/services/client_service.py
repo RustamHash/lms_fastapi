@@ -25,8 +25,6 @@ class ClientService:
             raise ValueError(f"Клиент с кодом {kwargs['code']} уже существует")
 
         return await self._repo.insert(
-            created_by_id=user_id,
-            updated_by_id=user_id,
             **kwargs,
         )
 
@@ -46,7 +44,7 @@ class ClientService:
         return await self._repo.list_by_depositor(depositor_id)
 
     async def update(self, client_id: int, user_id: int | None, **fields) -> Client | None:
-        return await self._repo.update(client_id, updated_by_id=user_id, **fields)
+        return await self._repo.update(client_id, **fields)
 
     async def soft_delete(self, client_id: int, user_id: int | None = None) -> bool:
         client = await self._repo.get_by_id(client_id)

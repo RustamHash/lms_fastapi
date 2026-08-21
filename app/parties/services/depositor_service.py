@@ -24,8 +24,6 @@ class DepositorService:
         return await self._repo.insert(
             legal_entity_id=legal_entity_id,
             code=code,
-            created_by_id=user_id,
-            updated_by_id=user_id,
         )
 
     async def get_by_id(self, depositor_id: int) -> Depositor | None:

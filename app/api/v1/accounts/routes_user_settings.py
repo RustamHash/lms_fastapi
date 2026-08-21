@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, status
 from sqlalchemy import select
 
 from app.accounts.models import UserDepositor, UserSettings
+from app.accounts.repository import UserSettingsRepository, UserDepositorRepository
 from app.api.deps import SessionDep, UserDep, require_permission
 from app.core.exceptions import ConflictError, NotFoundError
 
@@ -16,7 +17,7 @@ router = APIRouter(tags=["user-settings"])
 
 @router.get("/user-settings", dependencies=[Depends(require_permission("view", "users"))])
 async def list_user_settings(session: SessionDep):
-    rows = list(await session.scalars(select(UserSettings)))
+    rows = await UserSettingsRepository(session).list_all()
     return [
         {
             "id": s.id,
@@ -36,9 +37,7 @@ async def list_user_settings(session: SessionDep):
 
 @router.post("/user-settings", status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_permission("create", "users"))])
 async def create_user_settings(body: dict, session: SessionDep, user_id: UserDep):
-    existing = await session.scalar(
-        select(UserSettings).where(UserSettings.user_id == body["user_id"])
-    )
+    existing = await UserSettingsRepository(session).get_by_user(body["user_id"])
     if existing:
         raise ConflictError("Настройки для пользователя уже существуют")
 
@@ -48,8 +47,6 @@ async def create_user_settings(body: dict, session: SessionDep, user_id: UserDep
         theme=body.get("theme", "light"),
         density=body.get("density", "compact"),
         font_size=body.get("font_size", "small"),
-        created_by_id=user_id,
-        updated_by_id=user_id,
     )
     session.add(settings)
     await session.flush()
@@ -58,7 +55,7 @@ async def create_user_settings(body: dict, session: SessionDep, user_id: UserDep
 
 @router.get("/user-settings/{settings_id}", dependencies=[Depends(require_permission("view", "users"))])
 async def get_user_settings(settings_id: int, session: SessionDep):
-    s = await session.get(UserSettings, settings_id)
+    s = await UserSettingsRepository(session).get_by_id(settings_id)
     if s is None:
         raise NotFoundError("Настройки не найдены")
     return {
@@ -77,7 +74,7 @@ async def get_user_settings(settings_id: int, session: SessionDep):
 
 @router.patch("/user-settings/{settings_id}", dependencies=[Depends(require_permission("update", "users"))])
 async def update_user_settings(settings_id: int, body: dict, session: SessionDep, user_id: UserDep):
-    s = await session.get(UserSettings, settings_id)
+    s = await UserSettingsRepository(session).get_by_id(settings_id)
     if s is None:
         raise NotFoundError("Настройки не найдены")
     for field in ["menu_style", "theme", "density", "font_size"]:
@@ -90,7 +87,7 @@ async def update_user_settings(settings_id: int, body: dict, session: SessionDep
 
 @router.delete("/user-settings/{settings_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_permission("delete", "users"))])
 async def delete_user_settings(settings_id: int, session: SessionDep, user_id: UserDep):
-    s = await session.get(UserSettings, settings_id)
+    s = await UserSettingsRepository(session).get_by_id(settings_id)
     if s is None:
         raise NotFoundError("Настройки не найдены")
     s.soft_delete(user_id)
@@ -101,10 +98,8 @@ async def delete_user_settings(settings_id: int, session: SessionDep, user_id: U
 
 @router.get("/user-depositors", dependencies=[Depends(require_permission("view", "users"))])
 async def list_user_depositors(session: SessionDep, user_id: int | None = None):
-    stmt = select(UserDepositor)
-    if user_id:
-        stmt = stmt.where(UserDepositor.user_id == user_id)
-    rows = list(await session.scalars(stmt))
+    repo = UserDepositorRepository(session)
+    rows = await repo.list_all()
     return [
         {
             "id": ud.id,
@@ -121,11 +116,8 @@ async def list_user_depositors(session: SessionDep, user_id: int | None = None):
 
 @router.post("/user-depositors", status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_permission("create", "users"))])
 async def create_user_depositor(body: dict, session: SessionDep, user_id: UserDep):
-    existing = await session.scalar(
-        select(UserDepositor).where(
-            UserDepositor.user_id == body["user_id"],
-            UserDepositor.depositor_id == body["depositor_id"],
-        )
+    existing = await UserDepositorRepository(session).get_by_user_and_depositor(
+        body["user_id"], body["depositor_id"]
     )
     if existing:
         raise ConflictError("Привязка уже существует")
@@ -133,8 +125,6 @@ async def create_user_depositor(body: dict, session: SessionDep, user_id: UserDe
     ud = UserDepositor(
         user_id=body["user_id"],
         depositor_id=body["depositor_id"],
-        created_by_id=user_id,
-        updated_by_id=user_id,
     )
     session.add(ud)
     await session.flush()
@@ -143,7 +133,7 @@ async def create_user_depositor(body: dict, session: SessionDep, user_id: UserDe
 
 @router.get("/user-depositors/{ud_id}", dependencies=[Depends(require_permission("view", "users"))])
 async def get_user_depositor(ud_id: int, session: SessionDep):
-    ud = await session.get(UserDepositor, ud_id)
+    ud = await UserDepositorRepository(session).get_by_id(ud_id)
     if ud is None:
         raise NotFoundError("Привязка не найдена")
     return {
@@ -159,7 +149,7 @@ async def get_user_depositor(ud_id: int, session: SessionDep):
 
 @router.patch("/user-depositors/{ud_id}", dependencies=[Depends(require_permission("update", "users"))])
 async def update_user_depositor(ud_id: int, body: dict, session: SessionDep, user_id: UserDep):
-    ud = await session.get(UserDepositor, ud_id)
+    ud = await UserDepositorRepository(session).get_by_id(ud_id)
     if ud is None:
         raise NotFoundError("Привязка не найдена")
     for field in ["user_id", "depositor_id"]:
@@ -172,7 +162,7 @@ async def update_user_depositor(ud_id: int, body: dict, session: SessionDep, use
 
 @router.delete("/user-depositors/{ud_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_permission("delete", "users"))])
 async def delete_user_depositor(ud_id: int, session: SessionDep, user_id: UserDep):
-    ud = await session.get(UserDepositor, ud_id)
+    ud = await UserDepositorRepository(session).get_by_id(ud_id)
     if ud is None:
         raise NotFoundError("Привязка не найдена")
     ud.soft_delete(user_id)

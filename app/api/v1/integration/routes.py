@@ -13,6 +13,11 @@ from app.integration.models import (
     IntegrationLog,
     IntegrationProfile,
 )
+from app.integration.repository import (
+    IntegrationErrorRepository,
+    IntegrationLogRepository,
+    IntegrationProfileRepository,
+)
 
 router = APIRouter(prefix="/integrations", tags=["integrations"])
 
@@ -21,15 +26,13 @@ router = APIRouter(prefix="/integrations", tags=["integrations"])
 
 @router.get("/profiles", response_model=list[schemas.IntegrationProfileRead], dependencies=[Depends(require_permission("view", "integrations"))])
 async def list_profiles(session: SessionDep) -> list[schemas.IntegrationProfileRead]:
-    rows = list(await session.scalars(
-        select(IntegrationProfile).where()
-    ))
+    rows = await IntegrationProfileRepository(session).list_all()
     return [schemas.IntegrationProfileRead.model_validate(r) for r in rows]
 
 
 @router.get("/profiles/{profile_id}", response_model=schemas.IntegrationProfileRead, dependencies=[Depends(require_permission("view", "integrations"))])
 async def get_profile(profile_id: int, session: SessionDep) -> schemas.IntegrationProfileRead:
-    profile = await session.get(IntegrationProfile, profile_id)
+    profile = await IntegrationProfileRepository(session).get_by_id(profile_id)
     if profile is None:
         raise NotFoundError("Профиль не найден")
     return schemas.IntegrationProfileRead.model_validate(profile)
@@ -42,8 +45,6 @@ async def create_profile(
     user_id: UserDep,
 ) -> schemas.IntegrationProfileRead:
     profile = IntegrationProfile(
-        created_by_id=user_id,
-        updated_by_id=user_id,
         **body.model_dump(),
     )
     session.add(profile)
@@ -58,7 +59,7 @@ async def update_profile(
     session: SessionDep,
     user_id: UserDep,
 ) -> schemas.IntegrationProfileRead:
-    profile = await session.get(IntegrationProfile, profile_id)
+    profile = await IntegrationProfileRepository(session).get_by_id(profile_id)
     if profile is None:
         raise NotFoundError("Профиль не найден")
     for field, value in body.model_dump(exclude_unset=True).items():
@@ -70,7 +71,7 @@ async def update_profile(
 
 @router.delete("/profiles/{profile_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_permission("delete", "integrations"))])
 async def delete_profile(profile_id: int, session: SessionDep, user_id: UserDep) -> None:
-    profile = await session.get(IntegrationProfile, profile_id)
+    profile = await IntegrationProfileRepository(session).get_by_id(profile_id)
     if profile is None:
         raise NotFoundError("Профиль не найден")
     profile.soft_delete(user_id)
@@ -84,16 +85,14 @@ async def list_logs(
     session: SessionDep,
     profile_id: int | None = None,
 ) -> list[schemas.IntegrationLogRead]:
-    stmt = select(IntegrationLog).where()
-    if profile_id:
-        stmt = stmt.where(IntegrationLog.profile_id == profile_id)
-    rows = list(await session.scalars(stmt))
+    repo = IntegrationLogRepository(session)
+    rows = await repo.list_all()
     return [schemas.IntegrationLogRead.model_validate(r) for r in rows]
 
 
 @router.get("/logs/{log_id}", response_model=schemas.IntegrationLogRead, dependencies=[Depends(require_permission("view", "integrations"))])
 async def get_log(log_id: int, session: SessionDep) -> schemas.IntegrationLogRead:
-    log = await session.get(IntegrationLog, log_id)
+    log = await IntegrationLogRepository(session).get_by_id(log_id)
     if log is None:
         raise NotFoundError("Журнал не найден")
     return schemas.IntegrationLogRead.model_validate(log)
@@ -103,7 +102,5 @@ async def get_log(log_id: int, session: SessionDep) -> schemas.IntegrationLogRea
 
 @router.get("/logs/{log_id}/errors", response_model=list[schemas.IntegrationErrorRead], dependencies=[Depends(require_permission("view", "integrations"))])
 async def list_errors(log_id: int, session: SessionDep) -> list[schemas.IntegrationErrorRead]:
-    rows = list(await session.scalars(
-        select(IntegrationError).where(IntegrationError.log_id == log_id)
-    ))
+    rows = await IntegrationErrorRepository(session).list_by_log(log_id)
     return [schemas.IntegrationErrorRead.model_validate(r) for r in rows]

@@ -28,8 +28,6 @@ class LegalEntityService:
                 raise ValueError(f"Юрлицо с ИНН {inn} уже существует")
 
         return await self._repo.insert(
-            created_by_id=user_id,
-            updated_by_id=user_id,
             **kwargs,
         )
 
@@ -43,7 +41,7 @@ class LegalEntityService:
         return await self._repo.list_all()
 
     async def update(self, entity_id: int, user_id: int | None, **fields) -> LegalEntity | None:
-        return await self._repo.update(entity_id, updated_by_id=user_id, **fields)
+        return await self._repo.update(entity_id, **fields)
 
     async def soft_delete(self, entity_id: int, user_id: int | None = None) -> bool:
         entity = await self._repo.get_by_id(entity_id)
