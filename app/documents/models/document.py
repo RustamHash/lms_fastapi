@@ -23,9 +23,6 @@ class Document(Base):
     contract_id: Mapped[int | None] = mapped_column(
         ForeignKey("parties_contract.id"), nullable=True, comment="Договор"
     )
-    trade_point_id: Mapped[int | None] = mapped_column(
-        ForeignKey("parties_trade_point.id"), nullable=True, comment="Торговая точка"
-    )
     warehouse_id: Mapped[int] = mapped_column(
         ForeignKey("warehouse_warehouse.id"), nullable=False, comment="Склад"
     )

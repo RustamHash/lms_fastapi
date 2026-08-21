@@ -16,7 +16,6 @@ class DocumentRead(BaseRead):
     delivery_date: date | None = None
     document_type: str
     contract_id: int | None = None
-    trade_point_id: int | None = None
     warehouse_id: int
     virtual_warehouse_id: int | None = None
     status: str
@@ -31,7 +30,6 @@ class DocumentCreate(BaseModel):
     document_date: date | None = None
     delivery_date: date | None = None
     contract_id: int | None = None
-    trade_point_id: int | None = None
     virtual_warehouse_id: int | None = None
     is_delivery: bool = False
     is_edo: bool = False

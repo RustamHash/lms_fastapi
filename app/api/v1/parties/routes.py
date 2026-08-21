@@ -17,7 +17,6 @@ from app.parties.models import (
     RawAddress,
     Tariff,
     TariffDocument,
-    TradePoint,
 )
 from app.parties.repository import (
     AddressRepository,
@@ -26,7 +25,6 @@ from app.parties.repository import (
     DepositorRepository,
     LegalEntityRepository,
     TariffRepository,
-    TradePointRepository,
 )
 from app.parties.services import (
     AddressService,
@@ -35,7 +33,6 @@ from app.parties.services import (
     DepositorService,
     LegalEntityService,
     TariffService,
-    TradePointService,
 )
 
 router = APIRouter(prefix="/parties", tags=["parties"])
@@ -398,62 +395,6 @@ async def delete_client(client_id: int, session: SessionDep, user_id: UserDep) -
     ok = await service.soft_delete(client_id, user_id)
     if not ok:
         raise NotFoundError("Клиент не найден")
-
-
-# ========== Торговые точки ==========
-
-@router.get("/trade-points", response_model=list[schemas.TradePointRead], dependencies=[Depends(require_permission("view", "trade_points"))])
-async def list_trade_points(session: SessionDep) -> list[schemas.TradePointRead]:
-    rows = list(await session.scalars(select(TradePoint).where(TradePoint.is_deleted.is_(False))))
-    return [schemas.TradePointRead.model_validate(r) for r in rows]
-
-
-@router.get("/trade-points/{tp_id}", response_model=schemas.TradePointRead, dependencies=[Depends(require_permission("view", "trade_points"))])
-async def get_trade_point(tp_id: int, session: SessionDep) -> schemas.TradePointRead:
-    service = TradePointService(TradePointRepository(session))
-    tp = await service.get_by_id(tp_id)
-    if tp is None:
-        raise NotFoundError("Торговая точка не найдена")
-    return schemas.TradePointRead.model_validate(tp)
-
-
-@router.patch("/trade-points/{tp_id}", response_model=schemas.TradePointRead, dependencies=[Depends(require_permission("update", "trade_points"))])
-async def update_trade_point(
-    tp_id: int,
-    body: schemas.TradePointUpdate,
-    session: SessionDep,
-    user_id: UserDep,
-) -> schemas.TradePointRead:
-    tp = await session.get(TradePoint, tp_id)
-    if tp is None:
-        raise NotFoundError("Торговая точка не найдена")
-    for field, value in body.model_dump(exclude_unset=True).items():
-        setattr(tp, field, value)
-    tp.updated_by_id = user_id
-    await session.flush()
-    return schemas.TradePointRead.model_validate(tp)
-
-
-@router.delete("/trade-points/{tp_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_permission("delete", "trade_points"))])
-async def delete_trade_point(tp_id: int, session: SessionDep, user_id: UserDep) -> None:
-    tp = await session.get(TradePoint, tp_id)
-    if tp is None:
-        raise NotFoundError("Торговая точка не найдена")
-    tp.soft_delete(user_id)
-    await session.flush()
-
-
-@router.post("/trade-points/resolve", response_model=schemas.TradePointRead, dependencies=[Depends(require_permission("create", "trade_points"))])
-async def resolve_trade_point(
-    body: schemas.TradePointCreate,
-    session: SessionDep,
-    user_id: UserDep,
-) -> schemas.TradePointRead:
-    service = TradePointService(TradePointRepository(session))
-    tp, _ = await service.get_or_create(
-        body.client_id, body.address_id, body.name, user_id
-    )
-    return schemas.TradePointRead.model_validate(tp)
 
 
 # ========== Договоры ==========

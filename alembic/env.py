@@ -16,6 +16,7 @@ import app.documents.models  # noqa: F401
 import app.delivery.models  # noqa: F401
 import app.integration.models  # noqa: F401
 import app.notifications.models  # noqa: F401
+import app.orders.models  # noqa: F401
 
 config = context.config
 config.set_main_option("sqlalchemy.url", get_settings().database_url)

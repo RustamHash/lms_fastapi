@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from app.parties.models import Client, TradePoint
-from app.parties.repository import ClientRepository, TradePointRepository
+from app.parties.models import Client
+from app.parties.repository import ClientRepository
 
 
 class ClientService:
@@ -13,16 +13,16 @@ class ClientService:
     async def create(self, user_id: int | None, **kwargs) -> Client:
         if not kwargs.get("depositor_id"):
             raise ValueError("Поклажедатель обязателен")
-        if not kwargs.get("external_id"):
+        if not kwargs.get("code"):
             raise ValueError("Внешний код обязателен")
         if not kwargs.get("name"):
             raise ValueError("Наименование обязательно")
 
-        existing = await self._repo.get_by_external_id(
-            kwargs["depositor_id"], kwargs["external_id"]
+        existing = await self._repo.get_by_code(
+            kwargs["depositor_id"], kwargs["code"]
         )
         if existing:
-            raise ValueError(f"Клиент с кодом {kwargs['external_id']} уже существует")
+            raise ValueError(f"Клиент с кодом {kwargs['code']} уже существует")
 
         return await self._repo.insert(
             created_by_id=user_id,
@@ -31,8 +31,8 @@ class ClientService:
         )
 
     async def get_or_create(self, user_id: int | None, **kwargs) -> tuple[Client, bool]:
-        client = await self._repo.get_by_external_id(
-            kwargs.get("depositor_id"), kwargs.get("external_id")
+        client = await self._repo.get_by_code(
+            kwargs.get("depositor_id"), kwargs.get("code")
         )
         if client:
             return client, False
@@ -55,29 +55,3 @@ class ClientService:
         client.soft_delete(user_id)
         await self._repo.session.flush()
         return True
-
-
-class TradePointService:
-    def __init__(self, repo: TradePointRepository) -> None:
-        self._repo = repo
-
-    async def get_or_create(
-        self, client_id: int, address_id: int, name: str = "", user_id: int | None = None
-    ) -> tuple[TradePoint, bool]:
-        tp = await self._repo.get_by_client_and_address(client_id, address_id)
-        if tp:
-            return tp, False
-        tp = await self._repo.insert(
-            client_id=client_id,
-            address_id=address_id,
-            name=name,
-            created_by_id=user_id,
-            updated_by_id=user_id,
-        )
-        return tp, True
-
-    async def get_by_id(self, tp_id: int) -> TradePoint | None:
-        return await self._repo.get_by_id(tp_id)
-
-    async def list_by_client(self, client_id: int) -> list[TradePoint]:
-        return await self._repo.list_by_client(client_id)

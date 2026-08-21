@@ -10,6 +10,9 @@ from app.api.v1.documents.routes import router as documents_router
 from app.api.v1.files.routes import router as files_router
 from app.api.v1.integration.routes import router as integration_router
 from app.api.v1.notifications.routes import router as notifications_router
+from app.api.v1.orders.routes_inbound import router as inbound_orders_router
+from app.api.v1.orders.routes_outbound import router as outbound_orders_router
+from app.api.v1.orders.routes_return import router as return_orders_router
 from app.api.v1.notifications.routes_rules import router as notification_rules_router
 from app.api.v1.parties.routes import router as parties_router
 from app.api.v1.parties.routes_delivery_zones import router as delivery_zones_router
@@ -30,6 +33,9 @@ api_router.include_router(documents_router)
 api_router.include_router(delivery_router)
 api_router.include_router(deviations_lines_router)
 api_router.include_router(notifications_router)
+api_router.include_router(inbound_orders_router)
+api_router.include_router(outbound_orders_router)
+api_router.include_router(return_orders_router)
 api_router.include_router(notification_rules_router)
 api_router.include_router(integration_router)
 api_router.include_router(files_router)

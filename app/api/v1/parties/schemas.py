@@ -128,23 +128,25 @@ class DepositorUpdate(BaseModel):
 
 class ClientRead(BaseRead):
     depositor_id: int
-    external_id: str
+    code: str
     name: str
     legal_name: str = ""
     inn: str = ""
     kpp: str = ""
     legal_address_id: int | None = None
+    delivery_address_id: int | None = None
     is_edo: bool = False
 
 
 class ClientCreate(BaseModel):
     depositor_id: int
-    external_id: str = Field(min_length=1, max_length=50)
+    code: str = Field(min_length=1, max_length=50)
     name: str = Field(min_length=1, max_length=255)
     legal_name: str = ""
     inn: str = ""
     kpp: str = ""
     legal_address_id: int | None = None
+    delivery_address_id: int | None = None
     is_edo: bool = False
 
 
@@ -154,25 +156,9 @@ class ClientUpdate(BaseModel):
     inn: str | None = None
     kpp: str | None = None
     legal_address_id: int | None = None
+    delivery_address_id: int | None = None
     is_edo: bool | None = None
 
-
-class TradePointRead(BaseRead):
-    client_id: int
-    address_id: int
-    name: str = ""
-
-
-class TradePointCreate(BaseModel):
-    client_id: int
-    address_id: int
-    name: str = ""
-
-
-class TradePointUpdate(BaseModel):
-    name: str | None = None
-    client_id: int | None = None
-    address_id: int | None = None
 
 
 class ContractRead(BaseRead):

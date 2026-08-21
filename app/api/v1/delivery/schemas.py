@@ -13,7 +13,6 @@ class DeliveryOrderRead(BaseRead):
     number: str
     contract_id: int
     document_id: int | None = None
-    trade_point_id: int
     contact_person: str = ""
     phone: str = ""
     delivery_date: date | None = None
@@ -27,7 +26,6 @@ class DeliveryOrderRead(BaseRead):
 class DeliveryOrderCreate(BaseModel):
     number: str
     contract_id: int
-    trade_point_id: int
     document_id: int | None = None
     contact_person: str = ""
     phone: str = ""

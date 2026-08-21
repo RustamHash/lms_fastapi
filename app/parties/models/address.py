@@ -48,7 +48,6 @@ class Address(Base):
 
     delivery_zone: Mapped[DeliveryZone | None] = relationship(back_populates="addresses")
     raw_addresses: Mapped[list["RawAddress"]] = relationship(back_populates="normalized_address")
-    trade_points: Mapped[list["TradePoint"]] = relationship(back_populates="address")
     legal_entities_registered: Mapped[list["LegalEntity"]] = relationship(
         foreign_keys="LegalEntity.legal_address_id", 
     )

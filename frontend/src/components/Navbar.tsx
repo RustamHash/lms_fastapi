@@ -37,6 +37,15 @@ const MENU_GROUPS: MenuGroup[] = [
     ],
   },
   {
+    label: 'Заказы',
+    to: '/orders',
+    items: [
+      { to: '/orders/inbound', label: 'Входящие' },
+      { to: '/orders/outbound', label: 'Исходящие' },
+      { to: '/orders/return', label: 'Возвратные' },
+    ],
+  },
+  {
     label: 'Документы',
     to: '/documents',
   },

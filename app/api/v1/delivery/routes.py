@@ -20,13 +20,9 @@ router = APIRouter(prefix="/delivery", tags=["delivery"])
 @router.get("/orders", response_model=list[schemas.DeliveryOrderRead], dependencies=[Depends(require_permission("view", "delivery"))])
 async def list_orders(
     session: SessionDep,
-    trade_point_id: int | None = None,
 ) -> list[schemas.DeliveryOrderRead]:
     service = DeliveryOrderService(session)
-    if trade_point_id:
-        rows = await service.list_by_trade_point(trade_point_id)
-    else:
-        rows = await service.list_all()
+    rows = await service.list_all()
     return [schemas.DeliveryOrderRead.model_validate(r) for r in rows]
 
 

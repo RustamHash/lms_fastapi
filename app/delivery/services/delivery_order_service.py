@@ -49,10 +49,3 @@ class DeliveryOrderService:
     async def list_all(self) -> list[DeliveryOrder]:
         stmt = select(DeliveryOrder).where(DeliveryOrder.is_deleted.is_(False))
         return list(await self._s.scalars(stmt))
-
-    async def list_by_trade_point(self, trade_point_id: int) -> list[DeliveryOrder]:
-        stmt = select(DeliveryOrder).where(
-            DeliveryOrder.trade_point_id == trade_point_id,
-            DeliveryOrder.is_deleted.is_(False),
-        )
-        return list(await self._s.scalars(stmt))

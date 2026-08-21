@@ -34,6 +34,10 @@ const AddressesPage = lazy(() => import('./pages/AddressesPage').then(m => ({ de
 const ProductsPage = lazy(() => import('./pages/ProductsPage').then(m => ({ default: m.ProductsPage })))
 const BatchesPage = lazy(() => import('./pages/BatchesPage').then(m => ({ default: m.BatchesPage })))
 const LpnsPage = lazy(() => import('./pages/LpnsPage').then(m => ({ default: m.LpnsPage })))
+const OrdersHubPage = lazy(() => import('./pages/OrdersHubPage').then(m => ({ default: m.OrdersHubPage })))
+const InboundOrdersPage = lazy(() => import('./pages/InboundOrdersPage').then(m => ({ default: m.InboundOrdersPage })))
+const OutboundOrdersPage = lazy(() => import('./pages/OutboundOrdersPage').then(m => ({ default: m.OutboundOrdersPage })))
+const ReturnOrdersPage = lazy(() => import('./pages/ReturnOrdersPage').then(m => ({ default: m.ReturnOrdersPage })))
 const TasksPage = lazy(() => import('./pages/TasksPage').then(m => ({ default: m.TasksPage })))
 const DocumentsPage = lazy(() => import('./pages/DocumentsPage').then(m => ({ default: m.DocumentsPage })))
 const DeliveryOrdersPage = lazy(() => import('./pages/DeliveryOrdersPage').then(m => ({ default: m.DeliveryOrdersPage })))
@@ -79,6 +83,10 @@ function App() {
                 <Route element={<Layout />}>
                   <Route path="/" element={<HomePage />} />
                   <Route path="/references" element={<ReferencesPage />} />
+                  <Route path="/orders" element={<OrdersHubPage />} />
+                  <Route path="/orders/inbound" element={<InboundOrdersPage />} />
+                  <Route path="/orders/outbound" element={<OutboundOrdersPage />} />
+                  <Route path="/orders/return" element={<ReturnOrdersPage />} />
                   
                   {/* Справочники */}
                   <Route path="/reference/addresses" element={<AddressesPage />} />

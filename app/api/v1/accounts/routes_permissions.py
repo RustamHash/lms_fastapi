@@ -24,7 +24,6 @@ AVAILABLE_MODULES = [
     "legal_entities",
     "depositors",
     "clients",
-    "trade_points",
     "contracts",
     "tariffs",
     "products",

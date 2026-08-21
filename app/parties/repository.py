@@ -17,7 +17,6 @@ from app.parties.models import (
     RawAddress,
     Tariff,
     TariffDocument,
-    TradePoint,
 )
 
 
@@ -122,12 +121,12 @@ class ClientRepository:
     async def get_by_id(self, client_id: int) -> Client | None:
         return await self.session.get(Client, client_id)
 
-    async def get_by_external_id(self, depositor_id: int, external_id: str) -> Client | None:
-        if not external_id:
+    async def get_by_code(self, depositor_id: int, code: str) -> Client | None:
+        if not code:
             return None
         stmt = select(Client).where(
             Client.depositor_id == depositor_id,
-            Client.external_id == external_id,
+            Client.code == code,
             Client.is_deleted.is_(False),
         )
         return await self.session.scalar(stmt)
@@ -158,34 +157,6 @@ class ClientRepository:
         await self.session.flush()
         return row
 
-
-class TradePointRepository:
-    def __init__(self, session: AsyncSession) -> None:
-        self.session = session
-
-    async def get_by_id(self, tp_id: int) -> TradePoint | None:
-        return await self.session.get(TradePoint, tp_id)
-
-    async def get_by_client_and_address(self, client_id: int, address_id: int) -> TradePoint | None:
-        stmt = select(TradePoint).where(
-            TradePoint.client_id == client_id,
-            TradePoint.address_id == address_id,
-            TradePoint.is_deleted.is_(False),
-        )
-        return await self.session.scalar(stmt)
-
-    async def list_by_client(self, client_id: int) -> list[TradePoint]:
-        stmt = select(TradePoint).where(
-            TradePoint.client_id == client_id,
-            TradePoint.is_deleted.is_(False),
-        )
-        return list(await self.session.scalars(stmt))
-
-    async def insert(self, **kwargs) -> TradePoint:
-        row = TradePoint(**kwargs)
-        self.session.add(row)
-        await self.session.flush()
-        return row
 
 
 class ContractRepository:
