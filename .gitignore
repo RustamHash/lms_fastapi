@@ -1,11 +1,43 @@
+# Python
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
 .venv/
-.env
-logs/
-*.log
+ENV/
+*.egg-info/
+dist/
+build/
 
-# Frontend
+# Node.js
+node_modules/
 frontend/node_modules/
 frontend/dist/
 frontend/.vite/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Логи
+*.log
+logs/
+
+# Временные файлы
+tmp/
+temp/
+*.tmp
+
+# Окружение
+.env
+.env.local
+.env.*.local
