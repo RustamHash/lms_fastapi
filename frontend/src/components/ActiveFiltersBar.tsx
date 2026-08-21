@@ -6,9 +6,6 @@ type Props = {
   columnLabel: (columnId: string) => string
   onRemoveFilter: (columnId: string) => void
   onRemoveExclude: (columnId: string, value: string) => void
-  onResetAll: () => void
-  onSavePreset: () => void
-  onOpenSettings: () => void
 }
 
 function ActiveFiltersBarInner({
@@ -16,9 +13,6 @@ function ActiveFiltersBarInner({
   columnLabel,
   onRemoveFilter,
   onRemoveExclude,
-  onResetAll,
-  onSavePreset,
-  onOpenSettings,
 }: Props) {
   const hasActiveFilters = useMemo(() => {
     const hasFilters = Object.values(prefs.filters).some(v => v !== '')
@@ -69,19 +63,7 @@ function ActiveFiltersBarInner({
         })}
       </div>
 
-      <div className="active-filters-bar__actions">
-        {hasActiveFilters ? (
-          <button type="button" className="tb tb--reset" onClick={onResetAll}>
-            Сбросить все
-          </button>
-        ) : null}
-        <button type="button" className="tb tb--view" onClick={onSavePreset}>
-          Сохранить пресет
-        </button>
-        <button type="button" className="tb tb--view" onClick={onOpenSettings}>
-          Настроить
-        </button>
-      </div>
+
     </div>
   )
 }

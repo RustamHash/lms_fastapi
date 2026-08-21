@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { createPortal } from 'react-dom'
 import type { ListPreset } from '../hooks/useListPresets'
 import type { TablePrefs } from '../hooks/useTableSettings'
 
@@ -7,43 +8,64 @@ type Props = {
   prefs: TablePrefs
   presets: ListPreset[]
   columnLabels: Record<string, string>
-  allColumns: string[]
   onApplyPrefs: (prefs: TablePrefs) => void
   onApplyPreset: (presetId: number) => Promise<void>
+  onUpdatePreset: (presetId: number, name: string, config: TablePrefs) => Promise<unknown>
   onDeletePreset: (presetId: number) => Promise<void>
   onSetDefaultPreset: (presetId: number) => Promise<unknown>
   onResetToDefaults: () => Promise<void>
+  onSavePreset: () => void
   onClose: () => void
 }
 
-type TabId = 'filters' | 'columns' | 'sort' | 'presets'
+type TabId = 'columns' | 'presets'
 
 export function ListSettingsDialog({
   prefs,
   presets,
   columnLabels,
-  allColumns,
   onApplyPrefs,
   onApplyPreset,
+  onUpdatePreset,
   onDeletePreset,
   onSetDefaultPreset,
   onResetToDefaults,
+  onSavePreset,
   onClose,
 }: Props) {
-  const [activeTab, setActiveTab] = useState<TabId>('filters')
+  const [activeTab, setActiveTab] = useState<TabId>('columns')
   const [draftPrefs, setDraftPrefs] = useState<TablePrefs>({ ...prefs })
   const [applying, setApplying] = useState(false)
+  const [activePresetId, setActivePresetId] = useState<number | null>(null)
+  const [dragIndex, setDragIndex] = useState<number | null>(null)
+  const [dropIndex, setDropIndex] = useState<number | null>(null)
 
-  function toggleQuickFilter(columnId: string) {
-    setDraftPrefs(prev => {
-      const isIncluded = prev.quick_filters.includes(columnId)
-      return {
-        ...prev,
-        quick_filters: isIncluded
-          ? prev.quick_filters.filter(id => id !== columnId)
-          : [...prev.quick_filters, columnId]
-      }
-    })
+  function handleDragStart(index: number, e: React.DragEvent) {
+    setDragIndex(index)
+    e.dataTransfer.effectAllowed = 'move'
+  }
+
+  function handleDragOver(index: number, e: React.DragEvent) {
+    e.preventDefault()
+    setDropIndex(index)
+  }
+
+  function handleDrop(index: number, e: React.DragEvent) {
+    e.preventDefault()
+    if (dragIndex === null || dragIndex === index) return
+    
+    const newOrder = [...draftPrefs.order]
+    const [moved] = newOrder.splice(dragIndex, 1)
+    newOrder.splice(index, 0, moved)
+    
+    setDraftPrefs(prev => ({ ...prev, order: newOrder }))
+    setDragIndex(null)
+    setDropIndex(null)
+  }
+
+  function handleDragEnd() {
+    setDragIndex(null)
+    setDropIndex(null)
   }
 
   function toggleColumnVisibility(columnId: string) {
@@ -58,10 +80,24 @@ export function ListSettingsDialog({
     })
   }
 
-  function handleApply() {
+  async function handleApply() {
     setApplying(true)
-    onApplyPrefs(draftPrefs)
-    onClose()
+    try {
+      // Применяем к таблице
+      onApplyPrefs(draftPrefs)
+      
+      // Если есть активный пресет — обновляем его
+      if (activePresetId !== null) {
+        const preset = presets.find(p => p.id === activePresetId)
+        if (preset) {
+          await onUpdatePreset(activePresetId, preset.name, draftPrefs)
+        }
+      }
+      
+      onClose()
+    } finally {
+      setApplying(false)
+    }
   }
 
   async function handleReset() {
@@ -74,19 +110,13 @@ export function ListSettingsDialog({
     }
   }
 
-  return (
+  return createPortal(
     <div className="dialog-backdrop" role="presentation">
       <div className="dialog dialog--wide" role="dialog" aria-modal="true" aria-labelledby="list-settings-title">
         <h3 id="list-settings-title" className="dialog__title">Настройка списка</h3>
         
         <div className="entity-tabs">
-          <button
-            type="button"
-            className={`entity-tabs__btn${activeTab === 'filters' ? ' entity-tabs__btn--active' : ''}`}
-            onClick={() => setActiveTab('filters')}
-          >
-            Фильтры
-          </button>
+
           <button
             type="button"
             className={`entity-tabs__btn${activeTab === 'columns' ? ' entity-tabs__btn--active' : ''}`}
@@ -94,13 +124,7 @@ export function ListSettingsDialog({
           >
             Колонки
           </button>
-          <button
-            type="button"
-            className={`entity-tabs__btn${activeTab === 'sort' ? ' entity-tabs__btn--active' : ''}`}
-            onClick={() => setActiveTab('sort')}
-          >
-            Сортировка
-          </button>
+
           <button
             type="button"
             className={`entity-tabs__btn${activeTab === 'presets' ? ' entity-tabs__btn--active' : ''}`}
@@ -110,87 +134,52 @@ export function ListSettingsDialog({
           </button>
         </div>
 
-        {activeTab === 'filters' ? (
-          <div className="list-settings-panel">
-            <p className="dialog__hint">Выберите фильтры для отображения в шапке</p>
-            <div className="list-settings-filters">
-              {allColumns.map(columnId => (
-                <label key={columnId} className="list-settings-filter-item">
-                  <input
-                    type="checkbox"
-                    checked={draftPrefs.quick_filters.includes(columnId)}
-                    onChange={() => toggleQuickFilter(columnId)}
-                  />
-                  {columnLabels[columnId] ?? columnId}
-                </label>
-              ))}
-            </div>
-          </div>
-        ) : null}
+
 
         {activeTab === 'columns' ? (
           <div className="list-settings-panel">
-            <p className="dialog__hint">Выберите видимые колонки</p>
+            <p className="dialog__hint">Перетащите для изменения порядка. Снимите галочку чтобы скрыть.</p>
             <div className="list-settings-columns">
-              {allColumns.map(columnId => (
-                <label key={columnId} className="list-settings-filter-item">
-                  <input
-                    type="checkbox"
-                    checked={!draftPrefs.hidden.includes(columnId)}
-                    onChange={() => toggleColumnVisibility(columnId)}
-                  />
-                  {columnLabels[columnId] ?? columnId}
-                </label>
+              {draftPrefs.order.map((columnId, index) => (
+                <div
+                  key={columnId}
+                  className={`list-settings-column-item${dragIndex === index ? ' dragging' : ''}${dropIndex === index ? ' drop-over' : ''}`}
+                  draggable
+                  onDragStart={(e) => handleDragStart(index, e)}
+                  onDragOver={(e) => handleDragOver(index, e)}
+                  onDrop={(e) => handleDrop(index, e)}
+                  onDragEnd={handleDragEnd}
+                >
+                  <span className="list-settings-column-item__handle" aria-hidden>⠿</span>
+                  <label className="list-settings-filter-item">
+                    <input
+                      type="checkbox"
+                      checked={!draftPrefs.hidden.includes(columnId)}
+                      onChange={() => toggleColumnVisibility(columnId)}
+                    />
+                    {columnLabels[columnId] ?? columnId}
+                  </label>
+                </div>
               ))}
             </div>
           </div>
         ) : null}
 
-        {activeTab === 'sort' ? (
-          <div className="list-settings-panel">
-            <p className="dialog__hint">Настройте сортировку</p>
-            <div className="wh-form">
-              <label>
-                Колонка
-                <select
-                  value={draftPrefs.sort?.column ?? ''}
-                  onChange={(e) => setDraftPrefs(prev => ({
-                    ...prev,
-                    sort: e.target.value
-                      ? { column: e.target.value, direction: prev.sort?.direction ?? 'asc' }
-                      : null
-                  }))}
-                >
-                  <option value="">Не сортировать</option>
-                  {allColumns.map(columnId => (
-                    <option key={columnId} value={columnId}>
-                      {columnLabels[columnId] ?? columnId}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              {draftPrefs.sort ? (
-                <label>
-                  Направление
-                  <select
-                    value={draftPrefs.sort.direction}
-                    onChange={(e) => setDraftPrefs(prev => ({
-                      ...prev,
-                      sort: { column: prev.sort?.column ?? '', direction: e.target.value as 'asc' | 'desc' }
-                    }))}
-                  >
-                    <option value="asc">По возрастанию</option>
-                    <option value="desc">По убыванию</option>
-                  </select>
-                </label>
-              ) : null}
-            </div>
-          </div>
-        ) : null}
+
 
         {activeTab === 'presets' ? (
           <div className="list-settings-panel">
-            <p className="dialog__hint">Сохранённые пресеты</p>
+            <div className="list-settings-panel__header">
+              <p className="dialog__hint">Сохранённые пресеты</p>
+              <button
+                type="button"
+                className="tb tb--create"
+                onClick={onSavePreset}
+                title="Сохранить текущие настройки как пресет"
+              >
+                + Сохранить текущий
+              </button>
+            </div>
             {presets.length === 0 ? (
               <p className="list-msg list-msg--warn">Нет сохранённых пресетов</p>
             ) : (
@@ -206,11 +195,14 @@ export function ListSettingsDialog({
                     <div className="preset-item__actions">
                       <button
                         type="button"
-                        className="tb tb--create"
-                        onClick={() => void onApplyPreset(preset.id)}
-                        title="Применить"
+                        className={`tb tb--create${activePresetId === preset.id ? ' tb--active-preset' : ''}`}
+                        onClick={() => {
+                          setActivePresetId(preset.id)
+                          void onApplyPreset(preset.id)
+                        }}
+                        title={activePresetId === preset.id ? 'Активный пресет' : 'Сделать активным'}
                       >
-                        Применить
+                        {activePresetId === preset.id ? 'Активен' : 'Активировать'}
                       </button>
                       {!preset.is_default ? (
                         <button
@@ -250,6 +242,7 @@ export function ListSettingsDialog({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }

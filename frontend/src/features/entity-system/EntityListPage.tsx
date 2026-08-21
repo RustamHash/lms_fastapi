@@ -5,6 +5,7 @@ import { TableCellContextMenu } from '../../components/TableCellContextMenu'
 import { useAppNotice } from '../../notifications/AppNoticeContext'
 import { GroupActionsBar } from './GroupActionsBar'
 import { ActiveFiltersBar } from '../../components/ActiveFiltersBar'
+import { QuickFiltersBar } from '../../components/QuickFiltersBar'
 import { ListSettingsDialog } from '../../components/ListSettingsDialog'
 import { SavePresetDialog } from '../../components/SavePresetDialog'
 import { useEntityList } from './hooks/useEntityList'
@@ -37,9 +38,10 @@ type Props<Row extends { id: number }> = {
   canCreate?: boolean
   onBack?: () => void
   breadcrumbs?: Breadcrumb[]
+  onImport?: () => void
 }
 
-export function EntityListPage<Row extends { id: number }>({ config, onBack, breadcrumbs, canCreate = true }: Props<Row>) {
+export function EntityListPage<Row extends { id: number }>({ config, onBack, breadcrumbs, canCreate = true, onImport }: Props<Row>) {
   const navigate = useNavigate()
   const location = useLocation()
   const { notify } = useAppNotice()
@@ -137,36 +139,67 @@ export function EntityListPage<Row extends { id: number }>({ config, onBack, bre
         />
       ) : null}
       
-      <ActiveFiltersBar
-        prefs={{
-          order: entity.prefs.order,
-          hidden: entity.prefs.hidden,
-          widths: entity.prefs.widths,
-          filters: entity.filters,
-          exclude_filters: entity.excludeFilters,
-          sort: entity.sortCol ? { column: entity.sortCol, direction: entity.sortDir } : null,
-          quick_filters: entity.quickFilters,
-        }}
+      <QuickFiltersBar
+        quickFilters={entity.quickFilters}
+        filters={entity.filters}
+        columnFilters={config.columns.reduce((acc, col) => {
+          if (col.type === 'bool') {
+            acc[col.id] = {
+              kind: 'select',
+              options: [
+                { value: 'true', label: 'Да' },
+                { value: 'false', label: 'Нет' },
+              ],
+            }
+          } else if (col.type === 'select') {
+            acc[col.id] = { kind: 'select', options: col.options ?? [] }
+          } else if (col.type === 'date' || col.type === 'datetime') {
+            acc[col.id] = { kind: 'datetime' }
+          } else {
+            acc[col.id] = { kind: 'text' }
+          }
+          return acc
+        }, {} as Record<string, any>)}
         columnLabel={(cid) => config.columns.find((c) => c.id === cid)?.label ?? cid}
-        onRemoveFilter={(cid) => {
+        onFilterChange={(cid, next) => {
           entity.setFilters((prev) => {
-            const next = { ...prev }
-            delete next[cid]
-            return next
+            if (next === '') {
+              const { [cid]: _, ...rest } = prev
+              return rest
+            }
+            return { ...prev, [cid]: next }
           })
         }}
-        onRemoveExclude={(cid, value) => {
-          entity.setExcludeFilters((prev) => {
-            const cur = prev[cid] ?? []
-            return { ...prev, [cid]: cur.filter(v => v !== value) }
-          })
-        }}
-        onResetAll={entity.resetFilters}
-        onSavePreset={() => setSavePresetOpen(true)}
-        onOpenSettings={() => setSettingsOpen(true)}
       />
 
       <ListTableShell<Row>
+        filtersBar={
+          <ActiveFiltersBar
+            prefs={{
+              order: entity.prefs.order,
+              hidden: entity.prefs.hidden,
+              widths: entity.prefs.widths,
+              filters: entity.filters,
+              exclude_filters: entity.excludeFilters,
+              sort: entity.sortCol ? { column: entity.sortCol, direction: entity.sortDir } : null,
+              quick_filters: entity.quickFilters,
+            }}
+            columnLabel={(cid) => config.columns.find((c) => c.id === cid)?.label ?? cid}
+            onRemoveFilter={(cid) => {
+              entity.setFilters((prev) => {
+                const next = { ...prev }
+                delete next[cid]
+                return next
+              })
+            }}
+            onRemoveExclude={(cid, value) => {
+              entity.setExcludeFilters((prev) => {
+                const cur = prev[cid] ?? []
+                return { ...prev, [cid]: cur.filter(v => v !== value) }
+              })
+            }}
+          />
+        }
         onRefresh={entity.reload}
         createHref={config.toolbar?.createHref}
         canCreate={canCreate}
@@ -189,9 +222,7 @@ export function EntityListPage<Row extends { id: number }>({ config, onBack, bre
           a.click()
           URL.revokeObjectURL(a.href)
         }}
-        onOpenView={() => {
-          // Открыть настройки колонок
-        }}
+        onOpenView={() => setSettingsOpen(true)}
         onResetFilters={entity.resetFilters}
         canOpenView={!entity.prefs.loading}
         hasActiveFilters={entity.hasActiveFilters}
@@ -215,8 +246,16 @@ export function EntityListPage<Row extends { id: number }>({ config, onBack, bre
         sortDir={entity.sortDir}
         onSortHeaderClick={entity.onSortHeaderClick}
         columnFilters={config.columns.reduce((acc, col) => {
-          if (col.type === 'bool' || col.type === 'select') {
-            acc[col.id] = { kind: 'select', options: col.options }
+          if (col.type === 'bool') {
+            acc[col.id] = {
+              kind: 'select',
+              options: [
+                { value: 'true', label: 'Да' },
+                { value: 'false', label: 'Нет' },
+              ],
+            }
+          } else if (col.type === 'select') {
+            acc[col.id] = { kind: 'select', options: col.options ?? [] }
           } else if (col.type === 'date' || col.type === 'datetime') {
             acc[col.id] = { kind: 'datetime' }
           } else {
@@ -253,6 +292,7 @@ export function EntityListPage<Row extends { id: number }>({ config, onBack, bre
           })
         }}
         plainCellText={entity.cellText}
+        onImport={onImport}
         onInvertSelection={() => {
           entity.toggleAll(!entity.allSelected)
         }}
@@ -286,11 +326,21 @@ export function EntityListPage<Row extends { id: number }>({ config, onBack, bre
           }}
           presets={entity.listPresets.presets}
           columnLabels={Object.fromEntries(config.columns.map(c => [c.id, c.label]))}
-          allColumns={config.columns.map(c => c.id)}
           onApplyPrefs={(prefs) => {
             entity.setFilters(prefs.filters)
             entity.setExcludeFilters(prefs.exclude_filters)
             entity.setQuickFilters(prefs.quick_filters)
+            
+            // Сохраняем колонки
+            void entity.prefs.savePrefs({
+              order: prefs.order,
+              hidden: prefs.hidden,
+              widths: prefs.widths,
+              filters: prefs.filters,
+              exclude_filters: prefs.exclude_filters,
+              sort: prefs.sort,
+              quick_filters: prefs.quick_filters,
+            })
           }}
           onApplyPreset={async (presetId) => {
             const prefs = await entity.listPresets.applyPreset(presetId)
@@ -298,9 +348,11 @@ export function EntityListPage<Row extends { id: number }>({ config, onBack, bre
             entity.setExcludeFilters(prefs.exclude_filters)
             entity.setQuickFilters(prefs.quick_filters)
           }}
+          onUpdatePreset={entity.listPresets.updatePreset}
           onDeletePreset={entity.listPresets.deletePreset}
           onSetDefaultPreset={entity.listPresets.setDefaultPreset}
           onResetToDefaults={entity.resetToDefaults}
+          onSavePreset={() => setSavePresetOpen(true)}
           onClose={() => setSettingsOpen(false)}
         />
       ) : null}

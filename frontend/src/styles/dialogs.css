@@ -85,7 +85,7 @@
 }
 
 .dialog--wide {
-  max-width: min(44rem, calc(100vw - 32px));
+  max-width: min(800px, calc(100vw - 32px));
 }
 
 .dialog__hint {
@@ -181,4 +181,186 @@
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+/* Drag-and-drop для колонок */
+.list-settings-column-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  cursor: grab;
+  user-select: none;
+}
+
+.list-settings-column-item:hover {
+  background: #f8fafc;
+}
+
+.list-settings-column-item.dragging {
+  opacity: 0.5;
+  cursor: grabbing;
+}
+
+.list-settings-column-item.drop-over {
+  border-color: #2563eb;
+  background: #eff6ff;
+}
+
+.list-settings-column-item__handle {
+  font-size: 14px;
+  color: #94a3b8;
+  cursor: grab;
+  flex-shrink: 0;
+}
+
+.list-settings-column-item .list-settings-filter-item {
+  flex: 1;
+  margin: 0;
+}
+
+/* Результат импорта */
+.import-result {
+  margin-top: 12px;
+  padding: 12px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+}
+
+.import-result__details {
+  max-height: 300px;
+  overflow-y: auto;
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+/* Результат импорта */
+.import-result__list {
+  margin: 0;
+}
+
+.import-result__row {
+  display: flex;
+  gap: 8px;
+  padding: 4px 0;
+  font-size: 13px;
+}
+
+.import-result__row dt {
+  font-weight: 600;
+  color: #64748b;
+  min-width: 180px;
+}
+
+.import-result__row dd {
+  margin: 0;
+}
+
+.import-result__success {
+  color: #166534;
+  font-weight: 600;
+}
+
+.import-result__error {
+  color: #b91c1c;
+  font-weight: 600;
+}
+
+.import-result__errors {
+  margin: 0;
+  padding-left: 16px;
+  color: #b91c1c;
+}
+
+/* Прогресс импорта */
+.import-progress {
+  margin-top: 12px;
+}
+
+.import-progress__current-step {
+  margin-bottom: 8px;
+  font-weight: bold;
+  color: #3498db;
+  font-size: 13px;
+}
+
+.import-progress__current-step {
+  margin-bottom: 8px;
+  font-weight: bold;
+  color: #3498db;
+  font-size: 13px;
+}
+
+.import-progress__bar {
+  height: 8px;
+  background: #e2e8f0;
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+
+.import-progress__fill {
+  height: 100%;
+  background: #27ae60;
+  transition: width 0.3s ease;
+  border-radius: 4px;
+}
+
+.import-progress__stats {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  font-size: 13px;
+  margin-bottom: 8px;
+}
+
+.import-progress__success {
+  color: #166534;
+  font-weight: 600;
+}
+
+.import-progress__error {
+  color: #b91c1c;
+  font-weight: 600;
+}
+
+.import-progress__log {
+  max-height: 300px;
+  overflow-y: auto;
+  background: #1e293b;
+  border-radius: 6px;
+  padding: 8px;
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.import-progress__log-line {
+  color: #e2e8f0;
+  padding: 2px 0;
+}
+
+.import-progress__log-line--error {
+  color: #fca5a5;
+}
+
+.import-progress__done {
+  color: #166534;
+  font-weight: 600;
+  margin: 0;
+}
+
+.import-progress__failed {
+  color: #b91c1c;
+  font-weight: 600;
+  margin: 0;
+}
+
+.import-progress__running {
+  color: #b45309;
+  margin: 0;
 }

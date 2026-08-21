@@ -70,6 +70,35 @@ async def list_outbound_lines(order_id: int, session: SessionDep) -> list[Outbou
     return [OutboundOrderLineRead.model_validate(r) for r in rows]
 
 
+@router.get("/lines/{line_id}", response_model=OutboundOrderLineRead, dependencies=[Depends(require_permission("view", "orders"))])
+async def get_outbound_line(line_id: int, session: SessionDep) -> OutboundOrderLineRead:
+    line = await session.get(OutboundOrderLine, line_id)
+    if line is None:
+        raise NotFoundError("Строка не найдена")
+    return OutboundOrderLineRead.model_validate(line)
+
+
+@router.patch("/lines/{line_id}", response_model=OutboundOrderLineRead, dependencies=[Depends(require_permission("update", "orders"))])
+async def update_outbound_line(line_id: int, body: OutboundOrderLineCreate, session: SessionDep, user_id: UserDep) -> OutboundOrderLineRead:
+    line = await session.get(OutboundOrderLine, line_id)
+    if line is None:
+        raise NotFoundError("Строка не найдена")
+    for field, value in body.model_dump(exclude_unset=True, exclude={"order_id"}).items():
+        setattr(line, field, value)
+    line.updated_by_id = user_id
+    await session.flush()
+    return OutboundOrderLineRead.model_validate(line)
+
+
+@router.delete("/lines/{line_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_permission("delete", "orders"))])
+async def delete_outbound_line(line_id: int, session: SessionDep, user_id: UserDep) -> None:
+    line = await session.get(OutboundOrderLine, line_id)
+    if line is None:
+        raise NotFoundError("Строка не найдена")
+    line.soft_delete(user_id)
+    await session.flush()
+
+
 @router.post("/{order_id}/lines", response_model=OutboundOrderLineRead, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_permission("create", "orders"))])
 async def create_outbound_line(order_id: int, body: OutboundOrderLineCreate, session: SessionDep, user_id: UserDep) -> OutboundOrderLineRead:
     line = OutboundOrderLine(order_id=order_id, created_by_id=user_id, updated_by_id=user_id, **body.model_dump(exclude={"order_id"}))

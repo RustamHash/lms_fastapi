@@ -22,13 +22,20 @@ class IntegrationProfileCreate(BaseModel):
 
 
 class IntegrationLogRead(BaseRead):
-    profile_id: int
+    profile_id: int | None = None
     status: str
     total_rows: int = 0
     success_rows: int = 0
     error_rows: int = 0
     error_details: dict = Field(default_factory=dict)
     file_id: int | None = None
+    task_id: str = ""
+    document_type: str | None = None
+    processed_rows: int = 0
+    messages: list = Field(default_factory=list)
+    errors: list = Field(default_factory=list)
+    current_step: str = ""
+    order_number: str = ""
 
 
 class IntegrationErrorRead(BaseRead):

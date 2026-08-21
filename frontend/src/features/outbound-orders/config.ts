@@ -33,6 +33,7 @@ export const outboundOrdersConfig: ListPageConfig<OutboundOrderRow> = {
     { id: 'id', label: 'ID', type: 'number' },
     { id: 'number', label: 'Номер', type: 'text' },
     { id: 'customer_name', label: 'Клиент', type: 'text' },
+    { id: 'delivery_address_name', label: 'Адрес доставки', type: 'text' },
     { id: 'order_date', label: 'Дата заказа', type: 'date' },
     { id: 'shipping_date', label: 'Дата отгрузки', type: 'date' },
     { id: 'status', label: 'Статус', type: 'text' },
@@ -44,6 +45,7 @@ export const outboundOrdersConfig: ListPageConfig<OutboundOrderRow> = {
   filters: [
     { id: 'number', type: 'text', label: 'Номер' },
     { id: 'customer_name', type: 'text', label: 'Клиент' },
+    { id: 'delivery_address_name', type: 'text', label: 'Адрес доставки' },
     { id: 'status', type: 'text', label: 'Статус' },
     { id: 'delivery_status', type: 'text', label: 'Статус доставки' },
   ],

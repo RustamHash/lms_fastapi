@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from '../../../lib/http'
@@ -73,6 +73,12 @@ export function useEntityList<Row extends { id: number }>(config: ListPageConfig
   const saveCurrentPrefs = useCallback(() => {
     void tableSettings.save(currentPrefs)
   }, [currentPrefs, tableSettings])
+
+  // Автосохранение при изменении фильтров, сортировки, quick_filters
+  useEffect(() => {
+    if (!tableSettings.prefs) return
+    void saveCurrentPrefs()
+  }, [filters, excludeFilters, sort, quickFilters, prefs.order, prefs.hidden, prefs.widths])
 
   const resetToDefaults = useCallback(async () => {
     const defaults = await tableSettings.resetToDefaults()

@@ -63,6 +63,15 @@ function IconColumns() {
   )
 }
 
+function IconImport() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width={16} height={16} viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path d="M12 3v12m0 0l-4-4m4 4l4-4" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
 function IconFilterReset() {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" width={16} height={16} viewBox="0 0 24 24" fill="none" aria-hidden>
@@ -127,6 +136,8 @@ type Props<Row extends { id: number }> = {
   toolbarLeft?: ReactNode
   onRowDoubleClick?: (row: Row) => void
   onInvertSelection?: () => void
+  onImport?: () => void
+  filtersBar?: ReactNode
 }
 
 function ListTableShellInner<Row extends { id: number }>({
@@ -177,6 +188,8 @@ function ListTableShellInner<Row extends { id: number }>({
   toolbarLeft,
   onRowDoubleClick,
   onInvertSelection,
+  onImport,
+  filtersBar,
 }: Props<Row>) {
   const navigate = useNavigate()
 
@@ -345,6 +358,11 @@ function ListTableShellInner<Row extends { id: number }>({
             <button type="button" className={`tb tb--icon tb--create${createMuted ? ' tb--muted' : ''}`} onClick={onCreateClick} aria-label="Создать" title="Создать">
               <IconPlus />
             </button>
+            {onImport ? (
+              <button type="button" className="tb tb--icon tb--import" onClick={onImport} aria-label="Импорт" title="Импорт">
+                <IconImport />
+              </button>
+            ) : null}
             <button type="button" className={`tb tb--icon tb--excel${exportMuted ? ' tb--muted' : ''}`} onClick={onExportClick} aria-label="Экспорт CSV" title="Экспорт CSV (выделите строки)">
               <IconTableDown />
             </button>
@@ -374,9 +392,21 @@ function ListTableShellInner<Row extends { id: number }>({
       </div>
 
       <div className="list-table-area">
-        <p className={`list-selection-msg${selectionCount > 0 ? ' is-active' : ''}`} role="status">
-          {selectionCount > 0 ? `Выделено: ${selectionCount}` : '\u00A0'}
-        </p>
+        <div className="list-table-top-row">
+          <div className="list-selection-block">
+            {selectionCount > 0 ? (
+              <span className="list-selection-msg is-active" role="status">
+                Выделено: {selectionCount}
+              </span>
+            ) : null}
+          </div>
+          
+          {filtersBar ? (
+            <div className="list-filters-bar-sticky">
+              {filtersBar}
+            </div>
+          ) : null}
+        </div>
 
         <div className="table-wrap">
           <table className="list-table list-table--col-size">

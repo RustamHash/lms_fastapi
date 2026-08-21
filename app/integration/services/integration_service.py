@@ -34,8 +34,31 @@ class IntegrationService:
 
         logger.info("Начало импорта: %s", universal_doc.get("document_number"))
         doc_type = universal_doc.get("document_type")
+        doc_number = universal_doc.get("document_number", "")
 
         try:
+            # 0. Проверка дубликата
+            if doc_type == "porder":
+                existing = await self._s.scalar(
+                    select(InboundOrder).where(
+                        InboundOrder.depositor_id == depositor_id,
+                        InboundOrder.number == doc_number,
+                    )
+                )
+            elif doc_type == "order":
+                existing = await self._s.scalar(
+                    select(OutboundOrder).where(
+                        OutboundOrder.depositor_id == depositor_id,
+                        OutboundOrder.number == doc_number,
+                    )
+                )
+            else:
+                existing = None
+
+            if existing:
+                logger.info("Заказ %s уже существует, пропускаю", doc_number)
+                return None, [f"Заказ {doc_number} уже существует"]
+
             # 1. Товары — для всех типов
             product_service = ProductService(self._s)
             for item in universal_doc.get("items", []):

@@ -4,7 +4,15 @@ import { clampListColumnWidthPx } from '../features/lists/columnWidthConstants'
 
 export type ColumnDef = { id: string; label: string }
 
-export type PrefsPayload = { order: string[]; hidden: string[]; widths: Record<string, number> }
+export type PrefsPayload = {
+  order: string[]
+  hidden: string[]
+  widths: Record<string, number>
+  filters?: Record<string, string>
+  exclude_filters?: Record<string, string[]>
+  sort?: { column: string | null; direction: 'asc' | 'desc' } | null
+  quick_filters?: string[]
+}
 
 type ApiGetResponse = { prefs: PrefsPayload | null }
 
@@ -123,9 +131,21 @@ export function useColumnPrefs(
   const savePrefs = useCallback(
     async (next: PrefsPayload) => {
       const url = `/api/v1/table-settings/${encodeURIComponent(entityKey)}`
+      
+      // Формируем полный prefs с недостающими полями
+      const fullPrefs = {
+        order: next.order,
+        hidden: next.hidden,
+        widths: next.widths,
+        filters: next.filters ?? {},
+        exclude_filters: next.exclude_filters ?? {},
+        sort: next.sort ?? null,
+        quick_filters: next.quick_filters ?? [],
+      }
+      
       const res = await apiFetch(url, {
         method: 'PUT',
-        body: JSON.stringify(next),
+        body: JSON.stringify({ prefs: fullPrefs }),
       })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const data = (await res.json()) as { prefs: PrefsPayload }

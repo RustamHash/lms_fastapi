@@ -9,6 +9,7 @@ from app.api.v1.delivery.routes_deviations_lines import router as deviations_lin
 from app.api.v1.documents.routes import router as documents_router
 from app.api.v1.files.routes import router as files_router
 from app.api.v1.integration.routes import router as integration_router
+from app.api.v1.integration.routes_import import router as import_router
 from app.api.v1.notifications.routes import router as notifications_router
 from app.api.v1.orders.routes_inbound import router as inbound_orders_router
 from app.api.v1.orders.routes_outbound import router as outbound_orders_router
@@ -38,4 +39,5 @@ api_router.include_router(outbound_orders_router)
 api_router.include_router(return_orders_router)
 api_router.include_router(notification_rules_router)
 api_router.include_router(integration_router)
+api_router.include_router(import_router)
 api_router.include_router(files_router)

@@ -217,7 +217,11 @@ async def list_audit(
     if user_id:
         rows = await service.list_by_user(user_id)
     else:
-        rows = []
+        from app.accounts.models import Audit
+        from sqlalchemy import select as sa_select
+        rows = list(await session.scalars(
+            sa_select(Audit).order_by(Audit.created_at.desc()).limit(100)
+        ))
     return [schemas.AuditRead.model_validate(r) for r in rows]
 
 

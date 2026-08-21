@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { createPortal } from 'react-dom'
 import type { TablePrefs } from '../hooks/useTableSettings'
 
 type Props = {
@@ -30,7 +31,7 @@ export function SavePresetDialog({ currentPrefs, onSave, onClose }: Props) {
     }
   }
 
-  return (
+  return createPortal(
     <div className="dialog-backdrop" role="presentation">
       <div className="dialog" role="dialog" aria-modal="true" aria-labelledby="save-preset-title">
         <h3 id="save-preset-title" className="dialog__title">Сохранить пресет</h3>
@@ -71,6 +72,7 @@ export function SavePresetDialog({ currentPrefs, onSave, onClose }: Props) {
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
