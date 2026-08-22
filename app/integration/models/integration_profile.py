@@ -10,6 +10,8 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.infrastructure.orm_base import Base
+from app.parties.models.counterparty import Depositor
+from app.files.models import File
 
 
 class IntegrationProfile(Base):

@@ -96,6 +96,18 @@ const TopologyVirtualWarehouseDetailPage = lazy(() => import('./pages/TopologyVi
 const TopologyWarehouseDetailPage = lazy(() => import('./pages/TopologyWarehouseDetailPage').then(m => ({ default: m.TopologyWarehouseDetailPage })))
 const TopologyZoneDetailPage = lazy(() => import('./pages/TopologyZoneDetailPage').then(m => ({ default: m.TopologyZoneDetailPage })))
 const UserDetailPage = lazy(() => import('./pages/UserDetailPage').then(m => ({ default: m.UserDetailPage })))
+
+const TopologyHubPage = lazy(() => import('./pages/TopologyHubPage').then(m => ({ default: m.TopologyHubPage })))
+const ReportsHubPage = lazy(() => import('./pages/ReportsHubPage').then(m => ({ default: m.ReportsHubPage })))
+const SystemHubPage = lazy(() => import('./pages/SystemHubPage').then(m => ({ default: m.SystemHubPage })))
+const IntegrationsHubPage = lazy(() => import('./pages/IntegrationsHubPage').then(m => ({ default: m.IntegrationsHubPage })))
+const DeliveryHubPage = lazy(() => import('./pages/DeliveryHubPage').then(m => ({ default: m.DeliveryHubPage })))
+
+
+const ProductGroupsPage = lazy(() => import('./pages/ProductGroupsPage').then(m => ({ default: m.ProductGroupsPage })))
+const PackagesPage = lazy(() => import('./pages/PackagesPage').then(m => ({ default: m.PackagesPage })))
+const ProductLocationsPage = lazy(() => import('./pages/ProductLocationsPage').then(m => ({ default: m.ProductLocationsPage })))
+
 const VehicleDetailPage = lazy(() => import('./pages/VehicleDetailPage').then(m => ({ default: m.VehicleDetailPage })))
 
 
@@ -150,6 +162,10 @@ function App() {
                   
                   {/* Склад */}
                   <Route path="/reference/products" element={<ProductsPage />} />
+                  <Route path="/reference/product-groups" element={<ProductGroupsPage />} />
+                  <Route path="/reference/packages" element={<PackagesPage />} />
+                  <Route path="/reference/product-locations" element={<ProductLocationsPage />} />
+
                   <Route path="/reference/batches" element={<BatchesPage />} />
                   <Route path="/reference/lpns" element={<LpnsPage />} />
                   <Route path="/tasks" element={<TasksPage />} />
@@ -229,6 +245,13 @@ function App() {
                   <Route path="/reference/vehicles/:id" element={<VehicleDetailPage />} />
                   
                   
+
+                  <Route path="/topology" element={<TopologyHubPage />} />
+                  <Route path="/reports" element={<ReportsHubPage />} />
+                  <Route path="/system" element={<SystemHubPage />} />
+                  <Route path="/integrations" element={<IntegrationsHubPage />} />
+                  <Route path="/delivery" element={<DeliveryHubPage />} />
+
                   <Route path="*" element={<Navigate to="/" replace />} />
                 </Route>
               </Route>

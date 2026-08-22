@@ -168,6 +168,7 @@ class StockRepository:
         location_id: int,
         lpn_id: int | None = None,
         batch_id: int | None = None,
+        for_update: bool = False,
     ) -> StockBalance | None:
         stmt = select(StockBalance).where(
             StockBalance.product_id == product_id,
@@ -175,6 +176,8 @@ class StockRepository:
             StockBalance.lpn_id == lpn_id,
             StockBalance.batch_id == batch_id,
         )
+        if for_update:
+            stmt = stmt.with_for_update()
         return await self._s.scalar(stmt)
 
     async def list_balances(self) -> list[StockBalance]:

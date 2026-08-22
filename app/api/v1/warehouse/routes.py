@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, status
+from pydantic import BaseModel
+from fastapi import HTTPException, APIRouter, Depends, status
 from sqlalchemy import select
 
 from app.api.deps import SessionDep, UserDep, require_permission
@@ -75,7 +76,11 @@ async def update_product(
     for field, value in body.model_dump(exclude_unset=True).items():
         setattr(product, field, value)
     product.updated_by_id = user_id
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
     return schemas.ProductRead.model_validate(product)
 
 
@@ -140,7 +145,11 @@ async def update_batch(
     for field, value in body.model_dump(exclude_unset=True).items():
         setattr(batch, field, value)
     batch.updated_by_id = user_id
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
     return schemas.BatchRead.model_validate(batch)
 
 
@@ -159,7 +168,11 @@ async def delete_batch(batch_id: int, session: SessionDep, user_id: UserDep) -> 
     if batch is None:
         raise NotFoundError("Партия не найдена")
     batch.soft_delete(user_id)
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
 
 
 # ========== LPN ==========
@@ -199,7 +212,11 @@ async def update_lpn(
         raise NotFoundError("LPN не найдена")
     lpn.status = body.status
     lpn.updated_by_id = user_id
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
     return schemas.LPNRead.model_validate(lpn)
 
 
@@ -217,7 +234,11 @@ async def delete_lpn(lpn_id: int, session: SessionDep, user_id: UserDep) -> None
     if lpn is None:
         raise NotFoundError("LPN не найдена")
     lpn.soft_delete(user_id)
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
 
 
 # ========== Остатки ==========
@@ -238,6 +259,30 @@ async def list_stock(
     return [schemas.StockBalanceRead.model_validate(r) for r in rows]
 
 
+@router.patch("/stock/{stock_id}", response_model=schemas.StockBalanceRead, dependencies=[Depends(require_permission("update", "stock"))])
+async def update_stock_balance(
+    stock_id: int,
+    body: dict,
+    session: SessionDep,
+    user_id: UserDep,
+) -> schemas.StockBalanceRead:
+    """Обновить остаток."""
+    stock = await StockRepository(session).get_balance_by_id(stock_id)
+    if stock is None:
+        raise NotFoundError("Остаток не найден")
+    if "quantity" in body:
+        stock.quantity = body["quantity"]
+    if "reserved_quantity" in body:
+        stock.reserved_quantity = body["reserved_quantity"]
+    stock.updated_by_id = user_id
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
+    return schemas.StockBalanceRead.model_validate(stock)
+
+
 @router.get(
     "/stock/{stock_id}",
     response_model=schemas.StockBalanceRead,
@@ -254,6 +299,27 @@ async def get_stock(
     return schemas.StockBalanceRead.model_validate(stock)
 
 
+@router.post("/stock/clear", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_permission("delete", "stock"))])
+async def clear_stock(
+    body: dict,
+    session: SessionDep,
+    user_id: UserDep,
+) -> None:
+    """Обнулить остаток товара в ячейке."""
+    service = StockService(StockRepository(session))
+    try:
+        await service.remove_stock(
+            user_id=user_id,
+            product_id=body["product_id"],
+            location_id=body["location_id"],
+            quantity=body.get("quantity", 0),
+            lpn_id=body.get("lpn_id"),
+            batch_id=body.get("batch_id"),
+        )
+    except ValueError as e:
+        raise BadRequestError(str(e)) from e
+
+
 @router.post("/stock/add", response_model=schemas.StockBalanceRead, dependencies=[Depends(require_permission("create", "stock"))])
 async def add_stock(
     body: schemas.StockAdd,
@@ -266,6 +332,24 @@ async def add_stock(
     except ValueError as e:
         raise BadRequestError(str(e)) from e
     return schemas.StockBalanceRead.model_validate(balance)
+
+
+@router.delete("/stock/{stock_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_permission("delete", "stock"))])
+async def delete_stock_balance(
+    stock_id: int,
+    session: SessionDep,
+    user_id: UserDep,
+) -> None:
+    """Удалить запись остатка."""
+    stock = await StockRepository(session).get_balance_by_id(stock_id)
+    if stock is None:
+        raise NotFoundError("Остаток не найден")
+    stock.soft_delete(user_id)
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
 
 
 @router.post("/stock/remove", response_model=schemas.StockBalanceRead, dependencies=[Depends(require_permission("delete", "stock"))])
@@ -324,10 +408,10 @@ async def create_task_from_document(
     try:
         task = await service.create_from_document(
             user_id=user_id,
-            document_id=body["document_id"],
+            document_id=body.document_id,
             task_type=body["task_type"],
-            assignee_id=body.get("assignee_id"),
-            warehouse_id=body["warehouse_id"],
+            assignee_id=body.assignee_id,
+            warehouse_id=body.warehouse_id,
         )
     except ValueError as e:
         raise BadRequestError(str(e)) from e
@@ -340,7 +424,7 @@ async def create_task_from_document(
     dependencies=[Depends(require_permission("create", "tasks"))],
 )
 async def create_picking_task(
-    body: dict,
+    body: PickingTaskCreate,
     session: SessionDep,
     user_id: UserDep,
 ) -> dict:
@@ -348,9 +432,9 @@ async def create_picking_task(
     try:
         result = await service.create_picking_with_fefo(
             user_id=user_id,
-            document_id=body["document_id"],
-            assignee_id=body.get("assignee_id"),
-            warehouse_id=body["warehouse_id"],
+            document_id=body.document_id,
+            assignee_id=body.assignee_id,
+            warehouse_id=body.warehouse_id,
         )
     except ValueError as e:
         raise BadRequestError(str(e)) from e
@@ -383,10 +467,21 @@ async def start_task(
 
 
 @router.get("/tasks/list", response_model=list[schemas.TaskList], dependencies=[Depends(require_permission("view", "tasks"))])
-async def list_tasks_for_table(session: SessionDep,
-) -> list[schemas.TaskList]:
+async def list_tasks_for_table(session: SessionDep) -> list[schemas.TaskList]:
     """Плоский список для таблицы."""
-    rows = await TaskRepository(session).list_all()
+    from sqlalchemy.orm import selectinload
+    from app.documents.models import Document
+    from app.accounts.models import User
+    from app.warehouse.models import Warehouse
+    
+    stmt = (
+        select(Task)
+        .options(
+            selectinload(Task.document),
+            selectinload(Task.assignee),
+        )
+    )
+    rows = list(await session.scalars(stmt))
 
     result = []
     for r in rows:
@@ -404,8 +499,8 @@ async def list_tasks_for_table(session: SessionDep,
             status=r.status,
             status_label=TaskStatus(r.status).label if r.status in TaskStatus._value2member_map_ else r.status,
             assignee_id=r.assignee_id,
-            document_number=None,
-            assignee_name=None,
+            document_number=r.document.document_number if r.document else None,
+            assignee_name=r.assignee.username if r.assignee else None,
             warehouse_name=None,
         ))
     return result
@@ -428,6 +523,29 @@ async def list_tasks(session: SessionDep,
     return [schemas.TaskRead.model_validate(r) for r in rows]
 
 
+@router.patch("/tasks/{task_id}", response_model=schemas.TaskRead, dependencies=[Depends(require_permission("update", "tasks"))])
+async def update_task(
+    task_id: int,
+    body: TaskUpdate,
+    session: SessionDep,
+    user_id: UserDep,
+) -> schemas.TaskRead:
+    """Обновить задание."""
+    task = await TaskRepository(session).get_by_id(task_id)
+    if task is None:
+        raise NotFoundError("Задание не найдено")
+    for field in ["task_type", "document_id", "assignee_id", "status"]:
+        for field, value in body.model_dump(exclude_unset=True).items():
+            setattr(task, field, value)
+    task.updated_by_id = user_id
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
+    return schemas.TaskRead.model_validate(task)
+
+
 @router.get("/tasks/{task_id}", response_model=schemas.TaskRead, dependencies=[Depends(require_permission("view", "tasks"))])
 async def get_task(task_id: int, session: SessionDep) -> schemas.TaskRead:
     task = await TaskRepository(session).get_by_id(task_id)
@@ -442,7 +560,11 @@ async def delete_task(task_id: int, session: SessionDep, user_id: UserDep) -> No
     if task is None:
         raise NotFoundError("Задание не найдено")
     task.soft_delete(user_id)
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
 
 
 @router.post("/task-lines/{line_id}/complete", dependencies=[Depends(require_permission("execute", "tasks"))])

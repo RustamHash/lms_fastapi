@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, status
+from fastapi import HTTPException, APIRouter, Depends, status
 from sqlalchemy import select
 
 from app.api.deps import SessionDep, UserDep, require_permission
@@ -42,7 +42,11 @@ async def create_rule(
     """Создать правило."""
     rule = NotificationRule(**body.model_dump())
     session.add(rule)
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
     return NotificationRuleRead.model_validate(rule)
 
 
@@ -74,7 +78,11 @@ async def update_rule(
         raise NotFoundError("Правило не найдено")
     for field, value in body.model_dump(exclude_unset=True).items():
         setattr(rule, field, value)
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
     return NotificationRuleRead.model_validate(rule)
 
 
@@ -89,4 +97,8 @@ async def delete_rule(rule_id: int, session: SessionDep) -> None:
     if rule is None:
         raise NotFoundError("Правило не найдено")
     await session.delete(rule)
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")

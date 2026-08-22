@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, status
+from fastapi import HTTPException, APIRouter, Depends, status
 
 from app.accounts.repository import UserRepository
 from app.api.deps import CurrentUser, SessionDep, require_permission
@@ -115,7 +115,11 @@ async def update_user_permissions(
     # Обновляем extra_permissions
     user.extra_permissions = body.extra_permissions
     user.updated_by_id = current_user.id
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
 
     return UserPermissionsRead(
         user_id=user.id,

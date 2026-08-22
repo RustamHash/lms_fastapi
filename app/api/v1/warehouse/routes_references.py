@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, status
+from pydantic import BaseModel
+from fastapi import HTTPException, APIRouter, Depends, status
 from sqlalchemy import select
 
 from app.api.deps import SessionDep, UserDep, require_permission
@@ -21,6 +22,62 @@ from app.warehouse.repository import (
 )
 
 router = APIRouter(prefix="/warehouse", tags=["warehouse-references"])
+
+
+class ProductGroupCreate(BaseModel):
+    name: str
+
+
+class ProductGroupUpdate(BaseModel):
+    name: str | None = None
+
+
+class PackageCreate(BaseModel):
+    product_id: int
+    name: str
+    quantity: int = 1
+    barcode: str | None = None
+    weight: float | None = None
+    width: float | None = None
+    height: float | None = None
+    depth: float | None = None
+    is_base_unit: bool = False
+
+
+class PackageUpdate(BaseModel):
+    name: str | None = None
+    quantity: int | None = None
+    barcode: str | None = None
+    weight: float | None = None
+    width: float | None = None
+    height: float | None = None
+    depth: float | None = None
+    is_base_unit: bool | None = None
+
+
+class ProductLocationCreate(BaseModel):
+    product_id: int
+    location_id: int
+
+
+class ProductLocationUpdate(BaseModel):
+    product_id: int | None = None
+    location_id: int | None = None
+
+
+class StockMovementCreate(BaseModel):
+    product_id: int
+    location_id: int
+    direction: str
+    quantity: float
+    document_id: int | None = None
+    lpn_id: int | None = None
+    batch_id: int | None = None
+
+
+class StockMovementUpdate(BaseModel):
+    quantity: float | None = None
+    direction: str | None = None
 
 
 # ========== Группы товаров ==========
@@ -42,16 +99,20 @@ async def list_product_groups(session: SessionDep):
 
 
 @router.post("/product-groups", status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_permission("create", "products"))])
-async def create_product_group(body: dict, session: SessionDep, user_id: UserDep):
-    existing = await ProductGroupRepository(session).get_by_name(body["name"])
+async def create_product_group(body: ProductGroupCreate, session: SessionDep, user_id: UserDep):
+    existing = await ProductGroupRepository(session).get_by_name(body.name)
     if existing:
         raise ConflictError(f"Группа {body['name']} уже существует")
 
     group = ProductGroup(
-        name=body["name"],
+        name=body.name,
     )
     session.add(group)
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
     return {"id": group.id}
 
 
@@ -71,13 +132,17 @@ async def get_product_group(group_id: int, session: SessionDep):
 
 
 @router.patch("/product-groups/{group_id}", dependencies=[Depends(require_permission("update", "products"))])
-async def update_product_group(group_id: int, body: dict, session: SessionDep, user_id: UserDep):
+async def update_product_group(group_id: int, body: ProductGroupUpdate, session: SessionDep, user_id: UserDep):
     group = await ProductGroupRepository(session).get_by_id(group_id)
     if group is None:
         raise NotFoundError("Группа не найдена")
-    group.name = body.get("name", group.name)
+    group.name = body.name if body.name else group.name
     group.updated_by_id = user_id
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
     return {"id": group.id}
 
 
@@ -87,7 +152,11 @@ async def delete_product_group(group_id: int, session: SessionDep, user_id: User
     if group is None:
         raise NotFoundError("Группа не найдена")
     group.soft_delete(user_id)
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
 
 
 # ========== Упаковки ==========
@@ -117,20 +186,24 @@ async def list_packages(session: SessionDep, product_id: int | None = None):
 
 
 @router.post("/packages", status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_permission("create", "products"))])
-async def create_package(body: dict, session: SessionDep, user_id: UserDep):
+async def create_package(body: PackageCreate, session: SessionDep, user_id: UserDep):
     package = Package(
-        product_id=body["product_id"],
-        name=body["name"],
-        quantity=body.get("quantity", 1),
-        barcode=body.get("barcode"),
-        weight=body.get("weight"),
-        width=body.get("width"),
-        height=body.get("height"),
-        depth=body.get("depth"),
-        is_base_unit=body.get("is_base_unit", False),
+        product_id=body.product_id,
+        name=body.name,
+        quantity=body.quantity,
+        barcode=body.barcode,
+        weight=body.weight,
+        width=body.width,
+        height=body.height,
+        depth=body.depth,
+        is_base_unit=body.is_base_unit,
     )
     session.add(package)
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
     return {"id": package.id}
 
 
@@ -158,15 +231,19 @@ async def get_package(package_id: int, session: SessionDep):
 
 
 @router.patch("/packages/{package_id}", dependencies=[Depends(require_permission("update", "products"))])
-async def update_package(package_id: int, body: dict, session: SessionDep, user_id: UserDep):
+async def update_package(package_id: int, body: PackageUpdate, session: SessionDep, user_id: UserDep):
     p = await PackageRepository(session).get_by_id(package_id)
     if p is None:
         raise NotFoundError("Упаковка не найдена")
     for field in ["name", "quantity", "barcode", "weight", "width", "height", "depth", "is_base_unit"]:
-        if field in body:
-            setattr(p, field, body[field])
+        for field, value in body.model_dump(exclude_unset=True).items():
+            setattr(p, field, value)
     p.updated_by_id = user_id
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
     return {"id": p.id}
 
 
@@ -176,7 +253,11 @@ async def delete_package(package_id: int, session: SessionDep, user_id: UserDep)
     if p is None:
         raise NotFoundError("Упаковка не найдена")
     p.soft_delete(user_id)
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
 
 
 # ========== Связи товар-ячейка ==========
@@ -199,13 +280,17 @@ async def list_product_locations(session: SessionDep):
 
 
 @router.post("/product-locations", status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_permission("create", "products"))])
-async def create_product_location(body: dict, session: SessionDep, user_id: UserDep):
+async def create_product_location(body: ProductLocationCreate, session: SessionDep, user_id: UserDep):
     pl = ProductLocation(
-        product_id=body["product_id"],
-        location_id=body["location_id"],
+        product_id=body.product_id,
+        location_id=body.location_id,
     )
     session.add(pl)
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
     return {"id": pl.id}
 
 
@@ -226,7 +311,7 @@ async def get_product_location(pl_id: int, session: SessionDep):
 
 
 @router.patch("/product-locations/{pl_id}", dependencies=[Depends(require_permission("update", "products"))])
-async def update_product_location(pl_id: int, body: dict, session: SessionDep, user_id: UserDep):
+async def update_product_location(pl_id: int, body: ProductLocationUpdate, session: SessionDep, user_id: UserDep):
     pl = await ProductLocationRepository(session).get_by_id(pl_id)
     if pl is None:
         raise NotFoundError("Связь не найдена")
@@ -234,7 +319,11 @@ async def update_product_location(pl_id: int, body: dict, session: SessionDep, u
         if field in body:
             setattr(pl, field, body[field])
     pl.updated_by_id = user_id
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
     return {"id": pl.id}
 
 
@@ -244,7 +333,11 @@ async def delete_product_location(pl_id: int, session: SessionDep, user_id: User
     if pl is None:
         raise NotFoundError("Связь не найдена")
     pl.soft_delete(user_id)
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
 
 
 # ========== Движения остатков ==========
@@ -272,18 +365,22 @@ async def list_stock_movements(session: SessionDep, product_id: int | None = Non
 
 
 @router.post("/stock-movements", status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_permission("create", "stock"))])
-async def create_stock_movement(body: dict, session: SessionDep, user_id: UserDep):
+async def create_stock_movement(body: StockMovementCreate, session: SessionDep, user_id: UserDep):
     sm = StockMovement(
-        product_id=body["product_id"],
-        document_id=body.get("document_id"),
-        location_id=body["location_id"],
-        lpn_id=body.get("lpn_id"),
+        product_id=body.product_id,
+        document_id=body.document_id,
+        location_id=body.location_id,
+        lpn_id=body.lpn_id,
         batch_id=body["batch_id"],
-        direction=body["direction"],
-        quantity=body["quantity"],
+        direction=body.direction,
+        quantity=body.quantity,
     )
     session.add(sm)
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
     return {"id": sm.id}
 
 
@@ -309,7 +406,7 @@ async def get_stock_movement(sm_id: int, session: SessionDep):
 
 
 @router.patch("/stock-movements/{sm_id}", dependencies=[Depends(require_permission("update", "stock"))])
-async def update_stock_movement(sm_id: int, body: dict, session: SessionDep, user_id: UserDep):
+async def update_stock_movement(sm_id: int, body: StockMovementUpdate, session: SessionDep, user_id: UserDep):
     sm = await StockRepository(session).get_movement_by_id(sm_id)
     if sm is None:
         raise NotFoundError("Движение не найдено")
@@ -317,7 +414,11 @@ async def update_stock_movement(sm_id: int, body: dict, session: SessionDep, use
         if field in body:
             setattr(sm, field, body[field])
     sm.updated_by_id = user_id
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
     return {"id": sm.id}
 
 
@@ -327,4 +428,8 @@ async def delete_stock_movement(sm_id: int, session: SessionDep, user_id: UserDe
     if sm is None:
         raise NotFoundError("Движение не найдено")
     sm.soft_delete(user_id)
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")

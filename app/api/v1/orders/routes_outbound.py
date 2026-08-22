@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, status
+from fastapi import HTTPException, APIRouter, Depends, status
 
 from app.api.deps import SessionDep, UserDep, require_permission
 from app.api.v1.orders.schemas_detailed import OutboundOrderDetailed
@@ -190,7 +190,11 @@ async def create_outbound_order(
 ) -> OutboundOrderRead:
     order = OutboundOrder(created_by_id=user_id, **body.model_dump())
     session.add(order)
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
     return OutboundOrderRead.model_validate(order)
 
 
@@ -220,7 +224,11 @@ async def update_outbound_order(
     for field, value in body.model_dump(exclude_unset=True).items():
         setattr(order, field, value)
     order.updated_by_id = user_id
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
     return OutboundOrderRead.model_validate(order)
 
 
@@ -236,7 +244,11 @@ async def delete_outbound_order(
     if order is None:
         raise NotFoundError("Заявка не найдена")
     order.soft_delete(user_id)
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
 
 
 # ========== Строки ==========
@@ -328,7 +340,11 @@ async def update_outbound_line(
     ).items():
         setattr(line, field, value)
     line.updated_by_id = user_id
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
     return OutboundOrderLineRead.model_validate(line)
 
 
@@ -344,7 +360,11 @@ async def delete_outbound_line(
     if line is None:
         raise NotFoundError("Строка не найдена")
     line.soft_delete(user_id)
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
 
 
 @router.post(
@@ -358,30 +378,34 @@ async def create_outbound_line(
 ) -> OutboundOrderLineRead:
     line = OutboundOrderLine(order_id=order_id, **body.model_dump(exclude={"order_id"}))
     session.add(line)
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
     return OutboundOrderLineRead.model_validate(line)
 
 
 async def _get_order_documents(session, order):
-    """Складские документы по номеру заказа."""
+    """Складские документы по номеру заказа (оптимизировано)."""
     from app.documents.models import Document
     from sqlalchemy import select as sa_select
-    stmt = sa_select(Document).where(Document.document_number == order.number)
-    rows = list(await session.scalars(stmt))
-    return [{"id": d.id, "document_number": d.document_number, "document_type": d.document_type, "status": d.status} for d in rows]
+    stmt = sa_select(Document.id, Document.document_number, Document.document_type, Document.status).where(Document.document_number == order.number)
+    rows = (await session.execute(stmt)).all()
+    return [{"id": r[0], "document_number": r[1], "document_type": r[2], "status": r[3]} for r in rows]
 
 
 async def _get_order_tasks(session, order):
-    """Задания по документам заказа."""
+    """Задания по документам заказа (оптимизировано)."""
     from app.warehouse.models import Task
     from sqlalchemy import select as sa_select
     docs = await _get_order_documents(session, order)
     doc_ids = [d["id"] for d in docs]
     if not doc_ids:
         return []
-    stmt = sa_select(Task).where(Task.document_id.in_(doc_ids))
-    rows = list(await session.scalars(stmt))
-    return [{"id": t.id, "task_type": t.task_type, "status": t.status} for t in rows]
+    stmt = sa_select(Task.id, Task.task_type, Task.status).where(Task.document_id.in_(doc_ids))
+    rows = (await session.execute(stmt)).all()
+    return [{"id": r[0], "task_type": r[1], "status": r[2]} for r in rows]
 
 
 async def _get_order_returns(session, order):

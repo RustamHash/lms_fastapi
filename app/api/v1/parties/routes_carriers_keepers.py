@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, status
+from fastapi import HTTPException, APIRouter, Depends, status
 from sqlalchemy import select
 
 from app.api.deps import SessionDep, UserDep, require_permission
@@ -50,7 +50,11 @@ async def create_carrier(
         legal_entity_id=body.legal_entity_id,
     )
     session.add(carrier)
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
     return CarrierRead.model_validate(carrier)
 
 
@@ -82,7 +86,11 @@ async def update_carrier(
         raise NotFoundError("Перевозчик не найден")
     carrier.legal_entity_id = body.legal_entity_id
     carrier.updated_by_id = user_id
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
     return CarrierRead.model_validate(carrier)
 
 
@@ -96,7 +104,11 @@ async def delete_carrier(carrier_id: int, session: SessionDep, user_id: UserDep)
     if carrier is None:
         raise NotFoundError("Перевозчик не найден")
     carrier.soft_delete(user_id)
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
 
 
 # ========== Хранители ==========
@@ -130,7 +142,11 @@ async def create_keeper(
         legal_entity_id=body.legal_entity_id,
     )
     session.add(keeper)
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
     return KeeperRead.model_validate(keeper)
 
 
@@ -162,7 +178,11 @@ async def update_keeper(
         raise NotFoundError("Хранитель не найден")
     keeper.legal_entity_id = body.legal_entity_id
     keeper.updated_by_id = user_id
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
     return KeeperRead.model_validate(keeper)
 
 
@@ -176,4 +196,8 @@ async def delete_keeper(keeper_id: int, session: SessionDep, user_id: UserDep) -
     if keeper is None:
         raise NotFoundError("Хранитель не найден")
     keeper.soft_delete(user_id)
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")

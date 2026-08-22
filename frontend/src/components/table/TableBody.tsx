@@ -29,14 +29,6 @@ function TableBodyInner<Row extends { id: number }>({
 }: Props<Row>) {
   return (
     <tbody>
-      <tr className="list-table__header-row-spacer" aria-hidden>
-        <td className="list-table__cb" style={{ padding: 0, border: 'none' }} />
-      </tr>
-      <tr>
-        <td className="list-table__cb">
-          <input type="checkbox" checked={allSelected} onChange={(e) => onToggleAll(e.target.checked)} aria-label="Выбрать все на странице" />
-        </td>
-      </tr>
       {loading ? (
         <tr>
           <td className="list-table__empty" colSpan={visibleColumnIds.length + 1}>Загрузка…</td>

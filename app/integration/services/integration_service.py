@@ -86,6 +86,9 @@ class IntegrationService:
                             "weight": item.get("net_mass", 0),
                             "shelf_life_days": item.get("shelf_life_days"),
                             "min_shelf_life_days": item.get("min_shelf_life_days"),
+                            "unit": item.get("unit"),
+                            "barcode": item.get("ean"),
+                            "gross_mass": item.get("gross_mass"),
                         },
                         user_id=user_id,
                     )
@@ -114,7 +117,7 @@ class IntegrationService:
             try:
                 await savepoint.rollback()
             except Exception as rollback_error:
-                logger.error("Ошибка отката транзакции: %s", rollback_error)
+                logger.error("Ошибка отката транзакции: %s", rollback_error, exc_info=True)
             logger.error("Ошибка импорта: %s", e, exc_info=True)
             return None, [f"Ошибка: {e}"]
 

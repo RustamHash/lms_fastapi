@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import HTTPException, APIRouter, Depends, Query, status
 from sqlalchemy import select
 
 from app.api.deps import SessionDep, UserDep, require_permission
@@ -216,7 +216,11 @@ async def update_alias(
         raw.normalized_address_id = body.normalized_address_id
 
     raw.updated_by_id = user_id
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
 
     address = await AddressRepository(session).get_address_by_id(raw.normalized_address_id)
     return schemas.RawAddressRead(
@@ -235,7 +239,11 @@ async def delete_alias(alias_id: int, session: SessionDep, user_id: UserDep) -> 
     if raw is None or raw.is_deleted:
         raise NotFoundError("Вариант ввода не найден")
     raw.soft_delete(user_id)
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
 
 
 # ========== Юрлица ==========
@@ -352,7 +360,11 @@ async def update_depositor(
     for field, value in body.model_dump(exclude_unset=True).items():
         setattr(row, field, value)
     row.updated_by_id = user_id
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
     return schemas.DepositorRead.model_validate(row)
 
 
@@ -362,7 +374,11 @@ async def delete_depositor(depositor_id: int, session: SessionDep, user_id: User
     if row is None:
         raise NotFoundError("Поклажедатель не найден")
     row.soft_delete(user_id)
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
 
 
 # ========== Клиенты ==========
@@ -511,7 +527,11 @@ async def update_tariff_document(
     for field, value in body.model_dump(exclude_unset=True).items():
         setattr(doc, field, value)
     doc.updated_by_id = user_id
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
     return schemas.TariffDocumentRead.model_validate(doc)
 
 
@@ -521,7 +541,11 @@ async def delete_tariff_document(doc_id: int, session: SessionDep, user_id: User
     if doc is None:
         raise NotFoundError("Тарифный документ не найден")
     doc.soft_delete(user_id)
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
 
 
 @router.post("/tariff-documents", response_model=schemas.TariffDocumentRead, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_permission("create", "tariffs"))])
@@ -565,7 +589,11 @@ async def update_tariff(
     for field, value in body.model_dump(exclude_unset=True).items():
         setattr(tariff, field, value)
     tariff.updated_by_id = user_id
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
     return schemas.TariffRead.model_validate(tariff)
 
 
@@ -575,7 +603,11 @@ async def delete_tariff(tariff_id: int, session: SessionDep, user_id: UserDep) -
     if tariff is None:
         raise NotFoundError("Тариф не найден")
     tariff.soft_delete(user_id)
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
 
 
 @router.post("/tariffs", response_model=schemas.TariffRead, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_permission("create", "tariffs"))])

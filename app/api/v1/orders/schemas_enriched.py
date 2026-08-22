@@ -114,6 +114,8 @@ class InboundOrderDetail(BaseRead):
     depositor: Any | None = None
     supplier: Any | None = None
     warehouse: Any | None = None
+    documents: list = []
+    tasks: list = []
 
 
 # ========== ORDER LINES ==========

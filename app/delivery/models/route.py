@@ -25,7 +25,7 @@ class Route(Base):
 
     driver: Mapped["Driver"] = relationship(back_populates="routes")
     vehicle: Mapped["Vehicle"] = relationship(back_populates="routes")
-    lines: Mapped[list["RouteLine"]] = relationship(back_populates="route")
+    lines: Mapped[list["RouteLine"]] = relationship(back_populates="route", cascade="all, delete-orphan")
 
 
 class RouteLine(Base):

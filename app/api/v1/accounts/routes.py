@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, status
+from fastapi import HTTPException, APIRouter, Depends, status
 from fastapi.security import OAuth2PasswordRequestForm
 
 from app.accounts.repository import (
@@ -84,6 +84,30 @@ async def me(
 # ========== Users ==========
 
 
+@router.post(
+    "/users",
+    response_model=schemas.UserRead,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_permission("create", "users"))],
+)
+async def create_user(
+    body: schemas.UserCreate,
+    session: SessionDep,
+) -> schemas.UserRead:
+    """Создать пользователя."""
+    service = UserService(UserRepository(session))
+    try:
+        user = await service.create(
+            username=body.username,
+            password=body.password,
+            phone=body.phone,
+            email=body.email,
+        )
+    except ValueError as e:
+        raise ConflictError(str(e)) from e
+    return schemas.UserRead.model_validate(user)
+
+
 @router.get(
     "/users",
     response_model=list[schemas.UserRead],
@@ -107,6 +131,30 @@ async def get_user(user_id: int, session: SessionDep) -> schemas.UserRead:
     if user is None:
         raise NotFoundError("Пользователь не найден")
     return schemas.UserRead.model_validate(user)
+
+
+@router.delete(
+    "/users/{user_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_permission("delete", "users"))],
+)
+async def delete_user(
+    user_id: int,
+    session: SessionDep,
+    current_user: CurrentUser,
+) -> None:
+    """Удалить пользователя (soft delete)."""
+    user = await UserRepository(session).get_by_id(user_id)
+    if user is None:
+        raise NotFoundError("Пользователь не найден")
+    if user.is_superuser and not current_user.is_superuser:
+        raise ForbiddenError("Нельзя удалить суперпользователя")
+    user.soft_delete(current_user.id)
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
 
 
 @router.patch(
@@ -172,6 +220,32 @@ async def create_role(
     return schemas.RoleRead.model_validate(role)
 
 
+@router.patch(
+    "/roles/{role_id}",
+    response_model=schemas.RoleRead,
+    dependencies=[Depends(require_permission("update", "roles"))],
+)
+async def update_role(
+    role_id: int,
+    body: schemas.RoleCreate,
+    session: SessionDep,
+    user_id: UserDep,
+) -> schemas.RoleRead:
+    """Обновить роль."""
+    role = await RoleRepository(session).get_by_id(role_id)
+    if role is None:
+        raise NotFoundError("Роль не найдена")
+    for field, value in body.model_dump(exclude_unset=True).items():
+        setattr(role, field, value)
+    role.updated_by_id = user_id
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
+    return schemas.RoleRead.model_validate(role)
+
+
 @router.delete(
     "/roles/{role_id}",
     status_code=status.HTTP_204_NO_CONTENT,
@@ -183,7 +257,11 @@ async def delete_role(role_id: int, session: SessionDep, current_user: CurrentUs
     if role is None:
         raise NotFoundError("Роль не найдена")
     role.soft_delete(current_user.id)
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
 
 
 @router.patch(
@@ -263,7 +341,11 @@ async def update_audit(
     for field, value in body.model_dump(exclude_unset=True).items():
         setattr(audit, field, value)
     audit.updated_by_id = user_id
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
     return schemas.AuditRead.model_validate(audit)
 
 
@@ -282,7 +364,11 @@ async def delete_audit(
     if audit is None:
         raise NotFoundError("Запись аудита не найдена")
     audit.soft_delete(user_id)
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
 
 
 @router.get(

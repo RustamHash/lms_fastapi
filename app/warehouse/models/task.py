@@ -23,7 +23,7 @@ class Task(Base):
     )
     status: Mapped[str] = mapped_column(String(30), default=TaskStatus.NEW.value, comment="Статус")
 
-    lines: Mapped[list["TaskLine"]] = relationship(back_populates="task")
+    lines: Mapped[list["TaskLine"]] = relationship(back_populates="task", cascade="all, delete-orphan")
 
 
 class TaskLine(Base):

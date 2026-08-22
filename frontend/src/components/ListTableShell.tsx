@@ -323,6 +323,8 @@ function ListTableShellInner<Row extends { id: number }>({
               onColResizeDoubleClick={onColResizeDoubleClick}
               dragColPreview={dragColPreview}
               colDragRef={colDragRef}
+              allSelected={allSelected}
+              onToggleAll={onToggleAll}
             />
             <TableFilterRow
               visibleColumnIds={visibleColumnIds}

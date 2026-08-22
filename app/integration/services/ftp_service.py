@@ -6,6 +6,7 @@ import os
 
 
 class FTPService:
+    """Работа с FTP. Поддерживает контекстный менеджер."""
     """Работа с FTP."""
 
     def __init__(self, host: str, username: str, password: str):
@@ -20,6 +21,15 @@ class FTPService:
         self._ftp = FTP(self.host)
         self._ftp.login(self.username, self.password)
         return self
+
+    def __enter__(self):
+        """Вход в контекстный менеджер."""
+        return self.connect()
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Выход из контекстного менеджера — всегда закрываем соединение."""
+        self.disconnect()
+        return False
 
     def disconnect(self):
         if self._ftp:

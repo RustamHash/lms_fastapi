@@ -20,6 +20,46 @@ logger = logging.getLogger(__name__)
 AUDIT_METHODS = {"POST", "PATCH", "PUT", "DELETE"}
 
 
+
+
+class RateLimitMiddleware(BaseHTTPMiddleware):
+    """Простой rate limiting для auth-эндпоинтов."""
+
+    def __init__(self, app, max_requests: int = 10, window_seconds: int = 60):
+        super().__init__(app)
+        self.max_requests = max_requests
+        self.window_seconds = window_seconds
+        self._requests = {}
+
+    async def dispatch(self, request: Request, call_next):
+        # Применяем только к auth-эндпоинтам
+        if "/auth/" in request.url.path:
+            client_ip = request.client.host if request.client else "unknown"
+            current_time = __import__("time").time()
+            
+            # Очистка старых записей
+            self._requests = {
+                ip: [t for t in times if current_time - t < self.window_seconds]
+                for ip, times in self._requests.items()
+            }
+            
+            # Проверка лимита
+            times = self._requests.get(client_ip, [])
+            if len(times) >= self.max_requests:
+                return Response(
+                    status_code=429,
+                    content='{"detail": "Слишком много запросов. Попробуйте позже."}',
+                    media_type="application/json",
+                )
+            
+            # Запоминаем запрос
+            times.append(current_time)
+            self._requests[client_ip] = times
+        
+        return await call_next(request)
+
+
+
 class AuditMiddleware(BaseHTTPMiddleware):
     """Автоматический аудит действий пользователей."""
 
@@ -59,7 +99,7 @@ class AuditMiddleware(BaseHTTPMiddleware):
             try:
                 await self._log_audit(request, response, user_id, body)
             except Exception as e:
-                logger.error("Ошибка записи аудита: %s", e)
+                logger.error("Ошибка записи аудита: %s", e, exc_info=True)
 
         return response
 
@@ -113,4 +153,5 @@ def setup_middleware(app: FastAPI, settings: Settings) -> None:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    app.add_middleware(RateLimitMiddleware)
     app.add_middleware(AuditMiddleware)

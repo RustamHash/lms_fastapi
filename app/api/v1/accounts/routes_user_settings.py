@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, status
+from pydantic import BaseModel
+from fastapi import HTTPException, APIRouter, Depends, status
 from sqlalchemy import select
 
 from app.accounts.models import UserDepositor, UserSettings
@@ -11,6 +12,31 @@ from app.api.deps import SessionDep, UserDep, require_permission
 from app.core.exceptions import ConflictError, NotFoundError
 
 router = APIRouter(tags=["user-settings"])
+
+
+class UserSettingsCreate(BaseModel):
+    user_id: int
+    menu_style: str = "top"
+    theme: str = "light"
+    density: str = "compact"
+    font_size: str = "small"
+
+
+class UserSettingsUpdate(BaseModel):
+    menu_style: str | None = None
+    theme: str | None = None
+    density: str | None = None
+    font_size: str | None = None
+
+
+class UserDepositorCreate(BaseModel):
+    user_id: int
+    depositor_id: int
+
+
+class UserDepositorUpdate(BaseModel):
+    user_id: int | None = None
+    depositor_id: int | None = None
 
 
 # ========== Настройки пользователя ==========
@@ -36,20 +62,24 @@ async def list_user_settings(session: SessionDep):
 
 
 @router.post("/user-settings", status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_permission("create", "users"))])
-async def create_user_settings(body: dict, session: SessionDep, user_id: UserDep):
-    existing = await UserSettingsRepository(session).get_by_user(body["user_id"])
+async def create_user_settings(body: UserSettingsCreate, session: SessionDep, user_id: UserDep):
+    existing = await UserSettingsRepository(session).get_by_user(body.user_id)
     if existing:
         raise ConflictError("Настройки для пользователя уже существуют")
 
     settings = UserSettings(
-        user_id=body["user_id"],
-        menu_style=body.get("menu_style", "top"),
-        theme=body.get("theme", "light"),
-        density=body.get("density", "compact"),
-        font_size=body.get("font_size", "small"),
+        user_id=body.user_id,
+        menu_style=body.menu_style,
+        theme=body.theme,
+        density=body.density,
+        font_size=body.font_size,
     )
     session.add(settings)
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
     return {"id": settings.id}
 
 
@@ -73,7 +103,7 @@ async def get_user_settings(settings_id: int, session: SessionDep):
 
 
 @router.patch("/user-settings/{settings_id}", dependencies=[Depends(require_permission("update", "users"))])
-async def update_user_settings(settings_id: int, body: dict, session: SessionDep, user_id: UserDep):
+async def update_user_settings(settings_id: int, body: UserSettingsUpdate, session: SessionDep, user_id: UserDep):
     s = await UserSettingsRepository(session).get_by_id(settings_id)
     if s is None:
         raise NotFoundError("Настройки не найдены")
@@ -81,7 +111,11 @@ async def update_user_settings(settings_id: int, body: dict, session: SessionDep
         if field in body:
             setattr(s, field, body[field])
     s.updated_by_id = user_id
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
     return {"id": s.id}
 
 
@@ -91,7 +125,11 @@ async def delete_user_settings(settings_id: int, session: SessionDep, user_id: U
     if s is None:
         raise NotFoundError("Настройки не найдены")
     s.soft_delete(user_id)
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
 
 
 # ========== Привязки к поклажедателю ==========
@@ -115,19 +153,23 @@ async def list_user_depositors(session: SessionDep, user_id: int | None = None):
 
 
 @router.post("/user-depositors", status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_permission("create", "users"))])
-async def create_user_depositor(body: dict, session: SessionDep, user_id: UserDep):
+async def create_user_depositor(body: UserDepositorCreate, session: SessionDep, user_id: UserDep):
     existing = await UserDepositorRepository(session).get_by_user_and_depositor(
-        body["user_id"], body["depositor_id"]
+        body.user_id, body.depositor_id
     )
     if existing:
         raise ConflictError("Привязка уже существует")
 
     ud = UserDepositor(
-        user_id=body["user_id"],
-        depositor_id=body["depositor_id"],
+        user_id=body.user_id,
+        depositor_id=body.depositor_id,
     )
     session.add(ud)
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
     return {"id": ud.id}
 
 
@@ -148,7 +190,7 @@ async def get_user_depositor(ud_id: int, session: SessionDep):
 
 
 @router.patch("/user-depositors/{ud_id}", dependencies=[Depends(require_permission("update", "users"))])
-async def update_user_depositor(ud_id: int, body: dict, session: SessionDep, user_id: UserDep):
+async def update_user_depositor(ud_id: int, body: UserDepositorUpdate, session: SessionDep, user_id: UserDep):
     ud = await UserDepositorRepository(session).get_by_id(ud_id)
     if ud is None:
         raise NotFoundError("Привязка не найдена")
@@ -156,7 +198,11 @@ async def update_user_depositor(ud_id: int, body: dict, session: SessionDep, use
         if field in body:
             setattr(ud, field, body[field])
     ud.updated_by_id = user_id
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
     return {"id": ud.id}
 
 
@@ -166,4 +212,8 @@ async def delete_user_depositor(ud_id: int, session: SessionDep, user_id: UserDe
     if ud is None:
         raise NotFoundError("Привязка не найдена")
     ud.soft_delete(user_id)
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")

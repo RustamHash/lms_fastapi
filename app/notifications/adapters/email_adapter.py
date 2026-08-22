@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+import aiofiles
 from typing import Any
 
 from app.notifications.adapters.base import BaseAdapter
@@ -27,10 +28,10 @@ class EmailAdapter(BaseAdapter):
         text = notification.get("text", "")
 
         filename = EMAIL_DIR / f"email_{title.replace(' ', '_')}.txt"
-        with open(filename, "a", encoding="utf-8") as f:
-            f.write(f"Кому: {email_to}\n")
-            f.write(f"Тема: {title}\n")
-            f.write(f"Содержание:\n{text}\n")
-            f.write("---\n")
+        async with aiofiles.open(filename, "a", encoding="utf-8") as f:
+            await f.write(f"Кому: {email_to}\n")
+            await f.write(f"Тема: {title}\n")
+            await f.write(f"Содержание:\n{text}\n")
+            await f.write("---\n")
 
         logger.info("Письмо сохранено: %s", filename)

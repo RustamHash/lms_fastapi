@@ -22,6 +22,11 @@ class ProductService:
             raise ValueError(f"Товар с кодом {external_id} уже существует")
 
         logger.info("Создание товара: %s", external_id)
+        # Извлекаем поля для упаковки (их нет в модели Product)
+        unit = kwargs.pop("unit", "шт")
+        barcode = kwargs.pop("barcode", None)
+        gross_mass = kwargs.pop("gross_mass", None)
+
         product = await self._repo.create(
             depositor_id=depositor_id,
             external_id=external_id,
@@ -32,8 +37,10 @@ class ProductService:
         # Базовая упаковка
         base_package = Package(
             product_id=product.id,
-            name="шт",
+            name=unit,
             quantity=1,
+            barcode=barcode,
+            weight=gross_mass or kwargs.get("weight"),
             is_base_unit=True,
         )
         self._repo._s.add(base_package)
@@ -62,6 +69,9 @@ class ProductService:
             price=defaults.get("price"),
             shelf_life_days=defaults.get("shelf_life_days"),
             min_shelf_life_days=defaults.get("min_shelf_life_days"),
+            unit=defaults.get("unit"),
+            barcode=defaults.get("barcode"),
+            gross_mass=defaults.get("gross_mass"),
         )
         return product, True
 

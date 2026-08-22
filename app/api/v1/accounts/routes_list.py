@@ -28,6 +28,21 @@ def get_service(session: SessionDep) -> ListSettingsService:
 
 # ========== Настройки ==========
 
+@router.post("/table-settings/{entity_key}", response_model=TableSettingsRead, status_code=status.HTTP_201_CREATED)
+async def create_table_settings(
+    entity_key: str,
+    body: TableSettingsUpdate,
+    session: SessionDep,
+    user_id: UserDep,
+) -> TableSettingsRead:
+    """Создать настройки таблицы."""
+    if user_id is None:
+        raise UnauthorizedError("Не авторизован")
+    service = get_service(session)
+    prefs = await service.save_settings(user_id, entity_key, body.prefs.model_dump())
+    return TableSettingsRead(prefs=prefs)
+
+
 @router.get("/table-settings/{entity_key}", response_model=TableSettingsRead)
 async def get_table_settings(
     entity_key: str,

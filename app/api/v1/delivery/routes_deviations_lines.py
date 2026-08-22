@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, status
+from pydantic import BaseModel
+from fastapi import HTTPException, APIRouter, Depends, status
 from sqlalchemy import select
 
 from app.api.deps import SessionDep, UserDep, require_permission
@@ -13,6 +14,35 @@ from app.infrastructure.events import event_bus
 from app.infrastructure.events.event_types import EventTypes
 
 router = APIRouter(tags=["delivery-deviations-lines"])
+
+
+class DeviationCreate(BaseModel):
+    delivery_order_id: int
+    deviation_type: str
+    quantity: int = 0
+    description: str = ""
+
+
+class DeviationUpdate(BaseModel):
+    deviation_type: str | None = None
+    quantity: int | None = None
+    description: str | None = None
+
+
+class RouteLineCreate(BaseModel):
+    route_id: int
+    delivery_order_id: int
+    order: int = 0
+    planned_time: str | None = None
+    actual_time: str | None = None
+    status: str = "pending"
+
+
+class RouteLineUpdate(BaseModel):
+    order: int | None = None
+    planned_time: str | None = None
+    actual_time: str | None = None
+    status: str | None = None
 
 
 # ========== Отклонения ==========
@@ -54,7 +84,7 @@ async def list_deviations(
     dependencies=[Depends(require_permission("create", "delivery"))],
 )
 async def create_deviation(
-    body: dict,
+    body: DeviationCreate,
     session: SessionDep,
     user_id: UserDep,
 ) -> dict:
@@ -65,7 +95,11 @@ async def create_deviation(
         description=body.get("description", ""),
     )
     session.add(deviation)
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
     return {"id": deviation.id}
 
 
@@ -102,7 +136,7 @@ async def get_deviation(deviation_id: int, session: SessionDep) -> dict:
 )
 async def update_deviation(
     deviation_id: int,
-    body: dict,
+    body: DeviationUpdate,
     session: SessionDep,
     user_id: UserDep,
 ) -> dict:
@@ -113,7 +147,11 @@ async def update_deviation(
         if field in body:
             setattr(d, field, body[field])
     d.updated_by_id = user_id
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
     return {"id": d.id}
 
 
@@ -131,7 +169,11 @@ async def delete_deviation(
     if d is None:
         raise NotFoundError("Отклонение не найдено")
     d.soft_delete(user_id)
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
 
 
 # ========== Строки маршрута ==========
@@ -175,7 +217,7 @@ async def list_route_lines(
     dependencies=[Depends(require_permission("create", "routes"))],
 )
 async def create_route_line(
-    body: dict,
+    body: RouteLineCreate,
     session: SessionDep,
     user_id: UserDep,
 ) -> dict:
@@ -188,7 +230,11 @@ async def create_route_line(
         status=body.get("status", "pending"),
     )
     session.add(rl)
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
 
     # Отправить событие о назначении маршрута
     await event_bus.emit(EventTypes.ROUTE_ASSIGNED, {
@@ -236,7 +282,7 @@ async def get_route_line(line_id: int, session: SessionDep) -> dict:
 )
 async def update_route_line(
     line_id: int,
-    body: dict,
+    body: RouteLineUpdate,
     session: SessionDep,
     user_id: UserDep,
 ) -> dict:
@@ -247,7 +293,11 @@ async def update_route_line(
         if field in body:
             setattr(rl, field, body[field])
     rl.updated_by_id = user_id
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
     return {"id": rl.id}
 
 
@@ -265,4 +315,8 @@ async def delete_route_line(
     if rl is None:
         raise NotFoundError("Строка маршрута не найдена")
     rl.soft_delete(user_id)
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")

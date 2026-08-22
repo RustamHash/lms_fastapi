@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import xml.etree.ElementTree as ET
 from datetime import datetime
 from decimal import Decimal
@@ -12,8 +13,10 @@ from app.integration.adapters.base import BaseAdapter
 class ZLNAdapter(BaseAdapter):
     """Парсинг XML-файлов Зиландии."""
 
-    def parse(self, file_path: str):
-        tree = ET.parse(file_path)
+    async def parse(self, file_path: str):
+        """Асинхронный парсинг XML через executor."""
+        loop = asyncio.get_event_loop()
+        tree = await loop.run_in_executor(None, ET.parse, file_path)
         root = tree.getroot()
 
         if root.tag == "PORDER":

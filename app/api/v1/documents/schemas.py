@@ -89,3 +89,5 @@ class DocumentDetail(BaseRead):
     # Вложенные
     warehouse: Any | None = None
     lines: list = []
+    contract: Any | None = None
+    virtual_warehouse: Any | None = None

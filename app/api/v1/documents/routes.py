@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, status
+from fastapi import HTTPException, APIRouter, Depends, status
 
 from app.api.deps import SessionDep, UserDep, require_permission
 from app.api.v1.documents import schemas
@@ -128,13 +128,39 @@ async def list_document_lines(
     return [schemas.DocumentLineRead.model_validate(r) for r in rows]
 
 
+@router.patch("/{document_id}", response_model=schemas.DocumentRead, dependencies=[Depends(require_permission("update", "documents"))])
+async def update_document(
+    document_id: int,
+    body: schemas.DocumentCreate,
+    session: SessionDep,
+    user_id: UserDep,
+) -> schemas.DocumentRead:
+    """Обновить документ."""
+    doc = await DocumentRepository(session).get_by_id(document_id)
+    if doc is None:
+        raise NotFoundError("Документ не найден")
+    for field, value in body.model_dump(exclude_unset=True).items():
+        setattr(doc, field, value)
+    doc.updated_by_id = user_id
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
+    return schemas.DocumentRead.model_validate(doc)
+
+
 @router.delete("/{document_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_permission("delete", "documents"))])
 async def delete_document(document_id: int, session: SessionDep, user_id: UserDep) -> None:
     doc = await DocumentRepository(session).get_by_id(document_id)
     if doc is None:
         raise NotFoundError("Документ не найден")
     doc.soft_delete(user_id)
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
 
 
 @router.get(
@@ -171,7 +197,11 @@ async def update_document_line(
     for field, value in body.model_dump(exclude_unset=True).items():
         setattr(line, field, value)
     line.updated_by_id = user_id
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
     return schemas.DocumentLineRead.model_validate(line)
 
 
@@ -190,7 +220,11 @@ async def delete_document_line(
     if line is None:
         raise NotFoundError("Строка документа не найдена")
     line.soft_delete(user_id)
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
 
 
 @router.patch("/{document_id}/status", response_model=schemas.DocumentRead, dependencies=[Depends(require_permission("update", "documents"))])

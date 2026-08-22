@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, status
+from fastapi import HTTPException, APIRouter, Depends, status
 from sqlalchemy import select
 
 from app.api.deps import SessionDep, UserDep, require_permission
@@ -45,7 +45,11 @@ async def create_delivery_zone(
         name=body.name,
     )
     session.add(zone)
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
     return DeliveryZoneRead.model_validate(zone)
 
 
@@ -79,7 +83,11 @@ async def update_delivery_zone(
         raise NotFoundError("Зона доставки не найдена")
     zone.name = body.name
     zone.updated_by_id = user_id
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
     return DeliveryZoneRead.model_validate(zone)
 
 
@@ -94,4 +102,8 @@ async def delete_delivery_zone(zone_id: int, session: SessionDep, user_id: UserD
     if zone is None:
         raise NotFoundError("Зона доставки не найдена")
     zone.soft_delete(user_id)
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")

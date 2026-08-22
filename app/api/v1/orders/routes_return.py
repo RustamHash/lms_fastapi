@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, status
+from fastapi import HTTPException, APIRouter, Depends, status
 
 from app.api.deps import SessionDep, UserDep, require_permission
 from app.api.v1.orders.schemas import (
@@ -30,7 +30,11 @@ async def list_return_orders(session: SessionDep,
 async def create_return_order(body: ReturnOrderCreate, session: SessionDep, user_id: UserDep) -> ReturnOrderRead:
     order = ReturnOrder(created_by_id=user_id, **body.model_dump())
     session.add(order)
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
     return ReturnOrderRead.model_validate(order)
 
 
@@ -50,7 +54,11 @@ async def update_return_order(order_id: int, body: ReturnOrderUpdate, session: S
     for field, value in body.model_dump(exclude_unset=True).items():
         setattr(order, field, value)
     order.updated_by_id = user_id
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
     return ReturnOrderRead.model_validate(order)
 
 
@@ -60,7 +68,11 @@ async def delete_return_order(order_id: int, session: SessionDep, user_id: UserD
     if order is None:
         raise NotFoundError("Возврат не найден")
     order.soft_delete(user_id)
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
 
 
 # ========== Строки ==========
@@ -87,7 +99,11 @@ async def update_return_line(line_id: int, body: ReturnOrderLineCreate, session:
     for field, value in body.model_dump(exclude_unset=True, exclude={"return_order_id"}).items():
         setattr(line, field, value)
     line.updated_by_id = user_id
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
     return ReturnOrderLineRead.model_validate(line)
 
 
@@ -97,12 +113,20 @@ async def delete_return_line(line_id: int, session: SessionDep, user_id: UserDep
     if line is None:
         raise NotFoundError("Строка не найдена")
     line.soft_delete(user_id)
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
 
 
 @router.post("/{order_id}/lines", response_model=ReturnOrderLineRead, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_permission("create", "orders"))])
 async def create_return_line(order_id: int, body: ReturnOrderLineCreate, session: SessionDep, user_id: UserDep) -> ReturnOrderLineRead:
     line = ReturnOrderLine(return_order_id=order_id, **body.model_dump(exclude={"return_order_id"}))
     session.add(line)
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
     return ReturnOrderLineRead.model_validate(line)

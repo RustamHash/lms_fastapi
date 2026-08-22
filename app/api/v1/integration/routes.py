@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, status
+from fastapi import HTTPException, APIRouter, Depends, status
 from sqlalchemy import select
 
 from app.api.deps import SessionDep, UserDep, require_permission
@@ -48,7 +48,11 @@ async def create_profile(
         **body.model_dump(),
     )
     session.add(profile)
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
     return schemas.IntegrationProfileRead.model_validate(profile)
 
 
@@ -65,7 +69,11 @@ async def update_profile(
     for field, value in body.model_dump(exclude_unset=True).items():
         setattr(profile, field, value)
     profile.updated_by_id = user_id
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
     return schemas.IntegrationProfileRead.model_validate(profile)
 
 
@@ -75,7 +83,11 @@ async def delete_profile(profile_id: int, session: SessionDep, user_id: UserDep)
     if profile is None:
         raise NotFoundError("Профиль не найден")
     profile.soft_delete(user_id)
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
 
 
 # ========== Логи ==========

@@ -17,23 +17,24 @@ const MENU_GROUPS: MenuGroup[] = [
     to: '/',
   },
   {
+    label: 'Склад',
+    to: '/stock',
+    items: [
+      { to: '/stock', label: 'Остатки' },
+      { to: '/tasks', label: 'Задания' },
+      { to: '/topology', label: 'Топология' },
+    ],
+  },
+  {
     label: 'Справочники',
     to: '/references',
     items: [
       { to: '/reference/addresses', label: 'Адреса' },
+      { to: '/reference/legal-entities', label: 'Юрлица' },
       { to: '/reference/clients', label: 'Клиенты' },
       { to: '/reference/products', label: 'Товары' },
       { to: '/reference/contracts', label: 'Договоры' },
-    ],
-  },
-  {
-    label: 'Склад',
-    to: '/stock',
-    items: [
-      { to: '/reference/products', label: 'Товары' },
-      { to: '/stock', label: 'Остатки' },
-      { to: '/tasks', label: 'Задания' },
-      { to: '/topology/locations', label: 'Ячейки' },
+      { to: '/reference/drivers', label: 'Водители' },
     ],
   },
   {
@@ -54,24 +55,21 @@ const MENU_GROUPS: MenuGroup[] = [
     to: '/delivery',
     items: [
       { to: '/delivery/orders', label: 'Заказы' },
-      { to: '/reference/drivers', label: 'Водители' },
-      { to: '/reference/routes', label: 'Маршруты' },
-      { to: '/reference/vehicles', label: 'Транспорт' },
+      { to: '/route-lines', label: 'Строки маршрутов' },
+      { to: '/deviations', label: 'Отклонения' },
     ],
   },
   {
-    label: 'Система',
-    to: '/users',
+    label: 'Отчёты',
+    to: '/reports',
     items: [
-      { to: '/notifications', label: 'Уведомления' },
-      { to: '/users', label: 'Пользователи' },
-      { to: '/roles', label: 'Роли' },
-      { to: '/audit', label: 'Аудит' },
+      { to: '/reports/stock', label: 'Остатки' },
+      { to: '/reports/movements', label: 'Движения' },
     ],
   },
   {
     label: 'Интеграции',
-    to: '/integrations/profiles',
+    to: '/integrations',
     items: [
       { to: '/integrations/profiles', label: 'Профили' },
       { to: '/integrations/logs', label: 'Логи' },
@@ -80,6 +78,17 @@ const MENU_GROUPS: MenuGroup[] = [
   {
     label: 'Файлы',
     to: '/files-hub',
+  },
+  {
+    label: 'Система',
+    to: '/system',
+    items: [
+      { to: '/users', label: 'Пользователи' },
+      { to: '/roles', label: 'Роли' },
+      { to: '/audit', label: 'Аудит' },
+      { to: '/notifications', label: 'Уведомления' },
+      { to: '/notification-rules', label: 'Правила' },
+    ],
   },
 ]
 

@@ -2,13 +2,22 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, status
+from pydantic import BaseModel
+from fastapi import HTTPException, APIRouter, Depends, status
 
 from app.api.deps import SessionDep, UserDep, require_permission
 from app.api.v1.notifications import schemas
 from app.core.exceptions import NotFoundError, UnauthorizedError
 from app.notifications.services import NotificationService
 from app.notifications.repository import NotificationRepository
+
+class NotificationUpdate(BaseModel):
+    title: str | None = None
+    text: str | None = None
+    notification_type: str | None = None
+    status: str | None = None
+    link: str | None = None
+
 
 router = APIRouter(prefix="/notifications", tags=["notifications"])
 
@@ -53,6 +62,33 @@ async def create_notification(
     return schemas.NotificationRead.model_validate(notification)
 
 
+@router.patch(
+    "/{notification_id}",
+    response_model=schemas.NotificationRead,
+    dependencies=[Depends(require_permission("update", "notifications"))],
+)
+async def update_notification(
+    notification_id: int,
+    body: NotificationUpdate,
+    session: SessionDep,
+    user_id: UserDep,
+) -> schemas.NotificationRead:
+    """Обновить уведомление."""
+    notification = await NotificationRepository(session).get_by_id(notification_id)
+    if notification is None:
+        raise NotFoundError("Уведомление не найдено")
+    for field in ["title", "text", "notification_type", "status", "link"]:
+        for field, value in body.model_dump(exclude_unset=True).items():
+            setattr(notification, field, value)
+    notification.updated_by_id = user_id
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
+    return schemas.NotificationRead.model_validate(notification)
+
+
 @router.get(
     "/{notification_id}",
     response_model=schemas.NotificationRead,
@@ -82,7 +118,11 @@ async def delete_notification(
     if notification is None:
         raise NotFoundError("Уведомление не найдено")
     notification.soft_delete(user_id)
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
 
 
 @router.post("/{notification_id}/read", response_model=schemas.NotificationRead, dependencies=[Depends(require_permission("update", "notifications"))])

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, status
+from fastapi import HTTPException, APIRouter, Depends, status
 from sqlalchemy import select
 
 from app.api.deps import SessionDep, UserDep, require_permission
@@ -96,7 +96,11 @@ async def list_inbound_orders(session: SessionDep,
 async def create_inbound_order(body: InboundOrderCreate, session: SessionDep, user_id: UserDep) -> InboundOrderRead:
     order = InboundOrder(created_by_id=user_id, **body.model_dump())
     session.add(order)
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
     return InboundOrderRead.model_validate(order)
 
 
@@ -116,7 +120,11 @@ async def update_inbound_order(order_id: int, body: InboundOrderUpdate, session:
     for field, value in body.model_dump(exclude_unset=True).items():
         setattr(order, field, value)
     order.updated_by_id = user_id
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
     return InboundOrderRead.model_validate(order)
 
 
@@ -126,7 +134,11 @@ async def delete_inbound_order(order_id: int, session: SessionDep, user_id: User
     if order is None:
         raise NotFoundError("Заявка не найдена")
     order.soft_delete(user_id)
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
 
 
 # ========== Строки ==========
@@ -195,7 +207,11 @@ async def update_inbound_line(line_id: int, body: InboundOrderLineCreate, sessio
     for field, value in body.model_dump(exclude_unset=True, exclude={"order_id"}).items():
         setattr(line, field, value)
     line.updated_by_id = user_id
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
     return InboundOrderLineRead.model_validate(line)
 
 
@@ -205,12 +221,20 @@ async def delete_inbound_line(line_id: int, session: SessionDep, user_id: UserDe
     if line is None:
         raise NotFoundError("Строка не найдена")
     line.soft_delete(user_id)
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
 
 
 @router.post("/{order_id}/lines", response_model=InboundOrderLineRead, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_permission("create", "orders"))])
 async def create_inbound_line(order_id: int, body: InboundOrderLineCreate, session: SessionDep, user_id: UserDep) -> InboundOrderLineRead:
     line = InboundOrderLine(order_id=order_id, **body.model_dump(exclude={"order_id"}))
     session.add(line)
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
     return InboundOrderLineRead.model_validate(line)

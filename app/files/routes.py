@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import os
 from uuid import uuid4
+import aiofiles
 
-from fastapi import APIRouter, Depends, File, UploadFile, status
+from fastapi import HTTPException, APIRouter, Depends, File, UploadFile, status
 from fastapi.responses import FileResponse
 from sqlalchemy import select
 
@@ -32,8 +33,8 @@ async def upload_file(
     filename = f"{uuid4().hex}_{file.filename}"
     file_path = os.path.join(UPLOAD_DIR, filename)
 
-    with open(file_path, "wb") as f:
-        f.write(content)
+    async with aiofiles.open(file_path, "wb") as f:
+        await f.write(content)
 
     file_model = FileModel(
         file_path=file_path,
@@ -44,8 +45,49 @@ async def upload_file(
         uploaded_by_id=user_id,
     )
     session.add(file_model)
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
 
+    return schemas.FileRead.model_validate(file_model)
+
+
+@router.post("", response_model=schemas.FileRead, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_permission("create", "files"))])
+async def create_file(
+    file: UploadFile = File(...),
+    file_type: str = "document_scan",
+    session: SessionDep = None,
+    user_id: UserDep = None,
+) -> schemas.FileRead:
+    """Загрузить файл."""
+    import os
+    from uuid import uuid4
+    
+    os.makedirs(UPLOAD_DIR, exist_ok=True)
+    content_data = await file.read()
+    filename = f"{uuid4().hex}_{file.filename}"
+    file_path = os.path.join(UPLOAD_DIR, filename)
+    
+    with open(file_path, "wb") as f:
+        f.write(content_data)
+    
+    file_model = FileModel(
+        file_path=file_path,
+        file_type=file_type,
+        original_name=file.filename,
+        size=len(content_data),
+        mime_type=file.content_type or "",
+        uploaded_by_id=user_id,
+    )
+    session.add(file_model)
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
+    
     return schemas.FileRead.model_validate(file_model)
 
 
@@ -98,7 +140,11 @@ async def update_file(
     if file_type:
         file_model.file_type = file_type
     file_model.updated_by_id = user_id
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
     return schemas.FileRead.model_validate(file_model)
 
 
@@ -108,4 +154,8 @@ async def delete_file(file_id: int, session: SessionDep, user_id: UserDep) -> No
     if file_model is None:
         raise NotFoundError("Файл не найден")
     file_model.soft_delete(user_id)
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")

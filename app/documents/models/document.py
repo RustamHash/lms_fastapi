@@ -34,7 +34,7 @@ class Document(Base):
     is_delivery: Mapped[bool] = mapped_column(Boolean, default=False, comment="Признак доставки")
     is_edo: Mapped[bool] = mapped_column(Boolean, default=False, comment="Признак ЭДО")
 
-    lines: Mapped[list["DocumentLine"]] = relationship(back_populates="document")
+    lines: Mapped[list["DocumentLine"]] = relationship(back_populates="document", cascade="all, delete-orphan")
 
 
 class DocumentLine(Base):

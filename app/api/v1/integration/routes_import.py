@@ -37,12 +37,6 @@ class ImportRequest(BaseModel):
 
 router = APIRouter(prefix="/integrations", tags=["integrations"])
 
-# Флаг: импорт выполняется
-import_in_progress = False
-
-# Информация о текущем импорте
-current_import_info: dict = {}
-
 
 @router.post(
     "/import",
@@ -64,20 +58,6 @@ async def start_import(
 
     logger.info("ПОЛУЧЕН ЗАПРОС: document_type=%s, user_id=%s", document_type, user_id)
 
-    # Проверить, не выполняется ли уже импорт
-    if import_in_progress:
-        return {
-            "error": "Импорт уже выполняется",
-            "status": "busy",
-            "user_id": current_import_info.get("user_id"),
-            "username": current_import_info.get("username"),
-            "ip": current_import_info.get("ip"),
-            "started_at": current_import_info.get("started_at"),
-        }
-
-    # Сразу ставим флаг
-    import_in_progress = True
-
     # Получить реальный IP клиента
     client_ip = request.client.host if request.client else "unknown"
     forwarded_ip = request.headers.get("x-forwarded-for")
@@ -86,42 +66,33 @@ async def start_import(
     # Общий task_id для всей задачи
     task_id = str(uuid4())
 
-    asyncio.create_task(
-        _run_import_with_flag(task_id, user_id or 1, document_type, real_ip)
+    # Создаём запись в логе СРАЗУ, чтобы фронтенд мог получить статус
+    log = IntegrationLog(
+        task_id=task_id,
+        status="starting",
+        document_type=document_type,
+        created_by_id=user_id,
     )
+    session.add(log)
+    await session.commit()
 
-    return {"task_id": task_id, "status": "starting"}
+    # Отправляем задачу в Celery
+    from app.tasks import run_import_task
+
+    celery_task = run_import_task.delay(task_id, user_id or 1, document_type)
+
+    return {
+        "task_id": task_id,
+        "celery_task_id": celery_task.id,
+        "status": "queued",
+    }
 
 
 async def _run_import_with_flag(
     task_id: str, user_id: int, document_type: str | None, ip: str = "unknown"
 ) -> None:
-    """Запустить импорт с флагом."""
-    global import_in_progress
-
-    try:
-        # Сохранить информацию о текущем импорте
-        from app.accounts.repository import UserRepository
-        from app.core.database import async_session_factory
-
-        async with async_session_factory() as session:
-            user_repo = UserRepository(session)
-            user = await user_repo.get_by_id(user_id)
-            current_import_info.update(
-                {
-                    "user_id": user_id,
-                    "username": user.username if user else "unknown",
-                    "ip": ip,
-                    "started_at": datetime.now(timezone.utc).isoformat(),
-                }
-            )
-
-        await _run_import_background(task_id, user_id, document_type)
-
-    finally:
-        # Снять флаг и очистить информацию
-        import_in_progress = False
-        current_import_info.clear()
+    """Запустить импорт."""
+    await _run_import_background(task_id, user_id, document_type)
 
 
 async def _log_message(
@@ -143,15 +114,35 @@ async def _log_error(session, log: IntegrationLog, error: str) -> None:
 async def _run_import_background(
     task_id: str, user_id: int, document_type: str | None
 ) -> None:
-    """Фоновый импорт: одна запись лога на каждый профиль."""
+    """Фоновый импорт."""
     set_current_user_id(user_id)
 
     from app.core.database import async_session_factory
 
-    # Используем отдельную сессию с правильной обработкой транзакций
     session = async_session_factory()
-    
+
+    logger.info("Начало импорта: task_id=%s, type=%s", task_id, document_type)
+
     try:
+        # Найти или создать лог
+        log = await session.scalar(
+            select(IntegrationLog).where(IntegrationLog.task_id == task_id)
+        )
+
+        if log is None:
+            log = IntegrationLog(
+                task_id=task_id,
+                status="processing",
+                document_type=document_type,
+                created_by_id=user_id,
+            )
+            session.add(log)
+            await session.commit()
+
+        log.status = "processing"
+        await session.commit()
+        logger.info("Лог обновлён: processing")
+
         # 1. Поиск активных профилей
         profiles = list(
             await session.scalars(
@@ -160,257 +151,148 @@ async def _run_import_background(
                 )
             )
         )
+        logger.info("Найдено профилей: %d", len(profiles))
 
         if not profiles:
-            log = IntegrationLog(
-                task_id=task_id,
-                status="failed",
-                document_type=document_type,
-                errors=["Нет активных профилей интеграции"],
-            )
-            session.add(log)
+            log.status = "failed"
+            log.errors = ["Нет активных профилей интеграции"]
             await session.commit()
             await session.close()
             return
 
-            # 2. Обработка каждого профиля отдельно
-            adapter = ZLNAdapter()
-            integration = IntegrationService(session)
+        # 2. Обработка каждого профиля
+        adapter = ZLNAdapter()
+        integration = IntegrationService(session)
 
-            for profile in profiles:
-                log = IntegrationLog(
-                    task_id=task_id,
-                    profile_id=profile.id,
-                    status="processing",
-                    document_type=document_type,
-                )
-                session.add(log)
+        for profile in profiles:
+            logger.info("Обработка профиля: %s", profile.name)
+
+            ftp_config = profile.config.get("ftp", {})
+
+            if not ftp_config:
+                log.errors = (log.errors or []) + [
+                    f"Профиль {profile.name}: нет FTP-конфигурации"
+                ]
+                log.status = "failed"
                 await session.commit()
+                continue
 
-                ftp_config = profile.config.get("ftp", {})
-                if not ftp_config:
-                    log.errors = (log.errors or []) + [
-                        f"Профиль {profile.name}: нет FTP-конфигурации"
-                    ]
+            ftp = FTPService(
+                host=ftp_config["host"],
+                username=ftp_config["username"],
+                password=ftp_config["password"],
+            )
+
+            try:
+                logger.info("Подключение к FTP: %s", ftp_config["host"])
+                await ftp.connect()
+                logger.info("FTP подключен")
+
+                out_path = ftp_config.get("out_path", "/out")
+                all_files = await ftp.list_files(out_path)
+                logger.info("Файлов на FTP: %d", len(all_files))
+
+                # Фильтруем по типу документа
+                if document_type == "order":
+                    files = [f for f in all_files if f.startswith("order_")]
+                elif document_type == "porder":
+                    files = [f for f in all_files if f.startswith("porder_")]
+                else:
+                    files = all_files
+
+                logger.info("Отфильтровано файлов: %d", len(files))
+
+                if not files:
+                    message = (
+                        f"Нет файлов типа '{document_type}_*' на FTP. "
+                        f"Всего файлов: {len(all_files)}"
+                    )
+                    logger.warning(message)
                     log.status = "failed"
+                    log.errors = (log.errors or []) + [message]
+                    log.messages = (log.messages or []) + [message]
+                    log.current_step = "Файлы не найдены"
                     await session.commit()
                     continue
 
-                await _log_message(
-                    session,
-                    log,
-                    f"Подключение к профилю: {profile.name} ({ftp_config.get('host', '')})",
-                    "Подключение",
-                )
+                log.total_rows = len(files)
+                log.messages = (log.messages or []) + [f"Найдено файлов: {len(files)}"]
+                log.current_step = "Обработка файлов"
+                await session.commit()
 
-                ftp = FTPService(
-                    host=ftp_config["host"],
-                    username=ftp_config["username"],
-                    password=ftp_config["password"],
-                )
+                # Обработка каждого файла
+                for filename in files:
+                    logger.info("Обработка файла: %s", filename)
 
-                try:
-                    ftp.connect()
-                    await _log_message(
-                        session, log, f"Подключено: {ftp_config['host']}", "Подключено"
-                    )
-
-                    out_path = ftp_config.get("out_path", "/out")
-                    logger.info("ФИЛЬТРАЦИЯ: document_type=%s", document_type)
-                    all_files = ftp.list_files(out_path)
-
-                    # Фильтруем по имени файла
-                    if document_type == "order":
-                        files = [f for f in all_files if f.startswith("order_")]
-                    elif document_type == "porder":
-                        files = [f for f in all_files if f.startswith("porder_")]
-                    else:
-                        files = all_files
-
-                    await _log_message(
-                        session,
-                        log,
-                        f"Найдено файлов: {len(files)} (всего на FTP: {len(all_files)})",
-                        "Файлы найдены",
-                    )
-
-                    log.total_rows = len(files)
-                    await session.commit()
+                    remote_path = f"{out_path}/{filename}"
 
                     with tempfile.TemporaryDirectory() as tmp_dir:
-                        for filename in files:
-                            log.order_number = filename
-                            await _log_message(
-                                session,
-                                log,
-                                f"Обработка файла: {filename}",
-                                "Обработка файла",
-                            )
+                        local_path = await ftp.download(remote_path, tmp_dir)
+                        universal_doc, parse_errors = await adapter.parse(local_path)
 
-                            remote_path = f"{out_path}/{filename}"
-                            local_path = ftp.download(remote_path, tmp_dir)
-
-                            universal_doc, parse_errors = adapter.parse(local_path)
-                            if parse_errors:
-                                log.error_rows += 1
-                                for err in parse_errors:
-                                    await _log_error(
-                                        session, log, f"Файл {filename}: {err}"
-                                    )
-                                continue
-
-                            doc_type = universal_doc.get("document_type")
-                            doc_number = universal_doc.get("document_number")
-                            log.order_number = doc_number
-
-                            if document_type and doc_type != document_type:
-                                continue
-
-                            # Проверка дубликата
-                            from app.orders.models import InboundOrder, OutboundOrder
-
-                            existing = None
-                            if doc_type == "porder":
-                                existing = await session.scalar(
-                                    select(InboundOrder).where(
-                                        InboundOrder.depositor_id
-                                        == profile.depositor_id,
-                                        InboundOrder.number == doc_number,
-                                    )
-                                )
-                            elif doc_type == "order":
-                                existing = await session.scalar(
-                                    select(OutboundOrder).where(
-                                        OutboundOrder.depositor_id
-                                        == profile.depositor_id,
-                                        OutboundOrder.number == doc_number,
-                                    )
-                                )
-
-                            if existing:
-                                log.error_rows += 1
-                                log.processed_rows += 1
-                                await _log_error(
-                                    session,
-                                    log,
-                                    f"Файл {filename}: Заказ {doc_number} уже существует",
-                                )
-                                await session.commit()
-                                continue
-
-                            # Лог по товарам
-                            for item in universal_doc.get("items", []):
-                                item_id = item.get("external_id")
-                                await _log_message(
-                                    session,
-                                    log,
-                                    f"Поиск товара: {item_id}",
-                                    f"Поиск товара: {item_id}",
-                                )
-
-                            # Лог по клиенту/поставщику
-                            if doc_type == "order":
-                                customer_code = universal_doc.get("customer_code", "")
-                                await _log_message(
-                                    session,
-                                    log,
-                                    f"Поиск клиента: {customer_code}",
-                                    f"Поиск клиента: {customer_code}",
-                                )
-                            elif doc_type == "porder":
-                                vendor_code = universal_doc.get("vendor_code", "")
-                                await _log_message(
-                                    session,
-                                    log,
-                                    f"Поиск поставщика: {vendor_code}",
-                                    f"Поиск поставщика: {vendor_code}",
-                                )
-
-                            await _log_message(
-                                session,
-                                log,
-                                f"Создание заказа: {doc_number}",
-                                f"Создание заказа: {doc_number}",
-                            )
-
-                            result, imp_errors = await integration.process_document(
-                                universal_doc=universal_doc,
-                                depositor_id=profile.depositor_id,
-                                user_id=user_id,
-                            )
-
-                            log.processed_rows += 1
-                            if imp_errors:
-                                log.error_rows += 1
-                                for err in imp_errors:
-                                    await _log_error(
-                                        session, log, f"Файл {filename}: {err}"
-                                    )
-                            elif result:
-                                log.success_rows += 1
-                                await _log_message(
-                                    session,
-                                    log,
-                                    f"Заказ {doc_number} создан успешно",
-                                    f"Заказ создан: {doc_number}",
-                                )
-                                try:
-                                    ftp.delete(remote_path)
-                                    await _log_message(
-                                        session, log, f"Файл {filename} удалён с FTP"
-                                    )
-                                except Exception:
-                                    pass
-
+                        if parse_errors:
+                            log.error_rows += 1
+                            for err in parse_errors:
+                                log.errors = (log.errors or []) + [err]
                             await session.commit()
+                            continue
 
-                    log.status = "completed"
-                    log.current_step = "Импорт завершен"
-                    await event_bus.emit(
-                        EventTypes.IMPORT_COMPLETED,
-                        {
-                            "_event_type": EventTypes.IMPORT_COMPLETED,
-                            "success_rows": log.success_rows,
-                            "error_rows": log.error_rows,
-                        },
-                    )
-                    await _log_message(
-                        session,
-                        log,
-                        f"Импорт по профилю {profile.name} завершен. Успешно: {log.success_rows}, ошибок: {log.error_rows}",
-                        "Завершено",
-                    )
+                        doc_number = universal_doc.get("document_number")
 
-                except Exception as e:
-                    log.status = "failed"
-                    await _log_error(session, log, f"Критическая ошибка: {e}")
-                    await event_bus.emit(
-                        EventTypes.IMPORT_FAILED,
-                        {
-                            "_event_type": EventTypes.IMPORT_FAILED,
-                            "error": str(e),
-                        },
-                    )
-                finally:
-                    ftp.disconnect()
+                        result, imp_errors = await integration.process_document(
+                            universal_doc=universal_doc,
+                            depositor_id=profile.depositor_id,
+                            user_id=user_id,
+                        )
+
+                        log.processed_rows += 1
+
+                        if imp_errors:
+                            log.error_rows += 1
+                            for err in imp_errors:
+                                log.errors = (log.errors or []) + [err]
+                        else:
+                            log.success_rows += 1
+                            log.messages = (log.messages or []) + [
+                                f"Заказ {doc_number} создан"
+                            ]
+
+                        await session.commit()
+
+                log.status = "completed"
+                log.current_step = "Импорт завершён"
+                log.messages = (log.messages or []) + ["Импорт завершён"]
+                await session.commit()
+
+                await event_bus.emit(
+                    EventTypes.IMPORT_COMPLETED,
+                    {
+                        "_event_type": EventTypes.IMPORT_COMPLETED,
+                        "success_rows": log.success_rows,
+                        "error_rows": log.error_rows,
+                    },
+                )
+
+            except Exception as e:
+                logger.error("Ошибка импорта: %s", e, exc_info=True)
+                log.status = "failed"
+                log.errors = (log.errors or []) + [str(e)]
+                await session.commit()
+            finally:
+                try:
+                    await ftp.disconnect()
+                except Exception:
+                    pass
+
+        await session.close()
 
     except Exception as e:
-        logger.error("Критическая ошибка импорта: %s", e, exc_info=True)
+        logger.error("Критическая ошибка: %s", e, exc_info=True)
         try:
-            log = IntegrationLog(
-                task_id=task_id,
-                status="failed",
-                document_type=document_type,
-                errors=[str(e)],
-            )
-            session.add(log)
-            await session.commit()
-        except Exception as log_error:
-            logger.error("Не удалось записать лог ошибки: %s", log_error)
-        finally:
+            await session.rollback()
             await session.close()
-    else:
-        await session.close()
+        except Exception:
+            pass
 
 
 @router.get(

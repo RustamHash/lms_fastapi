@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, status
+from fastapi import HTTPException, APIRouter, Depends, status
 from sqlalchemy import select
 
 from app.api.deps import SessionDep, UserDep, require_permission
@@ -22,10 +22,20 @@ router = APIRouter(prefix="/delivery", tags=["delivery"])
 
 
 @router.get("/orders/list", response_model=list[schemas.DeliveryOrderList], dependencies=[Depends(require_permission("view", "delivery"))])
-async def list_delivery_orders_for_table(session: SessionDep,
-) -> list[schemas.DeliveryOrderList]:
+async def list_delivery_orders_for_table(session: SessionDep) -> list[schemas.DeliveryOrderList]:
     """Плоский список для таблицы."""
-    rows = await DeliveryOrderRepository(session).list_all()
+    from sqlalchemy.orm import selectinload
+    
+    stmt = (
+        select(DeliveryOrder)
+        .options(
+            selectinload(DeliveryOrder.outbound_order),
+            selectinload(DeliveryOrder.route),
+            selectinload(DeliveryOrder.route).selectinload(Route.driver),
+            selectinload(DeliveryOrder.route).selectinload(Route.vehicle),
+        )
+    )
+    rows = list(await session.scalars(stmt))
 
     result = []
     for r in rows:
@@ -49,10 +59,10 @@ async def list_delivery_orders_for_table(session: SessionDep,
             outbound_order_number=r.outbound_order.number if r.outbound_order else None,
             customer_name=r.outbound_order.customer_name if r.outbound_order else None,
             delivery_address=r.outbound_order.delivery_address_name if r.outbound_order else None,
-            route_number=None,
-            driver_name=None,
-            driver_phone=None,
-            vehicle_number=None,
+            route_number=r.route.number if r.route else None,
+            driver_name=r.route.driver.name if r.route and r.route.driver else None,
+            driver_phone=r.route.driver.phone if r.route and r.route.driver else None,
+            vehicle_number=r.route.vehicle.number if r.route and r.route.vehicle else None,
         ))
     return result
 
@@ -99,6 +109,28 @@ async def get_order(order_id: int, session: SessionDep) -> schemas.DeliveryOrder
     return schemas.DeliveryOrderRead.model_validate(order)
 
 
+@router.patch("/orders/{order_id}", response_model=schemas.DeliveryOrderRead, dependencies=[Depends(require_permission("update", "delivery"))])
+async def update_delivery_order(
+    order_id: int,
+    body: schemas.DeliveryOrderCreate,
+    session: SessionDep,
+    user_id: UserDep,
+) -> schemas.DeliveryOrderRead:
+    """Обновить заказ на доставку."""
+    order = await DeliveryOrderRepository(session).get_by_id(order_id)
+    if order is None:
+        raise NotFoundError("Заказ не найден")
+    for field, value in body.model_dump(exclude_unset=True).items():
+        setattr(order, field, value)
+    order.updated_by_id = user_id
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
+    return schemas.DeliveryOrderRead.model_validate(order)
+
+
 @router.delete(
     "/orders/{order_id}",
     status_code=status.HTTP_204_NO_CONTENT,
@@ -109,7 +141,11 @@ async def delete_order(order_id: int, session: SessionDep, user_id: UserDep) -> 
     if order is None:
         raise NotFoundError("Заказ не найден")
     order.soft_delete(user_id)
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
 
 
 @router.patch("/orders/{order_id}/status", response_model=schemas.DeliveryOrderRead, dependencies=[Depends(require_permission("update", "delivery"))])
@@ -153,7 +189,11 @@ async def create_driver(
         **body.model_dump(),
     )
     session.add(driver)
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
     return schemas.DriverRead.model_validate(driver)
 
 
@@ -178,7 +218,11 @@ async def update_driver(
     for field, value in body.model_dump(exclude_unset=True).items():
         setattr(driver, field, value)
     driver.updated_by_id = user_id
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
     return schemas.DriverRead.model_validate(driver)
 
 
@@ -188,7 +232,11 @@ async def delete_driver(driver_id: int, session: SessionDep, user_id: UserDep) -
     if driver is None:
         raise NotFoundError("Водитель не найден")
     driver.soft_delete(user_id)
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
 
 
 # ========== Автомобили ==========
@@ -214,7 +262,11 @@ async def create_vehicle(
         **body.model_dump(),
     )
     session.add(vehicle)
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
     return schemas.VehicleRead.model_validate(vehicle)
 
 
@@ -239,7 +291,11 @@ async def update_vehicle(
     for field, value in body.model_dump(exclude_unset=True).items():
         setattr(vehicle, field, value)
     vehicle.updated_by_id = user_id
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
     return schemas.VehicleRead.model_validate(vehicle)
 
 
@@ -251,7 +307,11 @@ async def delete_vehicle(
     if vehicle is None:
         raise NotFoundError("Автомобиль не найден")
     vehicle.soft_delete(user_id)
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
 
 
 # ========== Маршруты ==========
@@ -277,7 +337,11 @@ async def create_route(
         **body.model_dump(),
     )
     session.add(route)
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
     return schemas.RouteRead.model_validate(route)
 
 
@@ -302,7 +366,11 @@ async def update_route(
     for field, value in body.model_dump(exclude_unset=True).items():
         setattr(route, field, value)
     route.updated_by_id = user_id
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
     return schemas.RouteRead.model_validate(route)
 
 
@@ -312,4 +380,8 @@ async def delete_route(route_id: int, session: SessionDep, user_id: UserDep) -> 
     if route is None:
         raise NotFoundError("Маршрут не найден")
     route.soft_delete(user_id)
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")

@@ -12,6 +12,8 @@ type Props = {
   onColResizeDoubleClick: (cid: string, e: ReactMouseEvent) => void
   dragColPreview: { colId: string; widthPx: number } | null
   colDragRef: React.MutableRefObject<{ colId: string; startX: number; startW: number; lastW: number } | null>
+  allSelected: boolean
+  onToggleAll: (checked: boolean) => void
 }
 
 function TableHeaderInner({
@@ -24,6 +26,8 @@ function TableHeaderInner({
   onColResizePointerDown,
   onColResizeDoubleClick,
   dragColPreview,
+  allSelected,
+  onToggleAll,
 }: Props) {
   function colWidthPx(cid: string): number {
     if (dragColPreview?.colId === cid) return dragColPreview.widthPx
@@ -41,7 +45,12 @@ function TableHeaderInner({
       <thead>
         <tr className="list-table__head-row">
           <th className="list-table__cb">
-            <input type="checkbox" aria-label="Выбрать все на странице" />
+            <input
+              type="checkbox"
+              checked={allSelected}
+              onChange={(e) => onToggleAll(e.target.checked)}
+              aria-label="Выбрать все на странице"
+            />
           </th>
           {visibleColumnIds.map((cid) => {
             const label = columnLabel(cid)

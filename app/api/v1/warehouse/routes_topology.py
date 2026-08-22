@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, status
+from fastapi import HTTPException, APIRouter, Depends, status
 from sqlalchemy import select
 
 from app.api.deps import SessionDep, UserDep, require_permission
@@ -43,7 +43,11 @@ async def list_warehouses(session: SessionDep) -> list[WarehouseRead]:
 async def create_warehouse(body: WarehouseCreate, session: SessionDep, user_id: UserDep) -> WarehouseRead:
     wh = Warehouse(created_by_id=user_id, **body.model_dump())
     session.add(wh)
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
     return WarehouseRead.model_validate(wh)
 
 
@@ -63,7 +67,11 @@ async def update_warehouse(warehouse_id: int, body: WarehouseCreate, session: Se
     for field, value in body.model_dump(exclude_unset=True).items():
         setattr(wh, field, value)
     wh.updated_by_id = user_id
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
     return WarehouseRead.model_validate(wh)
 
 
@@ -73,7 +81,11 @@ async def delete_warehouse(warehouse_id: int, session: SessionDep, user_id: User
     if wh is None:
         raise NotFoundError("Склад не найден")
     wh.soft_delete(user_id)
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
 
 
 # ========== Виртуальные склады ==========
@@ -88,7 +100,11 @@ async def list_virtual_warehouses(session: SessionDep) -> list[VirtualWarehouseR
 async def create_virtual_warehouse(body: VirtualWarehouseCreate, session: SessionDep, user_id: UserDep) -> VirtualWarehouseRead:
     vw = VirtualWarehouse(created_by_id=user_id, **body.model_dump())
     session.add(vw)
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
     return VirtualWarehouseRead.model_validate(vw)
 
 
@@ -108,7 +124,11 @@ async def update_virtual_warehouse(vw_id: int, body: VirtualWarehouseCreate, ses
     for field, value in body.model_dump(exclude_unset=True).items():
         setattr(vw, field, value)
     vw.updated_by_id = user_id
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
     return VirtualWarehouseRead.model_validate(vw)
 
 
@@ -118,7 +138,11 @@ async def delete_virtual_warehouse(vw_id: int, session: SessionDep, user_id: Use
     if vw is None:
         raise NotFoundError("Виртуальный склад не найден")
     vw.soft_delete(user_id)
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
 
 
 # ========== Зоны ==========
@@ -133,7 +157,11 @@ async def list_zones(session: SessionDep) -> list[ZoneRead]:
 async def create_zone(body: ZoneCreate, session: SessionDep, user_id: UserDep) -> ZoneRead:
     zone = Zone(created_by_id=user_id, **body.model_dump())
     session.add(zone)
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
     return ZoneRead.model_validate(zone)
 
 
@@ -153,7 +181,11 @@ async def update_zone(zone_id: int, body: ZoneCreate, session: SessionDep, user_
     for field, value in body.model_dump(exclude_unset=True).items():
         setattr(zone, field, value)
     zone.updated_by_id = user_id
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
     return ZoneRead.model_validate(zone)
 
 
@@ -163,7 +195,11 @@ async def delete_zone(zone_id: int, session: SessionDep, user_id: UserDep) -> No
     if zone is None:
         raise NotFoundError("Зона не найдена")
     zone.soft_delete(user_id)
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
 
 
 # ========== Ряды ==========
@@ -178,7 +214,11 @@ async def list_rows(session: SessionDep) -> list[RowRead]:
 async def create_row(body: RowCreate, session: SessionDep, user_id: UserDep) -> RowRead:
     row = Row(created_by_id=user_id, **body.model_dump())
     session.add(row)
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
     return RowRead.model_validate(row)
 
 
@@ -198,7 +238,11 @@ async def update_row(row_id: int, body: RowCreate, session: SessionDep, user_id:
     for field, value in body.model_dump(exclude_unset=True).items():
         setattr(row, field, value)
     row.updated_by_id = user_id
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
     return RowRead.model_validate(row)
 
 
@@ -208,7 +252,11 @@ async def delete_row(row_id: int, session: SessionDep, user_id: UserDep) -> None
     if row is None:
         raise NotFoundError("Ряд не найден")
     row.soft_delete(user_id)
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
 
 
 # ========== Ячейки ==========
@@ -223,7 +271,11 @@ async def list_locations(session: SessionDep) -> list[LocationRead]:
 async def create_location(body: LocationCreate, session: SessionDep, user_id: UserDep) -> LocationRead:
     loc = Location(created_by_id=user_id, **body.model_dump())
     session.add(loc)
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
     return LocationRead.model_validate(loc)
 
 
@@ -243,7 +295,11 @@ async def update_location(location_id: int, body: LocationCreate, session: Sessi
     for field, value in body.model_dump(exclude_unset=True).items():
         setattr(loc, field, value)
     loc.updated_by_id = user_id
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
     return LocationRead.model_validate(loc)
 
 
@@ -253,4 +309,8 @@ async def delete_location(location_id: int, session: SessionDep, user_id: UserDe
     if loc is None:
         raise NotFoundError("Ячейка не найдена")
     loc.soft_delete(user_id)
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")

@@ -1,0 +1,43 @@
+===== GIT STATUS =====
+ M app/api/v1/accounts/routes.py
+ M app/api/v1/accounts/routes_list.py
+ M app/api/v1/delivery/routes.py
+ M app/api/v1/documents/routes.py
+ M app/api/v1/documents/schemas.py
+ M app/api/v1/notifications/routes.py
+ M app/api/v1/orders/schemas_enriched.py
+ M app/api/v1/warehouse/routes.py
+ M app/files/routes.py
+ M frontend/src/pages/DocumentsHubPage.tsx
+ M frontend/src/pages/FilesHubPage.tsx
+ M frontend/src/pages/OrdersHubPage.tsx
+ M frontend/src/pages/ReferencesPage.tsx
+?? _project_analysis/
+?? analysis/for_chatgpt/
+?? frontend/reports-implementation-plan.md
+?? plans/selectinload-refactoring-plan.md
+
+===== CURRENT BRANCH =====
+main
+
+===== RECENT COMMITS =====
+c1b4b5c Рефакторинг бэкенд + фронтенд
+e62fbc0 feat: статусы enum, документы при импорте, блокировка импорта
+1f827ad feat: складская логика + архитектура
+84cf467 feat: полная система LMS
+4ac98fb refactor: реорганизация стилей, удаление мёртвых CSS
+2608496 feat: очистка стилей, документация, детальные страницы, импорт
+26e7173 feat: улучшение UI — выравнивание фильтров, long polling импорта, заказы
+078ef24 feat: страницы заказов (входящие, исходящие, возвратные)
+4918620 Исправления по фронтенду, группировка меню
+3ac70d8 feat: UX улучшения - Esc, Ctrl+Enter, инвертирование выделения
+d8d0a28 fix: удалить node_modules из git, добавить .gitignore
+a60d83e feat: синхронизация API, новые страницы, фильтры и пресеты
+e8c0947 Fix lazy loading for user roles
+2bf4c5a Add frontend static serving
+44bb97c Fix UTC import for Python 3.10 compatibility
+5479bb9 Fix UTC import for Python 3.10 compatibility
+28663ab Fix submodule issue with frontend/src/pages
+fb5e321 Add systemd unit for LMS
+7cc4ccf Add CI/CD deploy workflow
+61c6f68 Remove node_modules and dist from git tracking
