@@ -31,7 +31,7 @@ export function LegalEntityEditPage() {
         ogrn: string
         phone: string
         email: string
-      }>(`/api/v1/parties/legal-entities/${entityId}`)
+      }>(`/api/v1/legal-entities/${entityId}`)
         setForm({
           name: data.name,
           legal_name: data.legal_name,
@@ -54,7 +54,7 @@ export function LegalEntityEditPage() {
     setSaving(true)
     setError(null)
     try {
-      await apiClient.patch(`/api/v1/parties/legal-entities/${entityId}`, form)
+      await apiClient.patch(`/api/v1/legal-entities/${entityId}`, form)
       navigate(`/reference/legal-entities/${entityId}`)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Ошибка')

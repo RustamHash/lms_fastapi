@@ -23,7 +23,8 @@ export const rowsConfig: ListPageConfig<RowRow> = {
     { id: 'name', type: 'text', label: 'Название' },
     { id: 'zone_id', type: 'text', label: 'Зона ID' },
   ],
+
   columnOverrides: {
-    id: { href: (row) => `/topology/rows/${row.id}` },
+    id: { href: (row) => `/reference/topology-rows/${row.id}` },
   },
 }

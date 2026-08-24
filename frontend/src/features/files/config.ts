@@ -25,4 +25,8 @@ export const filesConfig: ListPageConfig<FileRow> = {
     { id: 'original_name', type: 'text', label: 'Имя файла' },
     { id: 'file_type', type: 'text', label: 'Тип' },
   ],
+
+  columnOverrides: {
+    id: { href: (row) => `/reference/files/${row.id}` },
+  },
 }

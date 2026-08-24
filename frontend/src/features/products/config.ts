@@ -40,7 +40,8 @@ export const productsConfig: ListPageConfig<ProductRow> = {
     { id: 'sku', type: 'text', label: 'SKU' },
     { id: 'depositor_id', type: 'text', label: 'Поклажедатель ID' },
   ],
+
   columnOverrides: {
-    name: { href: (row) => `/reference/products/${row.id}` },
+    id: { href: (row) => `/reference/products/${row.id}` },
   },
 }

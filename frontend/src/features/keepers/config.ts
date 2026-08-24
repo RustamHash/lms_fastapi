@@ -23,7 +23,8 @@ export const keepersConfig: ListPageConfig<KeeperRow> = {
   filters: [
     { id: 'name', type: 'text', label: 'Название' },
   ],
+
   columnOverrides: {
-    id: { href: (row) => `/keepers/${row.id}` },
+    id: { href: (row) => `/reference/keepers/${row.id}` },
   },
 }

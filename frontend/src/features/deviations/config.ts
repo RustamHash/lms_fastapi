@@ -26,7 +26,8 @@ export const deviationsConfig: ListPageConfig<DeviationRow> = {
     { id: 'deviation_type', type: 'text', label: 'Тип' },
     { id: 'order_id', type: 'text', label: 'Заказ ID' },
   ],
+
   columnOverrides: {
-    id: { href: (row) => `/deviations/${row.id}` },
+    id: { href: (row) => `/reference/deviations/${row.id}` },
   },
 }

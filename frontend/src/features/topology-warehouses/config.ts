@@ -20,7 +20,8 @@ export const warehousesConfig: ListPageConfig<WarehouseRow> = {
   filters: [
     { id: 'name', type: 'text', label: 'Название' },
   ],
+
   columnOverrides: {
-    id: { href: (row) => `/topology/warehouses/${row.id}` },
+    id: { href: (row) => `/reference/warehouses/${row.id}` },
   },
 }

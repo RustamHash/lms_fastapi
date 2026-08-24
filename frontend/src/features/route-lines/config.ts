@@ -23,7 +23,8 @@ export const routeLinesConfig: ListPageConfig<RouteLineRow> = {
     { id: 'route_id', type: 'text', label: 'Маршрут ID' },
     { id: 'status', type: 'text', label: 'Статус' },
   ],
+
   columnOverrides: {
-    id: { href: (row) => `/route-lines/${row.id}` },
+    id: { href: (row) => `/reference/route-lines/${row.id}` },
   },
 }

@@ -44,7 +44,8 @@ export const tasksConfig: ListPageConfig<TaskRow> = {
       ],
     },
   ],
+
   columnOverrides: {
-    id: { href: (row) => `/tasks/${row.id}` },
+    id: { href: (row) => `/reference/tasks/${row.id}` },
   },
 }

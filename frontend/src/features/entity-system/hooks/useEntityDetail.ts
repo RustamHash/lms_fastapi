@@ -23,7 +23,6 @@ export function useEntityDetail<T extends { id: number }>({
     setError(null)
     try {
         const data = await apiClient.get<T>(`${apiUrl}/${id}`)
-      const data = await res.json() as T
       setData(data)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Ошибка загрузки')

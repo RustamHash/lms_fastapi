@@ -33,7 +33,8 @@ export const deliveryOrdersConfig: ListPageConfig<DeliveryOrderRow> = {
     { id: 'number', type: 'text', label: 'Номер' },
     { id: 'status', type: 'text', label: 'Статус' },
   ],
+
   columnOverrides: {
-    id: { href: (row) => `/delivery/orders/${row.id}` },
+    id: { href: (row) => `/reference/delivery-orders/${row.id}` },
   },
 }

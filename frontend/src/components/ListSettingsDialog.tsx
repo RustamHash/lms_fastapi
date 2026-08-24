@@ -8,6 +8,7 @@ type Props = {
   prefs: TablePrefs
   presets: ListPreset[]
   columnLabels: Record<string, string>
+  availableFields?: { path: string; title: string }[]
   onApplyPrefs: (prefs: TablePrefs) => void
   onApplyPreset: (presetId: number) => Promise<void>
   onUpdatePreset: (presetId: number, name: string, config: TablePrefs) => Promise<unknown>
@@ -24,6 +25,7 @@ export function ListSettingsDialog({
   prefs,
   presets,
   columnLabels,
+  availableFields = [],
   onApplyPrefs,
   onApplyPreset,
   onUpdatePreset,
@@ -84,7 +86,12 @@ export function ListSettingsDialog({
     setApplying(true)
     try {
       // Применяем к таблице
-      onApplyPrefs(draftPrefs)
+      onApplyPrefs({
+        ...draftPrefs,
+        order: draftPrefs.order,
+        hidden: draftPrefs.hidden,
+        widths: draftPrefs.widths,
+      })
       
       // Если есть активный пресет — обновляем его
       if (activePresetId !== null) {
@@ -139,6 +146,8 @@ export function ListSettingsDialog({
         {activeTab === 'columns' ? (
           <div className="list-settings-panel">
             <p className="dialog__hint">Перетащите для изменения порядка. Снимите галочку чтобы скрыть.</p>
+            
+            {/* Выбранные колонки */}
             <div className="list-settings-columns">
               {draftPrefs.order.map((columnId, index) => (
                 <div
@@ -162,6 +171,53 @@ export function ListSettingsDialog({
                 </div>
               ))}
             </div>
+
+            {/* Доступные поля (не выбранные) */}
+            {availableFields.length > 0 ? (
+              <>
+                <p className="dialog__hint" style={{ marginTop: 16, fontWeight: 600 }}>
+                  Доступные поля:
+                </p>
+                <div className="list-settings-available">
+                  {availableFields
+                    .filter((f) => !draftPrefs.order.includes(f.path))
+                    .map((field) => (
+                      <label
+                        key={field.path}
+                        className="list-settings-available-item"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={false}
+                          onChange={() => {
+                            setDraftPrefs((prev) => ({
+                              ...prev,
+                              order: [...prev.order, field.path],
+                              hidden: prev.hidden.filter((h) => h !== field.path),
+                            }))
+                          }}
+                        />
+                        <span>{field.title}</span>
+                        <button
+                          type="button"
+                          className="list-settings-available-add"
+                          onClick={() => {
+                            setDraftPrefs((prev) => ({
+                              ...prev,
+                              order: [...prev.order, field.path],
+                              hidden: prev.hidden.filter((h) => h !== field.path),
+                            }))
+                          }}
+                          aria-label={`Добавить ${field.title}`}
+                          title="Добавить колонку"
+                        >
+                          +
+                        </button>
+                      </label>
+                    ))}
+                </div>
+              </>
+            ) : null}
           </div>
         ) : null}
 

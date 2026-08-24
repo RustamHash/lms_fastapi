@@ -340,8 +340,6 @@ function ListTableShellInner<Row extends { id: number }>({
               visibleColumnIds={visibleColumnIds}
               loading={loading}
               totalRowsCount={totalRowsCount}
-              allSelected={allSelected}
-              onToggleAll={onToggleAll}
               isSelected={isSelected}
               onToggleRow={onToggleRow}
               onCellContextMenu={onCellContextMenu}

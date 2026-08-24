@@ -26,4 +26,8 @@ export const vehiclesConfig: ListPageConfig<VehicleRow> = {
     { id: 'number', type: 'text', label: 'Гос. номер' },
     { id: 'brand', type: 'text', label: 'Марка' },
   ],
+
+  columnOverrides: {
+    id: { href: (row) => `/reference/vehicles/${row.id}` },
+  },
 }

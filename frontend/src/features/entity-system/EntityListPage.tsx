@@ -13,6 +13,7 @@ import { useEntityFilters } from './hooks/useEntityFilters'
 import { useEntityContextMenu } from './hooks/useEntityContextMenu'
 import { exportRowsToCsv } from './exportCsv'
 import type { ListPageConfig } from './types'
+import type { ColumnFilterDef } from '../../components/ListTableShell'
 
 type Breadcrumb = {
   label: string
@@ -45,7 +46,7 @@ export function EntityListPage<Row extends { id: number }>({
   const [savePresetOpen, setSavePresetOpen] = useState(false)
 
   const columnFilters = useMemo(() => {
-    return config.columns.reduce((acc, col) => {
+    const base = (config.columns ?? []).reduce((acc, col) => {
       if (col.type === 'bool') {
         acc[col.id] = {
           kind: 'select' as const,
@@ -63,15 +64,42 @@ export function EntityListPage<Row extends { id: number }>({
       }
       return acc
     }, {} as Record<string, { kind: 'text' | 'select' | 'datetime'; options?: { value: string; label: string }[] }>)
-  }, [config.columns])
+    
+    // Добавить фильтры для вложенных полей из метаданных
+    for (const field of entity.entityFields.allFields) {
+      if (!base[field.path]) {
+        if (field.type === 'bool') {
+          base[field.path] = {
+            kind: 'select' as const,
+            options: [
+              { value: 'true', label: 'Да' },
+              { value: 'false', label: 'Нет' },
+            ],
+          }
+        } else if (field.type === 'date' || field.type === 'datetime') {
+          base[field.path] = { kind: 'datetime' as const }
+        } else {
+          base[field.path] = { kind: 'text' as const }
+        }
+      }
+    }
+    
+    return base
+  }, [config.columns, entity.entityFields.allFields])
 
-  const columnLabels = useMemo(
-    () => Object.fromEntries(config.columns.map(c => [c.id, c.label])),
-    [config.columns],
-  )
+  const columnLabels = useMemo(() => {
+    const base = Object.fromEntries((config.columns ?? []).map(c => [c.id, c.label]))
+    // Добавить русские названия из метаданных
+    for (const field of entity.entityFields.allFields) {
+      if (!base[field.path]) {
+        base[field.path] = field.title
+      }
+    }
+    return base
+  }, [config.columns, entity.entityFields.allFields])
 
   function filterValueFromRow(row: Row, colId: string): string {
-    const column = config.columns.find((c) => c.id === colId)
+    const column = config.columns?.find((c) => c.id === colId)
     if (!column) return entity.cellText(row, colId)
     
     if (column.type === 'bool') {
@@ -86,7 +114,7 @@ export function EntityListPage<Row extends { id: number }>({
       chosen,
       entity.prefs.visibleOrderedIds,
       columnLabels,
-      entity.cellText,
+      (row: Row, colId: string) => entity.cellText(row, colId),
       config.entityKey,
     )
   }
@@ -145,7 +173,7 @@ export function EntityListPage<Row extends { id: number }>({
       <QuickFiltersBar
         quickFilters={filtersHook.quickFilters}
         filters={filtersHook.filters}
-        columnFilters={columnFilters}
+        columnFilters={columnFilters as Record<string, ColumnFilterDef>}
         columnLabel={(cid) => columnLabels[cid] ?? cid}
         onFilterChange={filtersHook.setFilter}
       />
@@ -194,7 +222,7 @@ export function EntityListPage<Row extends { id: number }>({
         sortCol={entity.sortCol}
         sortDir={entity.sortDir}
         onSortHeaderClick={entity.onSortHeaderClick}
-        columnFilters={columnFilters}
+        columnFilters={columnFilters as Record<string, ColumnFilterDef>}
         filters={filtersHook.filters}
         excludeFilters={filtersHook.excludeFilters}
         onFilterChange={filtersHook.setFilter}
@@ -219,15 +247,23 @@ export function EntityListPage<Row extends { id: number }>({
         onImport={onImport}
         onInvertSelection={() => entity.toggleAll(!entity.allSelected)}
         onRowDoubleClick={(row) => {
-          const linkColumn = config.columns.find(col => config.columnOverrides?.[col.id]?.href)
-          if (linkColumn) {
-            const href = config.columnOverrides?.[linkColumn.id]?.href
+          // Приоритет 1: колонка с href на эту же запись (не вложенную)
+          const selfLink = entity.columnDefs.find(col => {
+            const override = config.columnOverrides?.[col.id]
+            return override?.href && !col.id.includes('.')
+          })
+          
+          if (selfLink) {
+            const href = config.columnOverrides?.[selfLink.id]?.href
             if (href) {
               navigate(href(row), { state: location.state })
               return
             }
           }
-          notify('Нет детальной страницы для этой записи', 'info')
+          
+          // Приоритет 2: стандартный путь для справочников
+          const entityPath = config.entityKey.replace(/_/g, '-')
+          navigate(`/reference/${entityPath}/${row.id}`, { state: location.state })
         }}
       />
       
@@ -245,7 +281,9 @@ export function EntityListPage<Row extends { id: number }>({
           }}
           presets={entity.listPresets.presets}
           columnLabels={columnLabels}
+          availableFields={entity.entityFields.allFields}
           onApplyPrefs={(prefs) => {
+            // Сохранить новые настройки
             void entity.prefs.savePrefs({
               order: prefs.order,
               hidden: prefs.hidden,
@@ -255,6 +293,10 @@ export function EntityListPage<Row extends { id: number }>({
               sort: prefs.sort,
               quick_filters: prefs.quick_filters,
             })
+            
+            // Обновить локальное состояние немедленно
+            entity.prefs.setOrder(prefs.order)
+            entity.prefs.setHidden(prefs.hidden)
           }}
           onApplyPreset={async (presetId) => {
             await entity.listPresets.applyPreset(presetId)
@@ -289,38 +331,41 @@ export function EntityListPage<Row extends { id: number }>({
       ) : null}
 
       {ctxMenuHook.ctxMenu ? (
+        (() => {
+          const ctx = ctxMenuHook.ctxMenu
+          return (
         <TableCellContextMenu
-          x={ctxMenuHook.ctxMenu.x}
-          y={ctxMenuHook.ctxMenu.y}
-          canOpen={Boolean(ctxMenuHook.ctxMenu.row.id)}
+          x={ctx.x}
+          y={ctx.y}
+          canOpen={Boolean(ctx.row.id)}
           onOpen={() => {
-            const override = config.columnOverrides?.[ctxMenuHook.ctxMenu.colId]
+            const override = config.columnOverrides?.[ctx.colId]
             if (override?.href) {
-              navigate(override.href(ctxMenuHook.ctxMenu.row), { state: location.state })
+              navigate(override.href(ctx.row), { state: location.state })
             }
           }}
           onOpenInNewTab={() => {
-            const override = config.columnOverrides?.[ctxMenuHook.ctxMenu.colId]
+            const override = config.columnOverrides?.[ctx.colId]
             if (override?.href) {
-              window.open(override.href(ctxMenuHook.ctxMenu.row), '_blank', 'noopener,noreferrer')
+              window.open(override.href(ctx.row), '_blank', 'noopener,noreferrer')
             }
           }}
           onFilterByValue={() => {
-            const val = filterValueFromRow(ctxMenuHook.ctxMenu.row, ctxMenuHook.ctxMenu.colId)
-            filtersHook.setFilter(ctxMenuHook.ctxMenu.colId, val)
+            const val = filterValueFromRow(ctx.row, ctx.colId)
+            filtersHook.setFilter(ctx.colId, val)
             ctxMenuHook.closeContextMenu()
           }}
           onExcludeValue={() => {
-            const val = filterValueFromRow(ctxMenuHook.ctxMenu.row, ctxMenuHook.ctxMenu.colId)
-            filtersHook.setExcludeFilter(ctxMenuHook.ctxMenu.colId, val)
+            const val = filterValueFromRow(ctx.row, ctx.colId)
+            filtersHook.setExcludeFilter(ctx.colId, val)
             ctxMenuHook.closeContextMenu()
           }}
           canResetColumn={
-            Boolean(filtersHook.filters[ctxMenuHook.ctxMenu.colId]) ||
-            (filtersHook.excludeFilters[ctxMenuHook.ctxMenu.colId]?.length ?? 0) > 0
+            Boolean(filtersHook.filters[ctx.colId]) ||
+            (filtersHook.excludeFilters[ctx.colId]?.length ?? 0) > 0
           }
           onResetColumnFilter={() => {
-            filtersHook.resetColumnFilter(ctxMenuHook.ctxMenu.colId)
+            filtersHook.resetColumnFilter(ctx.colId)
             ctxMenuHook.closeContextMenu()
           }}
           canResetAll={filtersHook.hasActiveFilters}
@@ -330,6 +375,8 @@ export function EntityListPage<Row extends { id: number }>({
           }}
           onClose={ctxMenuHook.closeContextMenu}
         />
+          )
+        })()
       ) : null}
     </section>
   )

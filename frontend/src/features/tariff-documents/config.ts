@@ -15,7 +15,7 @@ type TariffDocumentRow = {
 export const tariffDocumentsConfig: ListPageConfig<TariffDocumentRow> = {
   entityKey: 'tariff_documents',
   title: 'Документы тарифов',
-  apiUrl: '/api/v1/parties/tariff-documents',
+  apiUrl: '/api/v1/tariff-documents',
   columns: [
     { id: 'id', label: 'ID', type: 'number' },
     { id: 'number', label: 'Номер', type: 'text' },
@@ -32,6 +32,7 @@ export const tariffDocumentsConfig: ListPageConfig<TariffDocumentRow> = {
     { id: 'document_type', type: 'text', label: 'Тип документа' },
     { id: 'contract_id', type: 'text', label: 'Договор ID' },
   ],
+
   columnOverrides: {
     id: { href: (row) => `/reference/tariff-documents/${row.id}` },
   },

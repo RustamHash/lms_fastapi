@@ -26,4 +26,8 @@ export const integrationLogsConfig: ListPageConfig<IntegrationLogRow> = {
     { id: 'profile_id', type: 'text', label: 'Профиль ID' },
     { id: 'status', type: 'text', label: 'Статус' },
   ],
+
+  columnOverrides: {
+    id: { href: (row) => `/reference/integration-logs/${row.id}` },
+  },
 }

@@ -2,7 +2,7 @@ export function exportRowsToCsv(
   rows: Array<Record<string, unknown> & { id: number }>,
   visibleColumnIds: string[],
   columnLabels: Record<string, string>,
-  cellText: (row: { id: number }, colId: string) => string,
+  cellText: (row: any, colId: string) => string,
   filename: string,
 ): void {
   const esc = (s: string) => `"${s.replace(/"/g, '""')}"`

@@ -28,7 +28,7 @@ export function TariffDocumentDetailPage() {
     ;(async () => {
       setLoading(true)
       try {
-        const data = await apiClient.get<TariffDocument>(`/api/v1/parties/tariff-documents/${docId}`)
+        const data = await apiClient.get<TariffDocument>(`/api/v1/tariff-documents/${docId}`)
         setDoc(data)
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Ошибка')

@@ -24,7 +24,8 @@ export const carriersConfig: ListPageConfig<CarrierRow> = {
     { id: 'name', type: 'text', label: 'Название' },
     { id: 'phone', type: 'text', label: 'Телефон' },
   ],
+
   columnOverrides: {
-    id: { href: (row) => `/carriers/${row.id}` },
+    id: { href: (row) => `/reference/carriers/${row.id}` },
   },
 }

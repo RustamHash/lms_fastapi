@@ -28,4 +28,8 @@ export const stockConfig: ListPageConfig<StockRow> = {
     { id: 'location_id', type: 'text', label: 'Ячейка ID' },
     { id: 'batch_id', type: 'text', label: 'Партия ID' },
   ],
+
+  columnOverrides: {
+    id: { href: (row) => `/reference/stock/${row.id}` },
+  },
 }

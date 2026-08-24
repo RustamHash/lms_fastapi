@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { useAuth } from '../auth/AuthContext'
+import { useAuth, hasPermission } from '../auth/AuthContext'
 import { DetailPageShell } from '../components/DetailPageShell'
 import { apiClient } from '../lib/apiClient'
 
@@ -20,7 +20,7 @@ type Client = {
 export function ClientDetailPage() {
   const navigate = useNavigate()
   const { user } = useAuth()
-  const canEdit = user?.permissions?.all === true
+  const canEdit = hasPermission(user, 'clients', 'update')
   const { clientId } = useParams<{ clientId: string }>()
   const [client, setClient] = useState<Client | null>(null)
   const [loading, setLoading] = useState(true)
@@ -31,7 +31,7 @@ export function ClientDetailPage() {
     ;(async () => {
       setLoading(true)
       try {
-        const data = await apiClient.get<Client>(`/api/v1/parties/clients/${clientId}`)
+        const data = await apiClient.get<Client>(`/api/v1/clients/${clientId}`)
         setClient(data)
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Ошибка')

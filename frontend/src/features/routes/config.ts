@@ -25,4 +25,8 @@ export const routesConfig: ListPageConfig<RouteRow> = {
     { id: 'number', type: 'text', label: 'Номер' },
     { id: 'status', type: 'text', label: 'Статус' },
   ],
+
+  columnOverrides: {
+    id: { href: (row) => `/reference/routes/${row.id}` },
+  },
 }

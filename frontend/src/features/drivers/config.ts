@@ -21,4 +21,8 @@ export const driversConfig: ListPageConfig<DriverRow> = {
     { id: 'name', type: 'text', label: 'ФИО' },
     { id: 'phone', type: 'text', label: 'Телефон' },
   ],
+
+  columnOverrides: {
+    id: { href: (row) => `/reference/drivers/${row.id}` },
+  },
 }

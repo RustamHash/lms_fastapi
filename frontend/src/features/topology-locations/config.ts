@@ -25,7 +25,8 @@ export const locationsConfig: ListPageConfig<LocationRow> = {
     { id: 'name', type: 'text', label: 'Название' },
     { id: 'row_id', type: 'text', label: 'Ряд ID' },
   ],
+
   columnOverrides: {
-    id: { href: (row) => `/topology/locations/${row.id}` },
+    id: { href: (row) => `/reference/topology-locations/${row.id}` },
   },
 }

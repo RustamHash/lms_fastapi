@@ -5,8 +5,6 @@ type Props<Row extends { id: number }> = {
   visibleColumnIds: string[]
   loading: boolean
   totalRowsCount: number
-  allSelected: boolean
-  onToggleAll: (checked: boolean) => void
   isSelected: (id: number) => boolean
   onToggleRow: (id: number, checked: boolean) => void
   onCellContextMenu: (e: MouseEvent<HTMLTableCellElement>, row: Row, colId: string) => void
@@ -19,8 +17,6 @@ function TableBodyInner<Row extends { id: number }>({
   visibleColumnIds,
   loading,
   totalRowsCount,
-  allSelected,
-  onToggleAll,
   isSelected,
   onToggleRow,
   onCellContextMenu,

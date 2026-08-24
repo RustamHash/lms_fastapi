@@ -17,7 +17,7 @@ export const contractConfig = {
   list: {
     entityKey: 'contracts',
     title: 'Договоры',
-    apiUrl: '/api/v1/parties/contracts',
+    apiUrl: '/api/v1/contracts',
     columns: [
       { id: 'id', label: 'ID', type: 'number' },
       { id: 'number', label: 'Номер', type: 'text' },
@@ -35,8 +35,9 @@ export const contractConfig = {
     toolbar: {
       createHref: '/reference/contracts/new',
     },
-    columnOverrides: {
-      number: { href: (row) => `/reference/contracts/${row.id}` },
-    },
   } as ListPageConfig<ContractRow>,
+
+  columnOverrides: {
+    id: { href: (row: { id: number }) => `/reference/contracts/${row.id}` },
+  },
 }

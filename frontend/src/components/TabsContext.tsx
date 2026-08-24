@@ -69,7 +69,6 @@ function getLabelFromPath(path: string): string {
     '/reference/legal-entities': 'Юрлица',
     '/reference/depositors': 'Поклажедатели',
     '/reference/clients': 'Клиенты',
-    '/reference/trade-points': 'ТТ',
     '/reference/contracts': 'Договоры',
     '/reference/tariffs': 'Тарифы',
     '/reference/tariff-documents': 'Тарифы док.',

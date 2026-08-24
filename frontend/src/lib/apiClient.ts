@@ -1,11 +1,13 @@
 import { getAccessToken } from './token'
 
 export class ApiError extends Error {
-  constructor(
-    public status: number,
-    public detail: string,
-  ) {
+  status: number
+  detail: string
+
+  constructor(status: number, detail: string) {
     super(detail)
+    this.status = status
+    this.detail = detail
     this.name = 'ApiError'
   }
 }
@@ -21,8 +23,22 @@ function getHeaders(): Record<string, string> {
 
 async function parseError(res: Response): Promise<string> {
   try {
-    const data = await res.json() as { detail?: string; message?: string }
-    return data.detail ?? data.message ?? `HTTP ${res.status}`
+    const data = await res.json() as { detail?: string | unknown[]; message?: string }
+    const detail = data.detail
+    if (typeof detail === 'string') return detail
+    if (Array.isArray(detail)) {
+      // Pydantic validation errors: [{ loc: [...], msg: '...' }]
+      return detail
+        .map((item) => {
+          if (typeof item === 'object' && item !== null) {
+            const { msg } = item as { msg?: string; loc?: string[] }
+            return msg ?? JSON.stringify(item)
+          }
+          return String(item)
+        })
+        .join('; ')
+    }
+    return data.message ?? `HTTP ${res.status}`
   } catch {
     return `HTTP ${res.status}`
   }

@@ -20,7 +20,8 @@ export const productGroupsConfig: ListPageConfig<ProductGroupRow> = {
   filters: [
     { id: 'name', type: 'text', label: 'Название' },
   ],
+
   columnOverrides: {
-    name: { href: (row) => `/reference/product-groups/${row.id}` },
+    id: { href: (row) => `/reference/product-groups/${row.id}` },
   },
 }

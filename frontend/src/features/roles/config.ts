@@ -20,4 +20,8 @@ export const rolesConfig: ListPageConfig<RoleRow> = {
     { id: 'name', type: 'text', label: 'Название' },
     { id: 'code', type: 'text', label: 'Код' },
   ],
+
+  columnOverrides: {
+    id: { href: (row) => `/reference/roles/${row.id}` },
+  },
 }

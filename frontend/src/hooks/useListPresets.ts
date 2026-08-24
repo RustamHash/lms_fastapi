@@ -23,6 +23,10 @@ export function useListPresets(entityKey: string) {
       const data = await apiClient.get<ListPreset[]>(`/api/v1/list-presets/${entityKey}`)
       setPresets(data)
     } catch (e) {
+      // 404 — пресетов нет, это нормально
+      if (e instanceof Error && e.message.includes('404')) {
+        setPresets([])
+      }
       setError(e instanceof Error ? e.message : 'Ошибка загрузки пресетов')
     } finally {
       setLoading(false)
@@ -30,50 +34,39 @@ export function useListPresets(entityKey: string) {
   }, [entityKey])
 
   const createPreset = useCallback(async (name: string, config: TablePrefs, isDefault = false): Promise<ListPreset> => {
-    const res = await apiClient.post(`/api/v1/list-presets/${entityKey}`, { name, config, is_default: isDefault })
-    if (!res.ok) {
-      const data = await res.json().catch(() => null)
-      throw new Error(data?.detail ?? `HTTP ${res.status}`)
-    }
-    const preset = await res.json() as ListPreset
+    const preset = await apiClient.post<ListPreset>(
+      `/api/v1/list-presets/${entityKey}`,
+      { name, config, is_default: isDefault },
+    )
     setPresets(prev => [...prev, preset])
     return preset
   }, [entityKey])
 
   const updatePreset = useCallback(async (presetId: number, name: string, config: TablePrefs): Promise<ListPreset> => {
-    const res = await apiClient.put(`/api/v1/list-presets/${entityKey}/${presetId}`, { name, config })
-    if (!res.ok) {
-      const data = await res.json().catch(() => null)
-      throw new Error(data?.detail ?? `HTTP ${res.status}`)
-    }
-    const preset = await res.json() as ListPreset
+    const preset = await apiClient.put<ListPreset>(
+      `/api/v1/list-presets/${entityKey}/${presetId}`,
+      { name, config },
+    )
     setPresets(prev => prev.map(p => p.id === presetId ? preset : p))
     return preset
   }, [entityKey])
 
   const deletePreset = useCallback(async (presetId: number): Promise<void> => {
-    const res = await apiClient.delete(`/api/v1/list-presets/${entityKey}/${presetId}`)
-    if (!res.ok && res.status !== 204) throw new Error(`HTTP ${res.status}`)
+    await apiClient.delete(`/api/v1/list-presets/${entityKey}/${presetId}`)
     setPresets(prev => prev.filter(p => p.id !== presetId))
   }, [entityKey])
 
   const applyPreset = useCallback(async (presetId: number): Promise<TablePrefs> => {
-    const res = await apiClient.post(`/api/v1/list-presets/${entityKey}/${presetId}/apply`)
-    if (!res.ok) {
-      const data = await res.json().catch(() => null)
-      throw new Error(data?.detail ?? `HTTP ${res.status}`)
-    }
-    const data = await res.json() as { prefs: TablePrefs }
+    const data = await apiClient.post<{ prefs: TablePrefs }>(
+      `/api/v1/list-presets/${entityKey}/${presetId}/apply`,
+    )
     return data.prefs
   }, [entityKey])
 
   const setDefaultPreset = useCallback(async (presetId: number): Promise<ListPreset> => {
-    const res = await apiClient.post(`/api/v1/list-presets/${entityKey}/${presetId}/set-default`)
-    if (!res.ok) {
-      const data = await res.json().catch(() => null)
-      throw new Error(data?.detail ?? `HTTP ${res.status}`)
-    }
-    const preset = await res.json() as ListPreset
+    const preset = await apiClient.post<ListPreset>(
+      `/api/v1/list-presets/${entityKey}/${presetId}/set-default`,
+    )
     setPresets(prev => prev.map(p => ({ ...p, is_default: p.id === presetId })))
     return preset
   }, [entityKey])

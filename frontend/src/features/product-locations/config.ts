@@ -23,4 +23,8 @@ export const productLocationsConfig: ListPageConfig<ProductLocationRow> = {
     { id: 'product_id', type: 'text', label: 'Товар ID' },
     { id: 'location_id', type: 'text', label: 'Ячейка ID' },
   ],
+
+  columnOverrides: {
+    id: { href: (row) => `/reference/product-locations/${row.id}` },
+  },
 }

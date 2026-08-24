@@ -15,20 +15,18 @@ const DeliveryZonesPage = lazy(() => import('./pages/DeliveryZonesPage').then(m 
 const LegalEntitiesPage = lazy(() => import('./pages/LegalEntitiesPage').then(m => ({ default: m.LegalEntitiesPage })))
 const DepositorsPage = lazy(() => import('./pages/DepositorsPage').then(m => ({ default: m.DepositorsPage })))
 const ClientsPage = lazy(() => import('./pages/ClientsPage').then(m => ({ default: m.ClientsPage })))
-const TradePointsPage = lazy(() => import('./pages/TradePointsPage').then(m => ({ default: m.TradePointsPage })))
-const ContractsPage = lazy(() => import('./pages/ContractsPage').then(m => ({ default: m.ContractsPage })))
 const TariffsPage = lazy(() => import('./pages/TariffsPage').then(m => ({ default: m.TariffsPage })))
 const LegalEntityDetailPage = lazy(() => import('./pages/LegalEntityDetailPage').then(m => ({ default: m.LegalEntityDetailPage })))
 const LegalEntityEditPage = lazy(() => import('./pages/LegalEntityEditPage').then(m => ({ default: m.LegalEntityEditPage })))
+const DepositorEditPage = lazy(() => import('./pages/DepositorEditPage').then(m => ({ default: m.DepositorEditPage })))
 const DepositorDetailPage = lazy(() => import('./pages/DepositorDetailPage').then(m => ({ default: m.DepositorDetailPage })))
 const ClientDetailPage = lazy(() => import('./pages/ClientDetailPage').then(m => ({ default: m.ClientDetailPage })))
-const TradePointDetailPage = lazy(() => import('./pages/TradePointDetailPage').then(m => ({ default: m.TradePointDetailPage })))
+const ContractsPage = lazy(() => import('./pages/ContractsPage').then(m => ({ default: m.ContractsPage })))
 const ContractDetailPage = lazy(() => import('./pages/ContractDetailPage').then(m => ({ default: m.ContractDetailPage })))
 const TariffDetailPage = lazy(() => import('./pages/TariffDetailPage').then(m => ({ default: m.TariffDetailPage })))
 const LegalEntityCreatePage = lazy(() => import('./pages/LegalEntityCreatePage').then(m => ({ default: m.LegalEntityCreatePage })))
 const DepositorCreatePage = lazy(() => import('./pages/DepositorCreatePage').then(m => ({ default: m.DepositorCreatePage })))
 const ClientCreatePage = lazy(() => import('./pages/ClientCreatePage').then(m => ({ default: m.ClientCreatePage })))
-const TradePointCreatePage = lazy(() => import('./pages/TradePointCreatePage').then(m => ({ default: m.TradePointCreatePage })))
 const ContractCreatePage = lazy(() => import('./pages/ContractCreatePage').then(m => ({ default: m.ContractCreatePage })))
 const AddressesPage = lazy(() => import('./pages/AddressesPage').then(m => ({ default: m.AddressesPage })))
 const ProductsPage = lazy(() => import('./pages/ProductsPage').then(m => ({ default: m.ProductsPage })))
@@ -79,6 +77,7 @@ const DriverDetailPage = lazy(() => import('./pages/DriverDetailPage').then(m =>
 const FileDetailPage = lazy(() => import('./pages/FileDetailPage').then(m => ({ default: m.FileDetailPage })))
 const InboundOrderDetailPage = lazy(() => import('./pages/InboundOrderDetailPage').then(m => ({ default: m.InboundOrderDetailPage })))
 const IntegrationLogDetailPage = lazy(() => import('./pages/IntegrationLogDetailPage').then(m => ({ default: m.IntegrationLogDetailPage })))
+const IntegrationProfileCreatePage = lazy(() => import('./pages/IntegrationProfileCreatePage').then(m => ({ default: m.IntegrationProfileCreatePage })))
 const IntegrationProfileDetailPage = lazy(() => import('./pages/IntegrationProfileDetailPage').then(m => ({ default: m.IntegrationProfileDetailPage })))
 const KeeperDetailPage = lazy(() => import('./pages/KeeperDetailPage').then(m => ({ default: m.KeeperDetailPage })))
 const LpnDetailPage = lazy(() => import('./pages/LpnDetailPage').then(m => ({ default: m.LpnDetailPage })))
@@ -145,13 +144,11 @@ function App() {
                   <Route path="/reference/legal-entities/new" element={<LegalEntityCreatePage />} />
                   <Route path="/reference/depositors" element={<DepositorsPage />} />
                   <Route path="/reference/depositors/:depositorId" element={<DepositorDetailPage />} />
+                  <Route path="/reference/depositors/:depositorId/edit" element={<DepositorEditPage />} />
                   <Route path="/reference/depositors/new" element={<DepositorCreatePage />} />
                   <Route path="/reference/clients" element={<ClientsPage />} />
                   <Route path="/reference/clients/:clientId" element={<ClientDetailPage />} />
                   <Route path="/reference/clients/new" element={<ClientCreatePage />} />
-                  <Route path="/reference/trade-points" element={<TradePointsPage />} />
-                  <Route path="/reference/trade-points/:tpId" element={<TradePointDetailPage />} />
-                  <Route path="/reference/trade-points/new" element={<TradePointCreatePage />} />
                   <Route path="/reference/contracts" element={<ContractsPage />} />
                   <Route path="/reference/contracts/:contractId" element={<ContractDetailPage />} />
                   <Route path="/reference/contracts/new" element={<ContractCreatePage />} />
@@ -189,6 +186,7 @@ function App() {
                   
                   {/* Интеграции */}
                   <Route path="/integrations/profiles" element={<IntegrationProfilesPage />} />
+                  <Route path="/integrations/profiles/new" element={<IntegrationProfileCreatePage />} />
                   <Route path="/integrations/logs" element={<IntegrationLogsPage />} />
                   
                   {/* Перевозчики и хранители */}
@@ -225,7 +223,6 @@ function App() {
                   <Route path="/files/:id" element={<FileDetailPage />} />
                   <Route path="/orders/inbound/:id" element={<InboundOrderDetailPage />} />
                   <Route path="/integrations/logs/:id" element={<IntegrationLogDetailPage />} />
-                  <Route path="/integrations/profiles/:id" element={<IntegrationProfileDetailPage />} />
                   <Route path="/keepers/:id" element={<KeeperDetailPage />} />
                   <Route path="/reference/lpns/:id" element={<LpnDetailPage />} />
                   <Route path="/orders/outbound/:id" element={<OutboundOrderDetailPage />} />
@@ -252,6 +249,7 @@ function App() {
                   <Route path="/integrations" element={<IntegrationsHubPage />} />
                   <Route path="/delivery" element={<DeliveryHubPage />} />
 
+                  <Route path="/integrations/profiles/:id" element={<IntegrationProfileDetailPage />} />
                   <Route path="*" element={<Navigate to="/" replace />} />
                 </Route>
               </Route>

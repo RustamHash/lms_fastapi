@@ -10,7 +10,7 @@ import {
 import { apiClient } from '../lib/apiClient'
 import { getAccessToken, setAccessToken } from '../lib/token'
 
-export type AuthUser = { id: number; username: string; permissions?: Record<string, string[] | boolean> }
+export type AuthUser = { id: number; username: string; is_superuser?: boolean; permissions?: Record<string, string[] | boolean> }
 
 type AuthContextValue = {
   user: AuthUser | null
@@ -93,6 +93,70 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
+}
+
+
+/** Проверка: есть ли у пользователя все права */
+export function hasFullAccess(user: AuthUser | null): boolean {
+  if (!user) return false
+  if (user.is_superuser) return true
+  const all = user.permissions?.all
+  if (typeof all === 'boolean') return all
+  if (Array.isArray(all)) return all.includes('all')
+  return false
+}
+
+/** Проверка конкретного права */
+export function hasPermission(
+  user: AuthUser | null,
+  module: string,
+  action: string,
+): boolean {
+  if (!user) return false
+  if (user.is_superuser) return true
+  if (hasFullAccess(user)) return true
+  const perms = user.permissions?.[module]
+  if (typeof perms === 'boolean') return perms
+  if (Array.isArray(perms)) return perms.includes(action)
+  return false
+}
+
+/** Проверка доступа к модулю (любое право) */
+export function hasModuleAccess(
+  user: AuthUser | null,
+  module: string,
+): boolean {
+  if (!user) return false
+  if (user.is_superuser) return true
+  if (hasFullAccess(user)) return true
+  const perms = user.permissions?.[module]
+  if (typeof perms === 'boolean') return perms
+  if (Array.isArray(perms)) return perms.length > 0
+  return false
+}
+
+/** Получить список прав пользователя на модуль */
+export function getModulePermissions(
+  user: AuthUser | null,
+  module: string,
+): string[] {
+  if (!user) return []
+  if (user.is_superuser || hasFullAccess(user)) {
+    return ['view', 'create', 'update', 'delete', 'execute', 'complete', 'approve', 'cancel']
+  }
+  const perms = user.permissions?.[module]
+  if (Array.isArray(perms)) return perms
+  return []
+}
+
+/** Получить текст с описанием отсутствующего права */
+export function getPermissionMessage(
+  user: AuthUser | null,
+  module: string,
+  action: string,
+): string {
+  const userPerms = getModulePermissions(user, module)
+  return `Нужно право: ${action}. Ваши права: ${userPerms.length > 0 ? userPerms.join(', ') : 'нет'}`
 }
 
 export function useAuth(): AuthContextValue {

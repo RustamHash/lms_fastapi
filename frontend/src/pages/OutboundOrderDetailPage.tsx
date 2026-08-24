@@ -63,7 +63,7 @@ export function OutboundOrderDetailPage() {
     ;(async () => {
       setLoading(true)
       try {
-        const data = await apiClient.get<OutboundOrderDetail>(`/api/v1/outbound-orders/${id}/detail`)
+        const data = await apiClient.get<OutboundOrderDetail>(`/api/v1/outbound-orders/${id}`)
         setOrder(data)
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Ошибка')

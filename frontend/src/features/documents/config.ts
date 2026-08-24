@@ -33,7 +33,8 @@ export const documentsConfig: ListPageConfig<DocumentRow> = {
     { id: 'document_type', type: 'text', label: 'Тип' },
     { id: 'status', type: 'text', label: 'Статус' },
   ],
+
   columnOverrides: {
-    id: { href: (row) => `/documents/${row.id}` },
+    id: { href: (row) => `/reference/documents/${row.id}` },
   },
 }

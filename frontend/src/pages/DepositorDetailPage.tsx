@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { useAuth } from '../auth/AuthContext'
+import { useAuth, hasPermission } from '../auth/AuthContext'
 import { DetailPageShell } from '../components/DetailPageShell'
 import { apiClient } from '../lib/apiClient'
 
@@ -8,6 +8,13 @@ type Depositor = {
   id: number
   code: string
   legal_entity_id: number
+  legal_entity: {
+    id: number
+    name: string
+    legal_name: string
+    inn: string
+    kpp: string
+  } | null
   is_deleted: boolean
   is_active: boolean
 }
@@ -15,7 +22,7 @@ type Depositor = {
 export function DepositorDetailPage() {
   const navigate = useNavigate()
   const { user } = useAuth()
-  const canEdit = user?.permissions?.all === true
+  const canEdit = hasPermission(user, 'depositors', 'update')
   const { depositorId } = useParams<{ depositorId: string }>()
   const [depositor, setDepositor] = useState<Depositor | null>(null)
   const [loading, setLoading] = useState(true)
@@ -26,7 +33,7 @@ export function DepositorDetailPage() {
     ;(async () => {
       setLoading(true)
       try {
-        const data = await apiClient.get<Depositor>(`/api/v1/parties/depositors/${depositorId}`)
+        const data = await apiClient.get<Depositor>(`/api/v1/depositors/${depositorId}`)
         setDepositor(data)
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Ошибка')
@@ -47,13 +54,20 @@ export function DepositorDetailPage() {
       loading={loading}
       error={error}
       canEdit={canEdit}
-      onEdit={() => navigate('edit')}
+      onEdit={() => navigate(`/reference/depositors/${depositorId}/edit`)}
     >
       {depositor ? (
         <dl className="entity-dl">
           <div className="entity-dl__row"><dt>ID</dt><dd>{depositor.id}</dd></div>
           <div className="entity-dl__row"><dt>Код</dt><dd>{depositor.code}</dd></div>
-          <div className="entity-dl__row"><dt>Юрлицо ID</dt><dd>{depositor.legal_entity_id}</dd></div>
+          <div className="entity-dl__row">
+            <dt>Юрлицо</dt>
+            <dd>
+              {depositor.legal_entity
+                ? depositor.legal_entity.name || `#${depositor.legal_entity.id}`
+                : `#${depositor.legal_entity_id}`}
+            </dd>
+          </div>
           <div className="entity-dl__row"><dt>Удалён</dt><dd>{depositor.is_deleted ? 'Да' : 'Нет'}</dd></div>
         </dl>
       ) : null}

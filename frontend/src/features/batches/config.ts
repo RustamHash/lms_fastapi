@@ -23,4 +23,8 @@ export const batchesConfig: ListPageConfig<BatchRow> = {
     { id: 'batch_number', type: 'text', label: 'Номер партии' },
     { id: 'product_id', type: 'text', label: 'Товар ID' },
   ],
+
+  columnOverrides: {
+    id: { href: (row) => `/reference/batches/${row.id}` },
+  },
 }

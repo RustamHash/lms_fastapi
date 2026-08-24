@@ -28,7 +28,8 @@ export const notificationRulesConfig: ListPageConfig<NotificationRuleRow> = {
     { id: 'channel', type: 'text', label: 'Канал' },
     { id: 'recipient_type', type: 'text', label: 'Тип получателя' },
   ],
+
   columnOverrides: {
-    id: { href: (row) => `/notification-rules/${row.id}` },
+    id: { href: (row) => `/reference/notification-rules/${row.id}` },
   },
 }

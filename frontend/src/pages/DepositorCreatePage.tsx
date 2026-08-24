@@ -11,7 +11,7 @@ export function DepositorCreatePage() {
 
   useEffect(() => {
     ;(async () => {
-      const entitiesData = await apiClient.get<{id: number, name: string}[]>('/api/v1/parties/legal-entities')
+      const entitiesData = await apiClient.get<{id: number, name: string}[]>('/api/v1/legal-entities')
       setLegalEntities(entitiesData)
     })()
   }, [])
@@ -21,7 +21,7 @@ export function DepositorCreatePage() {
     setSaving(true)
     setError(null)
     try {
-      const created = await apiClient.post<{id: number}>('/api/v1/parties/depositors', {
+      const created = await apiClient.post<{id: number}>('/api/v1/depositors', {
         code: form.code,
         legal_entity_id: Number(form.legal_entity_id),
       })

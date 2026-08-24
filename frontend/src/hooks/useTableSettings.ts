@@ -28,7 +28,12 @@ export function useTableSettings(entityKey: string) {
       const data = await apiClient.get<TableSettingsResponse>(`/api/v1/table-settings/${entityKey}`)
       setPrefs(data.prefs)
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Ошибка загрузки настроек')
+      // 404 — настроек нет, это нормально
+      if (e instanceof Error && e.message.includes('404')) {
+        setPrefs(null)
+      } else {
+        setError(e instanceof Error ? e.message : 'Ошибка загрузки настроек')
+      }
     } finally {
       setLoading(false)
     }
@@ -41,9 +46,10 @@ export function useTableSettings(entityKey: string) {
     
     debounceTimerRef.current = setTimeout(async () => {
       try {
-        const res = await apiClient.put(`/api/v1/table-settings/${entityKey}`, { prefs: nextPrefs })
-        if (!res.ok) throw new Error(`HTTP ${res.status}`)
-        const data = await res.json() as TableSettingsResponse
+        const data = await apiClient.put<TableSettingsResponse>(
+          `/api/v1/table-settings/${entityKey}`,
+          { prefs: nextPrefs },
+        )
         setPrefs(data.prefs)
       } catch (e) {
         console.error('Ошибка сохранения настроек:', e)
@@ -52,16 +58,15 @@ export function useTableSettings(entityKey: string) {
   }, [entityKey])
 
   const resetToDefaults = useCallback(async (): Promise<TablePrefs> => {
-    const res = await apiClient.get(`/api/v1/table-settings/${entityKey}/defaults`)
-    if (!res.ok) throw new Error(`HTTP ${res.status}`)
-    const data = await res.json() as TableSettingsResponse
+    const data = await apiClient.get<TableSettingsResponse>(
+      `/api/v1/table-settings/${entityKey}/defaults`,
+    )
     setPrefs(data.prefs)
     return data.prefs
   }, [entityKey])
 
   const clear = useCallback(async () => {
-    const res = await apiClient.delete(`/api/v1/table-settings/${entityKey}`)
-    if (!res.ok && res.status !== 204) throw new Error(`HTTP ${res.status}`)
+    await apiClient.delete(`/api/v1/table-settings/${entityKey}`)
     setPrefs(null)
   }, [entityKey])
 

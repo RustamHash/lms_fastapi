@@ -35,7 +35,8 @@ export const inboundOrdersConfig: ListPageConfig<InboundOrderRow> = {
     { id: 'supplier_code', type: 'text', label: 'Поставщик' },
     { id: 'status', type: 'text', label: 'Статус' },
   ],
+
   columnOverrides: {
-    id: { href: (row) => `/orders/inbound/${row.id}` },
+    id: { href: (row) => `/reference/inbound-orders/${row.id}` },
   },
 }

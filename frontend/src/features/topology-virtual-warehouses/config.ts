@@ -21,7 +21,8 @@ export const virtualWarehousesConfig: ListPageConfig<VirtualWarehouseRow> = {
     { id: 'name', type: 'text', label: 'Название' },
     { id: 'warehouse_id', type: 'text', label: 'Склад ID' },
   ],
+
   columnOverrides: {
-    id: { href: (row) => `/topology/virtual-warehouses/${row.id}` },
+    id: { href: (row) => `/reference/virtual-warehouses/${row.id}` },
   },
 }

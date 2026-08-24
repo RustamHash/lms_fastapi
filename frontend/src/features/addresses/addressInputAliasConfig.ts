@@ -16,7 +16,7 @@ export const addressInputAliasConfig = {
   list: {
     entityKey: 'address_input_aliases',
     title: 'Варианты ввода адресов',
-    apiUrl: '/api/v1/parties/aliases',
+    apiUrl: '/api/v1/aliases',
     
     columns: [
       { id: 'id', label: 'ID', type: 'number' },

@@ -93,7 +93,7 @@ export type ListPageConfig<Row extends { id: number }> = {
   apiUrl: string
   staleTime?: number
   
-  columns: ColumnConfig[]
+  columns?: ColumnConfig[]
   filters?: FilterConfig[]
   toolbar?: ToolbarConfig
   groupActions?: GroupAction<Row>[]

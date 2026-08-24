@@ -31,7 +31,8 @@ export const returnOrdersConfig: ListPageConfig<ReturnOrderRow> = {
     { id: 'return_type', type: 'text', label: 'Тип возврата' },
     { id: 'status', type: 'text', label: 'Статус' },
   ],
+
   columnOverrides: {
-    id: { href: (row) => `/orders/return/${row.id}` },
+    id: { href: (row) => `/reference/return-orders/${row.id}` },
   },
 }

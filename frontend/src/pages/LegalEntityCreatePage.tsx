@@ -21,7 +21,7 @@ export function LegalEntityCreatePage() {
     setSaving(true)
     setError(null)
     try {
-      const created = await apiClient.post<{id: number}>('/api/v1/parties/legal-entities', form)
+      const created = await apiClient.post<{id: number}>('/api/v1/legal-entities', form)
       navigate(`/reference/legal-entities/${created.id}`)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Ошибка')

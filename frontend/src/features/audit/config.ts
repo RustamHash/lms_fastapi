@@ -31,4 +31,8 @@ export const auditConfig: ListPageConfig<AuditRow> = {
     { id: 'entity_type', type: 'text', label: 'Тип объекта' },
     { id: 'user_id', type: 'text', label: 'Пользователь ID' },
   ],
+
+  columnOverrides: {
+    id: { href: (row) => `/reference/audit/${row.id}` },
+  },
 }

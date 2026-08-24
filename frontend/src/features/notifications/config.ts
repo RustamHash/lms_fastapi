@@ -28,4 +28,8 @@ export const notificationsConfig: ListPageConfig<NotificationRow> = {
     { id: 'title', type: 'text', label: 'Заголовок' },
     { id: 'status', type: 'text', label: 'Статус' },
   ],
+
+  columnOverrides: {
+    id: { href: (row) => `/reference/notifications/${row.id}` },
+  },
 }

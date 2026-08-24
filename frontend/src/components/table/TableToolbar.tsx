@@ -107,7 +107,7 @@ function TableToolbarInner({
             className={`tb tb--icon tb--create${!canCreate ? ' tb--muted' : ''}`}
             onClick={onCreate}
             aria-label="Создать"
-            title="Создать"
+            title={canCreate ? 'Создать' : 'Недостаточно прав для создания'}
           >
             <IconPlus />
           </button>

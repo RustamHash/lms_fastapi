@@ -9,7 +9,7 @@ type IntegrationProfileRow = {
 }
 
 export const integrationProfilesConfig: ListPageConfig<IntegrationProfileRow> = {
-  entityKey: 'integration-profiles',
+  entityKey: 'integration_profiles',
   title: 'Профили интеграций',
   apiUrl: '/api/v1/integrations/profiles',
   columns: [
@@ -18,8 +18,15 @@ export const integrationProfilesConfig: ListPageConfig<IntegrationProfileRow> = 
     { id: 'source_type', label: 'Тип источника', type: 'text' },
     { id: 'depositor_id', label: 'Поклажедатель ID', type: 'number' },
   ],
+  toolbar: {
+    createHref: '/integrations/profiles/new',
+  },
   filters: [
     { id: 'name', type: 'text', label: 'Название' },
     { id: 'source_type', type: 'text', label: 'Тип источника' },
   ],
+
+  columnOverrides: {
+    id: { href: (row) => `/reference/integration-profiles/${row.id}` },
+  },
 }

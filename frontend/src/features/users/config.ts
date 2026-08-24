@@ -29,4 +29,8 @@ export const usersConfig: ListPageConfig<UserRow> = {
     { id: 'username', type: 'text', label: 'Имя пользователя' },
     { id: 'email', type: 'text', label: 'Email' },
   ],
+
+  columnOverrides: {
+    id: { href: (row) => `/reference/users/${row.id}` },
+  },
 }

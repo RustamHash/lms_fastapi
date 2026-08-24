@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { useAuth } from '../auth/AuthContext'
+import { useAuth, hasPermission } from '../auth/AuthContext'
 import { DetailPageShell } from '../components/DetailPageShell'
 import { apiClient } from '../lib/apiClient'
 
@@ -20,7 +20,7 @@ type Contract = {
 export function ContractDetailPage() {
   const navigate = useNavigate()
   const { user } = useAuth()
-  const canEdit = user?.permissions?.all === true
+  const canEdit = hasPermission(user, 'contracts', 'update')
   const { contractId } = useParams<{ contractId: string }>()
   const [contract, setContract] = useState<Contract | null>(null)
   const [loading, setLoading] = useState(true)
@@ -31,7 +31,7 @@ export function ContractDetailPage() {
     ;(async () => {
       setLoading(true)
       try {
-        const data = await apiClient.get<Contract>(`/api/v1/parties/contracts/${contractId}`)
+        const data = await apiClient.get<Contract>(`/api/v1/contracts/${contractId}`)
         setContract(data)
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Ошибка')

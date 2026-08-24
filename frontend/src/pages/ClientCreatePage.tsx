@@ -19,7 +19,7 @@ export function ClientCreatePage() {
 
   useEffect(() => {
     ;(async () => {
-      const depositorsData = await apiClient.get<{id: number, code: string}[]>('/api/v1/parties/depositors')
+      const depositorsData = await apiClient.get<{id: number, code: string}[]>('/api/v1/depositors')
       setDepositors(depositorsData)
     })()
   }, [])
@@ -29,7 +29,7 @@ export function ClientCreatePage() {
     setSaving(true)
     setError(null)
     try {
-      const created = await apiClient.post<{id: number}>('/api/v1/parties/clients', {
+      const created = await apiClient.post<{id: number}>('/api/v1/clients', {
         ...form,
         depositor_id: Number(form.depositor_id),
       })

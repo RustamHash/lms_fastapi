@@ -27,11 +27,8 @@ export const deliveryZoneConfig = {
     toolbar: {
       createHref: '/reference/delivery-zones/new',
     },
-    
     columnOverrides: {
-      name: {
-        href: (row) => `/reference/delivery-zones/${row.id}`,
-      },
+      id: { href: (row) => `/reference/delivery-zones/${row.id}` },
     },
   } as ListPageConfig<DeliveryZoneRow>,
 }

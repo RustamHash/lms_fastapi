@@ -52,7 +52,7 @@ export function AddressDetailPage() {
       setLoading(true)
       setError(null)
       try {
-        const data = await apiClient.get<AddressDetail>(`/api/v1/parties/addresses/${idNum}/detail`)
+        const data = await apiClient.get<AddressDetail>(`/api/v1/addresses/${idNum}`)
         if (!cancelled) setAddress(data)
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : 'Ошибка загрузки')

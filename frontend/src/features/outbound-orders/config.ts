@@ -54,7 +54,8 @@ export const outboundOrdersConfig: ListPageConfig<OutboundOrderRow> = {
     { id: 'status', type: 'text', label: 'Статус' },
     { id: 'delivery_status', type: 'text', label: 'Статус доставки' },
   ],
+
   columnOverrides: {
-    id: { href: (row) => `/orders/outbound/${row.id}` },
+    id: { href: (row) => `/reference/outbound-orders/${row.id}` },
   },
 }

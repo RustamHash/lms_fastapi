@@ -23,7 +23,8 @@ export const zonesConfig: ListPageConfig<ZoneRow> = {
     { id: 'name', type: 'text', label: 'Название' },
     { id: 'zone_type', type: 'text', label: 'Тип зоны' },
   ],
+
   columnOverrides: {
-    id: { href: (row) => `/topology/zones/${row.id}` },
+    id: { href: (row) => `/reference/topology-zones/${row.id}` },
   },
 }

@@ -435,3 +435,44 @@
 .import-dialog-btn--error:hover {
   background: #b91c1c;
 }
+
+
+/* Доступные поля в настройке колонок */
+.list-settings-available {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 200px;
+  overflow-y: auto;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  padding: 4px;
+}
+
+.list-settings-available-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.list-settings-available-item:hover {
+  background: #f8fafc;
+}
+
+.list-settings-available-add {
+  margin-left: auto;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 16px;
+  color: var(--text-secondary);
+  padding: 0 4px;
+}
+
+.list-settings-available-add:hover {
+  color: #1e293b;
+}

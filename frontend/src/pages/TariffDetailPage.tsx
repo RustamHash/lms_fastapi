@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { useAuth } from '../auth/AuthContext'
+import { useAuth, hasPermission } from '../auth/AuthContext'
 import { DetailPageShell } from '../components/DetailPageShell'
 import { apiClient } from '../lib/apiClient'
 
@@ -19,7 +19,7 @@ type Tariff = {
 export function TariffDetailPage() {
   const navigate = useNavigate()
   const { user } = useAuth()
-  const canEdit = user?.permissions?.all === true
+  const canEdit = hasPermission(user, 'tariffs', 'update')
   const { tariffId } = useParams<{ tariffId: string }>()
   const [tariff, setTariff] = useState<Tariff | null>(null)
   const [loading, setLoading] = useState(true)
@@ -30,7 +30,7 @@ export function TariffDetailPage() {
     ;(async () => {
       setLoading(true)
       try {
-        const data = await apiClient.get<Tariff>(`/api/v1/parties/tariffs/${tariffId}`)
+        const data = await apiClient.get<Tariff>(`/api/v1/tariffs/${tariffId}`)
         setTariff(data)
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Ошибка')

@@ -16,7 +16,7 @@ export const tariffConfig = {
   list: {
     entityKey: 'tariffs',
     title: 'Тарифы',
-    apiUrl: '/api/v1/parties/tariffs',
+    apiUrl: '/api/v1/tariffs',
     columns: [
       { id: 'id', label: 'ID', type: 'number' },
       { id: 'name', label: 'Название', type: 'text' },
@@ -30,8 +30,9 @@ export const tariffConfig = {
       { id: 'name', type: 'text', label: 'Название' },
       { id: 'service_group', type: 'text', label: 'Группа' },
     ],
-    columnOverrides: {
-      name: { href: (row) => `/reference/tariffs/${row.id}` },
-    },
   } as ListPageConfig<TariffRow>,
+
+  columnOverrides: {
+    id: { href: (row: { id: number }) => `/reference/tariffs/${row.id}` },
+  },
 }

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
-import { useAuth } from '../auth/AuthContext'
+import { useAuth, hasPermission } from '../auth/AuthContext'
 import { DetailPageShell } from '../components/DetailPageShell'
 import { apiClient } from '../lib/apiClient'
 
@@ -20,7 +20,7 @@ type LegalEntity = {
 export function LegalEntityDetailPage() {
   
   const { user } = useAuth()
-  const canEdit = user?.permissions?.all === true
+  const canEdit = hasPermission(user, 'legal_entities', 'update')
   const { entityId } = useParams<{ entityId: string }>()
   const [entity, setEntity] = useState<LegalEntity | null>(null)
   const [loading, setLoading] = useState(true)
@@ -31,7 +31,7 @@ export function LegalEntityDetailPage() {
     ;(async () => {
       setLoading(true)
       try {
-        const data = await apiClient.get<LegalEntity>(`/api/v1/parties/legal-entities/${entityId}`)
+        const data = await apiClient.get<LegalEntity>(`/api/v1/legal-entities/${entityId}`)
         setEntity(data)
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Ошибка')

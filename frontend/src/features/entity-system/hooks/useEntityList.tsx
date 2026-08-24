@@ -1,10 +1,12 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiClient } from '../../../lib/apiClient'
 import { useColumnPrefs } from '../../../hooks/useColumnPrefs'
 import { useTableSettings, type TablePrefs } from '../../../hooks/useTableSettings'
 import { useListPresets } from '../../../hooks/useListPresets'
+import { useEntityFields } from '../../entity-fields/useEntityFields'
+import { getNestedValue } from '../../flattenFields'
 import type { ListPageConfig, ColumnConfig } from '../types'
 
 type SortState = {
@@ -24,16 +26,38 @@ export function useEntityList<Row extends { id: number }>(config: ListPageConfig
     refetchOnWindowFocus: false,
   })
   
+  // Загружаем метаданные полей
+  const entityFields = useEntityFields(config.entityKey)
+
+  // Эффективные колонки: из конфига или автоопределение
+  const effectiveColumns = useMemo(() => {
+    if (config.columns && config.columns.length > 0) {
+      return config.columns
+    }
+    // Автоопределение из метаданных
+    return entityFields.defaultFields.map((f) => ({
+      id: f.path,
+      label: f.title,
+      type: f.type === 'number'
+        ? 'number' as const
+        : f.type === 'bool' ? 'bool' as const
+        : f.type === 'date' || f.type === 'datetime' ? 'date' as const
+        : 'text' as const,
+    }))
+  }, [config.columns, entityFields.defaultFields])
+
   const columnDefs = useMemo(
-    () => config.columns.map((c) => ({ id: c.id, label: c.label })),
-    [config.columns],
+    () => effectiveColumns.map((c) => ({ id: c.id, label: c.label })),
+    [effectiveColumns],
   )
   
   const defaultHidden = useMemo(
-    () => config.columns.filter((c) => c.hideByDefault).map((c) => c.id),
-    [config.columns],
+    () => effectiveColumns
+      .filter((c) => 'hideByDefault' in c && c.hideByDefault)
+      .map((c) => c.id),
+    [effectiveColumns],
   )
-  
+
   const prefs = useColumnPrefs(config.entityKey, columnDefs, defaultHidden)
   
   const tableSettings = useTableSettings(config.entityKey)
@@ -72,11 +96,7 @@ export function useEntityList<Row extends { id: number }>(config: ListPageConfig
     void tableSettings.save(currentPrefs)
   }, [currentPrefs, tableSettings])
 
-  // Автосохранение при изменении фильтров, сортировки, quick_filters
-  useEffect(() => {
-    if (!tableSettings.prefs) return
-    void saveCurrentPrefs()
-  }, [filters, excludeFilters, sort, quickFilters, prefs.order, prefs.hidden, prefs.widths, saveCurrentPrefs, tableSettings.prefs])
+  // Автосохранение отключено — используется явный savePrefs из useColumnPrefs
 
   const resetToDefaults = useCallback(async () => {
     const defaults = await tableSettings.resetToDefaults()
@@ -91,7 +111,7 @@ export function useEntityList<Row extends { id: number }>(config: ListPageConfig
     
     for (const [colId, raw] of Object.entries(filters)) {
       if (!raw || raw === '') continue
-      const column = config.columns.find((c) => c.id === colId)
+      const column = effectiveColumns.find((c) => c.id === colId)
       if (!column) continue
       
       result = result.filter((row) => {
@@ -101,7 +121,7 @@ export function useEntityList<Row extends { id: number }>(config: ListPageConfig
     }
     
     for (const [colId, values] of Object.entries(excludeFilters)) {
-      const column = config.columns.find((c) => c.id === colId)
+      const column = effectiveColumns.find((c) => c.id === colId)
       if (!column) continue
       
       for (const exc of values) {
@@ -114,7 +134,7 @@ export function useEntityList<Row extends { id: number }>(config: ListPageConfig
     }
     
     if (sort.col) {
-      const column = config.columns.find((c) => c.id === sort.col)
+      const column = effectiveColumns.find((c) => c.id === sort.col)
       if (column) {
         const mul = sort.dir === 'asc' ? 1 : -1
         result.sort((a, b) => {
@@ -171,7 +191,7 @@ export function useEntityList<Row extends { id: number }>(config: ListPageConfig
   
   const cellText = useCallback(
     (row: Row, colId: string): string => {
-      const column = config.columns.find((c) => c.id === colId)
+      const column = effectiveColumns.find((c) => c.id === colId)
       if (!column) return ''
       return formatCellValue(row as unknown as Record<string, unknown>, column)
     },
@@ -219,6 +239,8 @@ export function useEntityList<Row extends { id: number }>(config: ListPageConfig
     toggleRow,
     clearSelection,
     prefs,
+    columnDefs,
+    entityFields,
     cellText,
     renderCell,
     reload,
@@ -234,7 +256,9 @@ export function useEntityList<Row extends { id: number }>(config: ListPageConfig
 }
 
 function formatCellValue(row: Record<string, unknown>, column: ColumnConfig): string {
-  const value = row[column.id]
+  const value = column.id.includes('.')
+    ? getNestedValue(row, column.id)
+    : row[column.id]
   if (value == null) return '—'
   
   switch (column.type) {

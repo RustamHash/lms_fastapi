@@ -18,7 +18,7 @@ export const legalEntityConfig = {
   list: {
     entityKey: 'legal_entities',
     title: 'Юридические лица',
-    apiUrl: '/api/v1/parties/legal-entities',
+    apiUrl: '/api/v1/legal-entities',
     columns: [
       { id: 'id', label: 'ID', type: 'number' },
       { id: 'name', label: 'Наименование', type: 'text' },
@@ -38,8 +38,9 @@ export const legalEntityConfig = {
     toolbar: {
       createHref: '/reference/legal-entities/new',
     },
-    columnOverrides: {
-      name: { href: (row) => `/reference/legal-entities/${row.id}` },
-    },
   } as ListPageConfig<LegalEntityRow>,
+
+  columnOverrides: {
+    id: { href: (row: { id: number }) => `/reference/legal-entities/${row.id}` },
+  },
 }

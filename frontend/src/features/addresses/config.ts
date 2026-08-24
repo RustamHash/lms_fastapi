@@ -23,7 +23,7 @@ export const addressConfig = {
   list: {
     entityKey: 'addresses',
     title: 'Адреса',
-    apiUrl: '/api/v1/parties/addresses/list',
+    apiUrl: '/api/v1/addresses',
     
     columns: [
       { id: 'id', label: 'ID', type: 'number' },
@@ -50,11 +50,8 @@ export const addressConfig = {
     toolbar: {
       showExport: true,
     },
-    
     columnOverrides: {
-      full_address: {
-        href: (row) => `/reference/addresses/${row.id}`,
-      },
+      id: { href: (row) => `/reference/addresses/${row.id}` },
     },
   } as ListPageConfig<AddressRow>,
 }

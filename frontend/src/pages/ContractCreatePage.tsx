@@ -18,7 +18,7 @@ export function ContractCreatePage() {
 
   useEffect(() => {
     ;(async () => {
-      const entitiesData = await apiClient.get<{id: number, name: string}[]>('/api/v1/parties/legal-entities')
+      const entitiesData = await apiClient.get<{id: number, name: string}[]>('/api/v1/legal-entities')
       setLegalEntities(entitiesData)
     })()
   }, [])
@@ -28,7 +28,7 @@ export function ContractCreatePage() {
     setSaving(true)
     setError(null)
     try {
-      const created = await apiClient.post<{id: number}>('/api/v1/parties/contracts', {
+      const created = await apiClient.post<{id: number}>('/api/v1/contracts', {
         number: form.number,
         customer_id: Number(form.customer_id),
         executor_id: Number(form.executor_id),

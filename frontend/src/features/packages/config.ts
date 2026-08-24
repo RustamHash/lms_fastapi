@@ -24,7 +24,8 @@ export const packagesConfig: ListPageConfig<PackageRow> = {
   filters: [
     { id: 'name', type: 'text', label: 'Название' },
   ],
+
   columnOverrides: {
-    name: { href: (row) => `/reference/packages/${row.id}` },
+    id: { href: (row) => `/reference/packages/${row.id}` },
   },
 }

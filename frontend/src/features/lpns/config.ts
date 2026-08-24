@@ -19,4 +19,8 @@ export const lpnsConfig: ListPageConfig<LpnRow> = {
     { id: 'number', type: 'text', label: 'Номер LPN' },
     { id: 'status', type: 'text', label: 'Статус' },
   ],
+
+  columnOverrides: {
+    id: { href: (row) => `/reference/lpns/${row.id}` },
+  },
 }

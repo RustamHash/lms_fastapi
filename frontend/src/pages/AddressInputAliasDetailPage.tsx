@@ -39,8 +39,7 @@ export function AddressInputAliasDetailPage() {
       setLoading(true)
       setError(null)
       try {
-        const data = await apiClient.get<AddressInputAliasDetail>(`/api/v1/parties/aliases/${idNum}`)
-        const data = await res.json() as AddressInputAliasDetail
+        const data = await apiClient.get<AddressInputAliasDetail>(`/api/v1/aliases/${idNum}`)
         if (!cancelled) setAlias(data)
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : 'Ошибка загрузки')
