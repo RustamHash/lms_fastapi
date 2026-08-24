@@ -6,8 +6,8 @@ from decimal import Decimal
 
 import logging
 
+from app.warehouse.models import Product, Package
 from app.warehouse.repository import ProductRepository
-from app.warehouse.models import Package
 
 logger = logging.getLogger(__name__)
 
@@ -16,13 +16,24 @@ class ProductService:
     def __init__(self, repo: ProductRepository) -> None:
         self._repo = repo
 
-    async def create(self, *, user_id: int, depositor_id: int, external_id: str, name: str, **kwargs) -> object:
+    async def get_by_id(self, product_id: int) -> Product | None:
+        return await self._repo.get_by_id(product_id)
+
+    async def list_all(self) -> list[Product]:
+        return await self._repo.list_all()
+
+    async def list_by_depositor(self, depositor_id: int) -> list[Product]:
+        return await self._repo.list_by_depositor(depositor_id)
+
+    async def get_by_external_id(self, depositor_id: int, external_id: str) -> Product | None:
+        return await self._repo.get_by_external_id(depositor_id, external_id)
+
+    async def create(self, *, user_id: int | None = None, depositor_id: int, external_id: str, name: str, **kwargs) -> Product:
         existing = await self._repo.get_by_external_id(depositor_id, external_id)
         if existing:
             raise ValueError(f"Товар с кодом {external_id} уже существует")
 
-        logger.info("Создание товара: %s", external_id)
-        # Извлекаем поля для упаковки (их нет в модели Product)
+        # Извлекаем поля для упаковки
         unit = kwargs.pop("unit", "шт")
         barcode = kwargs.pop("barcode", None)
         gross_mass = kwargs.pop("gross_mass", None)
@@ -46,13 +57,11 @@ class ProductService:
         self._repo._s.add(base_package)
         await self._repo._s.flush()
 
-        logger.info("Товар создан: id=%s", product.id)
         return product
 
-    async def get_by_id(self, product_id: int):
-        return await self._repo.get_by_id(product_id)
-
-    async def get_or_create(self, depositor_id: int, external_id: str, defaults: dict, user_id: int | None = None):
+    async def get_or_create(
+        self, depositor_id: int, external_id: str, defaults: dict, user_id: int | None = None
+    ) -> tuple[Product, bool]:
         product = await self._repo.get_by_external_id(depositor_id, external_id)
         if product:
             return product, False
@@ -75,19 +84,8 @@ class ProductService:
         )
         return product, True
 
-    async def list_by_depositor(self, depositor_id: int):
-        return await self._repo.list_by_depositor(depositor_id)
-
-    async def list_all(self):
-        return await self._repo.list_all()
-
-    async def update(self, product_id: int, user_id: int, **fields):
-        return await self._repo.update(product_id, **fields)
+    async def update(self, product_id: int, user_id: int | None = None, **kwargs) -> Product | None:
+        return await self._repo.update(product_id, **kwargs)
 
     async def soft_delete(self, product_id: int, user_id: int | None = None) -> bool:
-        product = await self.get_by_id(product_id)
-        if not product:
-            return False
-        product.soft_delete(user_id)
-        await self._repo._s.flush()
-        return True
+        return await self._repo.soft_delete(product_id, user_id)

@@ -7,7 +7,10 @@ from typing import Any
 from sqlalchemy import Boolean, String
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+from typing import TYPE_CHECKING
 
+if TYPE_CHECKING:
+    from app.accounts.models.role import Role
 from app.infrastructure.orm_base import Base
 
 
@@ -31,7 +34,7 @@ class User(Base):
         comment="Дополнительные права пользователя",
     )
 
-    roles: Mapped[list["Role"]] = relationship(
+    roles: Mapped[list["Role"]] = relationship(lazy="selectin", 
         secondary="accounts_user_roles",
         back_populates="users",
     )

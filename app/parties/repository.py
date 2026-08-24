@@ -1,10 +1,14 @@
+# app/parties/repository.py
+
 """Репозитории для модуля parties."""
 
 from __future__ import annotations
 
-from sqlalchemy import or_, select
+
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.infrastructure.repo_base import BaseRepository
 from app.parties.models import (
     Address,
     Carrier,
@@ -20,362 +24,56 @@ from app.parties.models import (
 )
 
 
-class AddressRepository:
+class AddressRepository(BaseRepository[Address]):
     def __init__(self, session: AsyncSession) -> None:
-        self.session = session
-
-    async def get_address_by_id(self, address_id: int) -> Address | None:
-        return await self.session.get(Address, address_id)
-
-    async def get_by_hash(self, address_hash: str) -> Address | None:
-        if not address_hash:
-            return None
-        stmt = (
-            select(Address)
-            .join(RawAddress, RawAddress.normalized_address_id == Address.id)
-            .where(RawAddress.hash == address_hash)
-        )
-        return await self.session.scalar(stmt)
-
-    async def list_addresses(self) -> list[Address]:
-        stmt = select(Address)
-        return list(await self.session.scalars(stmt))
-
-    async def insert_address(self, **kwargs) -> Address:
-        row = Address(**kwargs)
-        self.session.add(row)
-        await self.session.flush()
-        return row
-
-    async def list_raw(self, limit: int = 1000, offset: int = 0) -> list[RawAddress]:
-        stmt = select(RawAddress).order_by(RawAddress.id.desc()).limit(limit).offset(offset)
-        return list(await self.session.scalars(stmt))
-
-    async def find_raw_by_text(self, raw_text: str) -> RawAddress | None:
-        stmt = select(RawAddress).where(
-            RawAddress.raw_text == raw_text,
-        )
-        return await self.session.scalar(stmt)
-
-    async def find_address_by_fias_id(self, fias_id: str) -> Address | None:
-        if not fias_id:
-            return None
-        stmt = select(Address).where(
-            Address.fias_id == fias_id,
-        )
-        return await self.session.scalar(stmt)
-
-    async def find_address_by_full_address(self, full_address: str) -> Address | None:
-        if not full_address:
-            return None
-        stmt = select(Address).where(
-            Address.full_address == full_address,
-        )
-        return await self.session.scalar(stmt)
-
-    async def get_raw_by_id(self, raw_id: int) -> RawAddress | None:
-        return await self.session.get(RawAddress, raw_id)
-
-    async def insert_raw(self, **kwargs) -> RawAddress:
-        row = RawAddress(**kwargs)
-        self.session.add(row)
-        await self.session.flush()
-        return row
+        super().__init__(session, Address)
 
 
-class LegalEntityRepository:
+class RawAddressRepository(BaseRepository[RawAddress]):
     def __init__(self, session: AsyncSession) -> None:
-        self.session = session
-
-    async def get_by_id(self, entity_id: int) -> LegalEntity | None:
-        return await self.session.get(LegalEntity, entity_id)
-
-    async def get_by_inn(self, inn: str) -> LegalEntity | None:
-        if not inn:
-            return None
-        stmt = select(LegalEntity).where(
-            LegalEntity.inn == inn)
-        return await self.session.scalar(stmt)
-
-    async def list_all(self) -> list[LegalEntity]:
-        stmt = select(LegalEntity)
-        return list(await self.session.scalars(stmt))
-
-    async def insert(self, **kwargs) -> LegalEntity:
-        row = LegalEntity(**kwargs)
-        self.session.add(row)
-        await self.session.flush()
-        return row
-
-    async def update(self, entity_id: int, **kwargs) -> LegalEntity | None:
-        row = await self.session.get(LegalEntity, entity_id)
-        if row is None:
-            return None
-        for field, value in kwargs.items():
-            setattr(row, field, value)
-        await self.session.flush()
-        return row
+        super().__init__(session, RawAddress)
 
 
-class ClientRepository:
+class LegalEntityRepository(BaseRepository[LegalEntity]):
     def __init__(self, session: AsyncSession) -> None:
-        self.session = session
-
-    async def get_by_id(self, client_id: int) -> Client | None:
-        return await self.session.get(Client, client_id)
-
-    async def get_by_code(self, depositor_id: int, code: str) -> Client | None:
-        if not code:
-            return None
-        stmt = select(Client).where(
-            Client.depositor_id == depositor_id,
-            Client.code == code,
-        )
-        return await self.session.scalar(stmt)
-
-    async def get_by_code_and_address(
-        self, depositor_id: int, code: str, delivery_address_id: int | None
-    ) -> Client | None:
-        """Найти клиента по коду и адресу доставки."""
-        if not code:
-            return None
-        stmt = select(Client).where(
-            Client.depositor_id == depositor_id,
-            Client.code == code,
-        )
-        if delivery_address_id is not None:
-            stmt = stmt.where(Client.delivery_address_id == delivery_address_id)
-        return await self.session.scalar(stmt)
-
-    async def list_by_depositor(self, depositor_id: int) -> list[Client]:
-        stmt = select(Client).where(
-            Client.depositor_id == depositor_id,
-        )
-        return list(await self.session.scalars(stmt))
-
-    async def list_all(self) -> list[Client]:
-        stmt = select(Client)
-        return list(await self.session.scalars(stmt))
-
-    async def insert(self, **kwargs) -> Client:
-        row = Client(**kwargs)
-        self.session.add(row)
-        await self.session.flush()
-        return row
-
-    async def update(self, client_id: int, **kwargs) -> Client | None:
-        row = await self.session.get(Client, client_id)
-        if row is None:
-            return None
-        for field, value in kwargs.items():
-            setattr(row, field, value)
-        await self.session.flush()
-        return row
+        super().__init__(session, LegalEntity)
 
 
-
-class ContractRepository:
+class ClientRepository(BaseRepository[Client]):
     def __init__(self, session: AsyncSession) -> None:
-        self.session = session
-
-    async def get_by_id(self, contract_id: int) -> Contract | None:
-        return await self.session.get(Contract, contract_id)
-
-    async def list_active(self) -> list[Contract]:
-        stmt = select(Contract).where(
-            Contract.status == "active",
-        )
-        return list(await self.session.scalars(stmt))
-
-    async def list_all(self) -> list[Contract]:
-        stmt = select(Contract)
-        return list(await self.session.scalars(stmt))
-
-    async def insert(self, **kwargs) -> Contract:
-        row = Contract(**kwargs)
-        self.session.add(row)
-        await self.session.flush()
-        return row
-
-    async def update(self, contract_id: int, **kwargs) -> Contract | None:
-        row = await self.session.get(Contract, contract_id)
-        if row is None:
-            return None
-        for field, value in kwargs.items():
-            setattr(row, field, value)
-        await self.session.flush()
-        return row
+        super().__init__(session, Client)
 
 
-class TariffRepository:
+class DepositorRepository(BaseRepository[Depositor]):
     def __init__(self, session: AsyncSession) -> None:
-        self.session = session
-
-    async def get_document_by_id(self, document_id: int) -> TariffDocument | None:
-        return await self.session.get(TariffDocument, document_id)
-
-    async def insert_document(self, **kwargs) -> TariffDocument:
-        row = TariffDocument(**kwargs)
-        self.session.add(row)
-        await self.session.flush()
-        return row
-
-    async def insert_tariff(self, **kwargs) -> Tariff:
-        row = Tariff(**kwargs)
-        self.session.add(row)
-        await self.session.flush()
-        return row
-
-    async def get_tariff_by_id(self, tariff_id: int) -> Tariff | None:
-        return await self.session.get(Tariff, tariff_id)
-
-    async def list_documents(self) -> list[TariffDocument]:
-        return list(await self.session.scalars(select(TariffDocument)))
-
-    async def list_all_tariffs(self) -> list[Tariff]:
-        return list(await self.session.scalars(select(Tariff)))
-
-    async def list_tariffs_by_document(self, document_id: int) -> list[Tariff]:
-        stmt = select(Tariff).where(
-            Tariff.document_id == document_id,
-        )
-        return list(await self.session.scalars(stmt))
+        super().__init__(session, Depositor)
 
 
-class DepositorRepository:
+class ContractRepository(BaseRepository[Contract]):
     def __init__(self, session: AsyncSession) -> None:
-        self.session = session
-
-    async def get_by_id(self, depositor_id: int) -> Depositor | None:
-        return await self.session.get(Depositor, depositor_id)
-
-    async def get_by_code(self, code: str) -> Depositor | None:
-        if not code:
-            return None
-        stmt = select(Depositor).where(
-            Depositor.code == code)
-        return await self.session.scalar(stmt)
-
-    async def list_all(self) -> list[Depositor]:
-        stmt = select(Depositor)
-        return list(await self.session.scalars(stmt))
-
-    async def insert(self, **kwargs) -> Depositor:
-        row = Depositor(**kwargs)
-        self.session.add(row)
-        await self.session.flush()
-        return row
+        super().__init__(session, Contract)
 
 
-class CarrierRepository:
+class TariffDocumentRepository(BaseRepository[TariffDocument]):
     def __init__(self, session: AsyncSession) -> None:
-        self.session = session
-
-    async def get_by_id(self, carrier_id: int) -> Carrier | None:
-        return await self.session.get(Carrier, carrier_id)
-
-    async def get_by_legal_entity(self, legal_entity_id: int) -> Carrier | None:
-        stmt = select(Carrier).where(Carrier.legal_entity_id == legal_entity_id)
-        return await self.session.scalar(stmt)
-
-    async def list_all(self) -> list[Carrier]:
-        return list(await self.session.scalars(select(Carrier)))
-
-    async def create(self, **kwargs) -> Carrier:
-        row = Carrier(**kwargs)
-        self.session.add(row)
-        await self.session.flush()
-        return row
-
-    async def update(self, carrier_id: int, **kwargs) -> Carrier | None:
-        row = await self.get_by_id(carrier_id)
-        if row is None:
-            return None
-        for field, value in kwargs.items():
-            setattr(row, field, value)
-        await self.session.flush()
-        return row
-
-    async def delete(self, carrier_id: int) -> bool:
-        row = await self.get_by_id(carrier_id)
-        if row is None:
-            return False
-        await self.session.delete(row)
-        await self.session.flush()
-        return True
+        super().__init__(session, TariffDocument)
 
 
-class KeeperRepository:
+class TariffRepository(BaseRepository[Tariff]):
     def __init__(self, session: AsyncSession) -> None:
-        self.session = session
-
-    async def get_by_id(self, keeper_id: int) -> Keeper | None:
-        return await self.session.get(Keeper, keeper_id)
-
-    async def get_by_legal_entity(self, legal_entity_id: int) -> Keeper | None:
-        stmt = select(Keeper).where(Keeper.legal_entity_id == legal_entity_id)
-        return await self.session.scalar(stmt)
-
-    async def list_all(self) -> list[Keeper]:
-        return list(await self.session.scalars(select(Keeper)))
-
-    async def create(self, **kwargs) -> Keeper:
-        row = Keeper(**kwargs)
-        self.session.add(row)
-        await self.session.flush()
-        return row
-
-    async def update(self, keeper_id: int, **kwargs) -> Keeper | None:
-        row = await self.get_by_id(keeper_id)
-        if row is None:
-            return None
-        for field, value in kwargs.items():
-            setattr(row, field, value)
-        await self.session.flush()
-        return row
-
-    async def delete(self, keeper_id: int) -> bool:
-        row = await self.get_by_id(keeper_id)
-        if row is None:
-            return False
-        await self.session.delete(row)
-        await self.session.flush()
-        return True
+        super().__init__(session, Tariff)
 
 
-class DeliveryZoneRepository:
+class DeliveryZoneRepository(BaseRepository[DeliveryZone]):
     def __init__(self, session: AsyncSession) -> None:
-        self.session = session
+        super().__init__(session, DeliveryZone)
 
-    async def get_by_id(self, zone_id: int) -> DeliveryZone | None:
-        return await self.session.get(DeliveryZone, zone_id)
 
-    async def get_by_name(self, name: str) -> DeliveryZone | None:
-        stmt = select(DeliveryZone).where(DeliveryZone.name == name)
-        return await self.session.scalar(stmt)
+class CarrierRepository(BaseRepository[Carrier]):
+    def __init__(self, session: AsyncSession) -> None:
+        super().__init__(session, Carrier)
 
-    async def list_all(self) -> list[DeliveryZone]:
-        return list(await self.session.scalars(select(DeliveryZone)))
 
-    async def create(self, **kwargs) -> DeliveryZone:
-        row = DeliveryZone(**kwargs)
-        self.session.add(row)
-        await self.session.flush()
-        return row
-
-    async def update(self, zone_id: int, **kwargs) -> DeliveryZone | None:
-        row = await self.get_by_id(zone_id)
-        if row is None:
-            return None
-        for field, value in kwargs.items():
-            setattr(row, field, value)
-        await self.session.flush()
-        return row
-
-    async def delete(self, zone_id: int) -> bool:
-        row = await self.get_by_id(zone_id)
-        if row is None:
-            return False
-        await self.session.delete(row)
-        await self.session.flush()
-        return True
+class KeeperRepository(BaseRepository[Keeper]):
+    def __init__(self, session: AsyncSession) -> None:
+        super().__init__(session, Keeper)

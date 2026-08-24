@@ -1,0 +1,3000 @@
+async def create_return_order(body: ReturnOrderCreate, session: SessionDep, user_id: UserDep) -> ReturnOrderRead:
+    order = await ReturnOrderRepository(session).create(**body.model_dump())
+    return ReturnOrderRead.model_validate(order)
+
+
+@router.get("/{order_id}", response_model=ReturnOrderRead, dependencies=[Depends(require_permission("view", "orders"))])
+async def get_return_order(order_id: int, session: SessionDep) -> ReturnOrderRead:
+    order = await ReturnOrderRepository(session).get_by_id(order_id)
+    if order is None:
+        raise NotFoundError("Возврат не найден")
+    return ReturnOrderRead.model_validate(order)
+
+
+@router.patch("/{order_id}", response_model=ReturnOrderRead, dependencies=[Depends(require_permission("update", "orders"))])
+async def update_return_order(order_id: int, body: ReturnOrderUpdate, session: SessionDep, user_id: UserDep) -> ReturnOrderRead:
+    order = await ReturnOrderRepository(session).update(order_id, **body.model_dump(exclude_unset=True))
+    if order is None:
+        raise NotFoundError("Возврат не найден")
+    return ReturnOrderRead.model_validate(order)
+
+
+@router.delete("/{order_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_permission("delete", "orders"))])
+async def delete_return_order(order_id: int, session: SessionDep, user_id: UserDep) -> None:
+    ok = await ReturnOrderRepository(session).soft_delete(order_id, user_id)
+    if not ok:
+        raise NotFoundError("Возврат не найден")
+
+
+@router.get("/{order_id}/lines", response_model=list[ReturnOrderLineRead], dependencies=[Depends(require_permission("view", "orders"))])
+async def list_return_lines(order_id: int, session: SessionDep) -> list[ReturnOrderLineRead]:
+    rows = await ReturnOrderLineRepository(session).list_by_order(order_id)
+    return [ReturnOrderLineRead.model_validate(r) for r in rows]
+
+
+@router.post("/{order_id}/lines", response_model=ReturnOrderLineRead, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_permission("create", "orders"))])
+async def create_return_line(order_id: int, body: ReturnOrderLineCreate, session: SessionDep, user_id: UserDep) -> ReturnOrderLineRead:
+    line = await ReturnOrderLineRepository(session).create(return_order_id=order_id, **body.model_dump(exclude={"return_order_id"}))
+    return ReturnOrderLineRead.model_validate(line)
+
+
+@router.delete("/lines/{line_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_permission("delete", "orders"))])
+async def delete_return_line(line_id: int, session: SessionDep, user_id: UserDep) -> None:
+    ok = await ReturnOrderLineRepository(session).soft_delete(line_id, user_id)
+    if not ok:
+        raise NotFoundError("Строка не найдена")
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/api/v1/orders/schemas_detailed.py
+========================================
+"""Детальные схемы заказов с вложенными объектами."""
+
+from __future__ import annotations
+
+from datetime import date
+from app.api.v1.base_schemas import BaseRead
+from app.api.v1.parties.schemas import DepositorRead, ClientRead
+from app.api.v1.warehouse.schemas import WarehouseRead
+
+
+class InboundOrderDetailed(BaseRead):
+    """Приходный заказ с поставщиком и складом."""
+
+    depositor_id: int
+    warehouse_id: int | None = None
+    number: str
+    supplier_code: str = ""
+    order_date: date
+    planned_date: date | None = None
+    status: str = "new"
+    has_shortage: bool = False
+
+    # Вложенные
+    depositor: DepositorRead | None = None
+    supplier: ClientRead | None = None
+    warehouse: WarehouseRead | None = None
+
+
+class OutboundOrderDetailed(BaseRead):
+    """Расходный заказ с клиентом, поклажедателем, маршрутом."""
+
+    depositor_id: int
+    warehouse_id: int | None = None
+    number: str
+    customer_code: str = ""
+    customer_name: str = ""
+    delivery_address_name: str = ""
+    order_date: date
+    shipping_date: date | None = None
+    needs_delivery: bool = False
+    status: str = "new"
+    delivery_status: str | None = None
+
+    # Вложенные
+    depositor: DepositorRead | None = None
+    client: ClientRead | None = None
+    warehouse: WarehouseRead | None = None
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/api/v1/orders/schemas_enriched.py
+========================================
+"""Обогащенные схемы для списков и детальных страниц."""
+
+from __future__ import annotations
+
+from datetime import date
+from decimal import Decimal
+from typing import TYPE_CHECKING, Any
+
+from app.api.v1.base_schemas import BaseRead
+
+if TYPE_CHECKING:
+    from app.api.v1.parties.schemas import AddressRead, ClientRead, DeliveryZoneRead, DepositorRead
+    from app.api.v1.warehouse.schemas import WarehouseRead
+    from app.api.v1.delivery.schemas import DeliveryOrderRead, DriverRead, RouteRead
+
+
+# ========== OUTBOUND ORDER ==========
+
+class OutboundOrderList(BaseRead):
+    """Плоская схема для таблицы."""
+    number: str
+    customer_code: str = ""
+    customer_name: str = ""
+    document_number: str = ""
+    delivery_address_name: str = ""
+    order_date: date
+    shipping_date: date | None = None
+    status: str = "new"
+    status_label: str = ""
+    is_edo: bool = False
+    warehouse_id: int | None = None
+    declared_weight: Decimal | None = None
+    needs_delivery: bool = False
+    notes: str = ""
+    address_comment: str = ""
+    shipping_contact: str = ""
+    total_quantity: int = 0
+    total_lines: int = 0
+
+    # Плоские связи
+    depositor_name: str | None = None
+    zone_name: str | None = None
+    warehouse_name: str | None = None
+    route_number: str | None = None
+    driver_name: str | None = None
+    driver_phone: str | None = None
+
+
+class OutboundOrderDetail(BaseRead):
+    """Вложенная схема для детальной страницы."""
+    number: str
+    customer_code: str = ""
+    customer_name: str = ""
+    document_number: str = ""
+    delivery_address_name: str = ""
+    order_date: date
+    shipping_date: date | None = None
+    status: str = "new"
+    is_edo: bool = False
+    warehouse_id: int | None = None
+    declared_weight: Decimal | None = None
+    needs_delivery: bool = False
+    delivery_only: bool = False
+    places_count: int | None = None
+    delivery_contact: str = ""
+    notes: str = ""
+
+    # Вложенные связи
+    depositor: Any | None = None
+    client: Any | None = None
+    warehouse: Any | None = None
+    delivery_order: Any | None = None
+    route: Any | None = None
+    driver: Any | None = None
+    delivery_address: Any | None = None
+    zone: Any | None = None
+    documents: list = []
+    tasks: list = []
+    returns: list = []
+
+
+# ========== INBOUND ORDER ==========
+
+class InboundOrderList(BaseRead):
+    """Плоская схема для таблицы приходных."""
+    number: str
+    supplier_code: str = ""
+    order_date: date
+    planned_date: date | None = None
+    status: str = "new"
+    status_label: str = ""
+    has_shortage: bool = False
+    warehouse_id: int | None = None
+    notes: str = ""
+
+    # Плоские связи
+    depositor_name: str | None = None
+    supplier_name: str | None = None
+    warehouse_name: str | None = None
+
+
+class InboundOrderDetail(BaseRead):
+    """Вложенная схема для детальной страницы приходного."""
+    number: str
+    supplier_code: str = ""
+    order_date: date
+    planned_date: date | None = None
+    status: str = "new"
+    has_shortage: bool = False
+    warehouse_id: int | None = None
+    notes: str = ""
+
+    # Вложенные
+    depositor: Any | None = None
+    supplier: Any | None = None
+    warehouse: Any | None = None
+    documents: list = []
+    tasks: list = []
+
+
+# ========== ORDER LINES ==========
+
+class OutboundOrderLineList(BaseRead):
+    """Строка заказа для таблицы."""
+    order_id: int
+    product_id: int | None = None
+    quantity: Decimal
+    location_id: int | None = None
+    batch_number: str = ""
+    manufacture_date: date | None = None
+
+    # Плоские связи
+    product_name: str | None = None
+    product_sku: str | None = None
+    location_name: str | None = None
+
+
+class InboundOrderLineList(BaseRead):
+    """Строка приходного заказа для таблицы."""
+    order_id: int
+    product_id: int | None = None
+    quantity: Decimal
+    batch_number: str = ""
+    manufacture_date: date | None = None
+
+    # Плоские связи
+    product_name: str | None = None
+    product_sku: str | None = None
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/api/v1/orders/schemas.py
+========================================
+"""Схемы для заказов."""
+
+from __future__ import annotations
+
+from datetime import date
+from decimal import Decimal
+
+from pydantic import BaseModel, Field
+
+from app.api.v1.base_schemas import BaseRead
+from app.core.statuses import OrderStatus, DeliveryStatus
+
+
+class InboundOrderRead(BaseRead):
+    depositor_id: int
+    warehouse_id: int | None = None
+    number: str
+    supplier_code: str = ""
+    order_date: date
+    planned_date: date | None = None
+    notes: str = ""
+    status: str = OrderStatus.NEW.value
+    pordrsp_exported: bool = False
+    recadv_exported: bool = False
+    has_shortage: bool = False
+
+
+class InboundOrderCreate(BaseModel):
+    depositor_id: int
+    warehouse_id: int | None = None
+    number: str = Field(min_length=1, max_length=100)
+    supplier_code: str = ""
+    order_date: date
+    planned_date: date | None = None
+    notes: str = ""
+
+
+class InboundOrderUpdate(BaseModel):
+    warehouse_id: int | None = None
+    supplier_code: str | None = None
+    planned_date: date | None = None
+    notes: str | None = None
+    status: str | None = None
+
+
+class InboundOrderLineRead(BaseRead):
+    order_id: int
+    product_id: int | None = None
+    quantity: Decimal
+    batch_number: str = ""
+    manufacture_date: date | None = None
+    serial_numbers: list = Field(default_factory=list)
+
+
+class InboundOrderLineCreate(BaseModel):
+    order_id: int
+    product_id: int | None = None
+    quantity: Decimal
+    batch_number: str = ""
+    manufacture_date: date | None = None
+    serial_numbers: list = Field(default_factory=list)
+
+
+class OutboundOrderRead(BaseRead):
+    depositor_id: int
+    warehouse_id: int | None = None
+    number: str
+    customer_code: str = ""
+    customer_name: str = ""
+    delivery_address_name: str = ""
+    order_date: date
+    shipping_date: date | None = None
+    needs_delivery: bool = False
+    delivery_only: bool = False
+    places_count: int | None = None
+    declared_weight: Decimal | None = None
+    delivery_contact: str = ""
+    notes: str = ""
+    status: str = OrderStatus.NEW.value
+    ordrsp_exported: bool = False
+    desadv_exported: bool = False
+    zone_id: int | None = None
+    document_number: str = ""
+    is_printed: bool = False
+    uuid: str = ""
+    delivery_status: str | None = None
+
+
+class OutboundOrderCreate(BaseModel):
+    depositor_id: int
+    warehouse_id: int | None = None
+    number: str = Field(min_length=1, max_length=100)
+    customer_code: str = ""
+    customer_name: str = ""
+    delivery_address_name: str = ""
+    order_date: date
+    shipping_date: date | None = None
+    needs_delivery: bool = False
+    delivery_only: bool = False
+    places_count: int | None = None
+    declared_weight: Decimal | None = None
+    delivery_contact: str = ""
+    notes: str = ""
+
+
+class OutboundOrderUpdate(BaseModel):
+    warehouse_id: int | None = None
+    customer_name: str | None = None
+    delivery_address_name: str | None = None
+    shipping_date: date | None = None
+    needs_delivery: bool | None = None
+    delivery_contact: str | None = None
+    notes: str | None = None
+    status: str | None = None
+    delivery_status: str | None = None
+
+
+class OutboundOrderLineRead(BaseRead):
+    order_id: int
+    product_id: int | None = None
+    quantity: Decimal
+    location_id: int | None = None
+    batch_number: str = ""
+    manufacture_date: date | None = None
+    serial_numbers: list = Field(default_factory=list)
+
+
+class OutboundOrderLineCreate(BaseModel):
+    order_id: int
+    product_id: int | None = None
+    quantity: Decimal
+    location_id: int | None = None
+    batch_number: str = ""
+    manufacture_date: date | None = None
+    serial_numbers: list = Field(default_factory=list)
+
+
+class ReturnOrderRead(BaseRead):
+    outbound_order_id: int
+    inbound_order_id: int | None = None
+    depositor_id: int
+    warehouse_id: int | None = None
+    customer_code: str = ""
+    customer_name: str = ""
+    return_date: date
+    return_type: str = "partial"
+    status: str = "new"
+    notes: str = ""
+
+
+class ReturnOrderCreate(BaseModel):
+    outbound_order_id: int
+    inbound_order_id: int | None = None
+    depositor_id: int
+    warehouse_id: int | None = None
+    customer_code: str = ""
+    customer_name: str = ""
+    return_date: date
+    return_type: str = "partial"
+    notes: str = ""
+
+
+class ReturnOrderUpdate(BaseModel):
+    inbound_order_id: int | None = None
+    status: str | None = None
+    notes: str | None = None
+
+
+class ReturnOrderLineRead(BaseRead):
+    return_order_id: int
+    outbound_order_line_id: int | None = None
+    product_id: int
+    qty_returned: Decimal
+    batch_number: str = ""
+    manufacture_date: date | None = None
+    reason: str = ""
+
+
+class ReturnOrderLineCreate(BaseModel):
+    return_order_id: int
+    outbound_order_line_id: int | None = None
+    product_id: int
+    qty_returned: Decimal
+    batch_number: str = ""
+    manufacture_date: date | None = None
+    reason: str = ""
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/api/v1/parties/__init__.py
+========================================
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/api/v1/parties/routes/addresses.py
+========================================
+# app/api/v1/parties/routes/addresses.py
+
+"""Роутер для адресов."""
+
+from __future__ import annotations
+
+from fastapi import APIRouter, Depends, status
+
+from app.api.deps import SessionDep, require_permission
+from app.api.v1.parties.schemas import AddressCreate, AddressRead, AddressUpdate
+from app.core.exceptions import NotFoundError
+from app.parties.repository import AddressRepository
+from app.parties.services.address_service import AddressService
+
+router = APIRouter(prefix="/addresses", tags=["addresses"])
+
+
+def get_service(session: SessionDep) -> AddressService:
+    return AddressService(AddressRepository(session))
+
+
+@router.get("", response_model=list[AddressRead], dependencies=[Depends(require_permission("view", "addresses"))])
+async def list_addresses(service: AddressService = Depends(get_service)) -> list[AddressRead]:
+    return await service.list_all()
+
+
+@router.post("", response_model=AddressRead, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_permission("create", "addresses"))])
+async def create_address(body: AddressCreate, service: AddressService = Depends(get_service)) -> AddressRead:
+    return await service.create(**body.model_dump())
+
+
+@router.get("/{id}", response_model=AddressRead, dependencies=[Depends(require_permission("view", "addresses"))])
+async def get_address(id: int, service: AddressService = Depends(get_service)) -> AddressRead:
+    row = await service.get_by_id(id)
+    if row is None:
+        raise NotFoundError("Адрес не найден")
+    return row
+
+
+@router.patch("/{id}", response_model=AddressRead, dependencies=[Depends(require_permission("update", "addresses"))])
+async def update_address(id: int, body: AddressUpdate, service: AddressService = Depends(get_service)) -> AddressRead:
+    row = await service.update(id, **body.model_dump(exclude_unset=True))
+    if row is None:
+        raise NotFoundError("Адрес не найден")
+    return row
+
+
+@router.delete("/{id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_permission("delete", "addresses"))])
+async def delete_address(id: int, service: AddressService = Depends(get_service)) -> None:
+    ok = await service.soft_delete(id)
+    if not ok:
+        raise NotFoundError("Адрес не найден")
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/api/v1/parties/routes/carriers.py
+========================================
+# app/api/v1/parties/routes/carriers.py
+
+"""Роутер для перевозчиков."""
+
+from __future__ import annotations
+
+from fastapi import APIRouter, Depends, status
+
+from app.api.deps import SessionDep, require_permission
+from app.api.v1.parties.schemas import CarrierCreate, CarrierRead, CarrierUpdate
+from app.core.exceptions import NotFoundError
+from app.parties.repository import CarrierRepository
+from app.parties.services.carrier_service import CarrierService
+
+router = APIRouter(prefix="/carriers", tags=["carriers"])
+
+
+def get_service(session: SessionDep) -> CarrierService:
+    return CarrierService(CarrierRepository(session))
+
+
+@router.get("", response_model=list[CarrierRead], dependencies=[Depends(require_permission("view", "carriers"))])
+async def list_carriers(service: CarrierService = Depends(get_service)) -> list[CarrierRead]:
+    return await service.list_all()
+
+
+@router.post("", response_model=CarrierRead, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_permission("create", "carriers"))])
+async def create_carrier(body: CarrierCreate, service: CarrierService = Depends(get_service)) -> CarrierRead:
+    return await service.create(**body.model_dump())
+
+
+@router.get("/{id}", response_model=CarrierRead, dependencies=[Depends(require_permission("view", "carriers"))])
+async def get_carrier(id: int, service: CarrierService = Depends(get_service)) -> CarrierRead:
+    row = await service.get_by_id(id)
+    if row is None:
+        raise NotFoundError("Перевозчик не найден")
+    return row
+
+
+@router.patch("/{id}", response_model=CarrierRead, dependencies=[Depends(require_permission("update", "carriers"))])
+async def update_carrier(id: int, body: CarrierUpdate, service: CarrierService = Depends(get_service)) -> CarrierRead:
+    row = await service.update(id, **body.model_dump(exclude_unset=True))
+    if row is None:
+        raise NotFoundError("Перевозчик не найден")
+    return row
+
+
+@router.delete("/{id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_permission("delete", "carriers"))])
+async def delete_carrier(id: int, service: CarrierService = Depends(get_service)) -> None:
+    ok = await service.soft_delete(id)
+    if not ok:
+        raise NotFoundError("Перевозчик не найден")
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/api/v1/parties/routes/clients.py
+========================================
+# app/api/v1/parties/routes/clients.py
+
+"""Роутер для клиентов."""
+
+from __future__ import annotations
+
+from fastapi import APIRouter, Depends, status
+
+from app.api.deps import SessionDep, require_permission
+from app.api.v1.parties.schemas import ClientCreate, ClientRead, ClientUpdate
+from app.core.exceptions import NotFoundError
+from app.parties.repository import ClientRepository
+from app.parties.services.client_service import ClientService
+
+router = APIRouter(prefix="/clients", tags=["clients"])
+
+
+def get_service(session: SessionDep) -> ClientService:
+    return ClientService(ClientRepository(session))
+
+
+@router.get("", response_model=list[ClientRead], dependencies=[Depends(require_permission("view", "clients"))])
+async def list_clients(service: ClientService = Depends(get_service)) -> list[ClientRead]:
+    return await service.list_all()
+
+
+@router.post("", response_model=ClientRead, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_permission("create", "clients"))])
+async def create_client(body: ClientCreate, service: ClientService = Depends(get_service)) -> ClientRead:
+    return await service.create(**body.model_dump())
+
+
+@router.get("/{id}", response_model=ClientRead, dependencies=[Depends(require_permission("view", "clients"))])
+async def get_client(id: int, service: ClientService = Depends(get_service)) -> ClientRead:
+    row = await service.get_by_id(id)
+    if row is None:
+        raise NotFoundError("Клиент не найден")
+    return row
+
+
+@router.patch("/{id}", response_model=ClientRead, dependencies=[Depends(require_permission("update", "clients"))])
+async def update_client(id: int, body: ClientUpdate, service: ClientService = Depends(get_service)) -> ClientRead:
+    row = await service.update(id, **body.model_dump(exclude_unset=True))
+    if row is None:
+        raise NotFoundError("Клиент не найден")
+    return row
+
+
+@router.delete("/{id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_permission("delete", "clients"))])
+async def delete_client(id: int, service: ClientService = Depends(get_service)) -> None:
+    ok = await service.soft_delete(id)
+    if not ok:
+        raise NotFoundError("Клиент не найден")
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/api/v1/parties/routes/contracts.py
+========================================
+# app/api/v1/parties/routes/contracts.py
+
+"""Роутер для договоров."""
+
+from __future__ import annotations
+
+from fastapi import APIRouter, Depends, status
+
+from app.api.deps import SessionDep, require_permission
+from app.api.v1.parties.schemas import ContractCreate, ContractRead, ContractUpdate
+from app.core.exceptions import NotFoundError
+from app.parties.repository import ContractRepository
+from app.parties.services.contract_service import ContractService
+
+router = APIRouter(prefix="/contracts", tags=["contracts"])
+
+
+def get_service(session: SessionDep) -> ContractService:
+    return ContractService(ContractRepository(session))
+
+
+@router.get("", response_model=list[ContractRead], dependencies=[Depends(require_permission("view", "contracts"))])
+async def list_contracts(service: ContractService = Depends(get_service)) -> list[ContractRead]:
+    return await service.list_all()
+
+
+@router.post("", response_model=ContractRead, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_permission("create", "contracts"))])
+async def create_contract(body: ContractCreate, service: ContractService = Depends(get_service)) -> ContractRead:
+    return await service.create(**body.model_dump())
+
+
+@router.get("/{id}", response_model=ContractRead, dependencies=[Depends(require_permission("view", "contracts"))])
+async def get_contract(id: int, service: ContractService = Depends(get_service)) -> ContractRead:
+    row = await service.get_by_id(id)
+    if row is None:
+        raise NotFoundError("Договор не найден")
+    return row
+
+
+@router.patch("/{id}", response_model=ContractRead, dependencies=[Depends(require_permission("update", "contracts"))])
+async def update_contract(id: int, body: ContractUpdate, service: ContractService = Depends(get_service)) -> ContractRead:
+    row = await service.update(id, **body.model_dump(exclude_unset=True))
+    if row is None:
+        raise NotFoundError("Договор не найден")
+    return row
+
+
+@router.delete("/{id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_permission("delete", "contracts"))])
+async def delete_contract(id: int, service: ContractService = Depends(get_service)) -> None:
+    ok = await service.soft_delete(id)
+    if not ok:
+        raise NotFoundError("Договор не найден")
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/api/v1/parties/routes/delivery_zones.py
+========================================
+# app/api/v1/parties/routes/delivery_zones.py
+
+"""Роутер для зон доставки."""
+
+from __future__ import annotations
+
+from fastapi import APIRouter, Depends, status
+
+from app.api.deps import SessionDep, require_permission
+from app.api.v1.parties.schemas import DeliveryZoneCreate, DeliveryZoneRead, DeliveryZoneUpdate
+from app.core.exceptions import NotFoundError
+from app.parties.repository import DeliveryZoneRepository
+from app.parties.services.delivery_zone_service import DeliveryZoneService
+
+router = APIRouter(prefix="/delivery-zones", tags=["delivery-zones"])
+
+
+def get_service(session: SessionDep) -> DeliveryZoneService:
+    return DeliveryZoneService(DeliveryZoneRepository(session))
+
+
+@router.get("", response_model=list[DeliveryZoneRead], dependencies=[Depends(require_permission("view", "addresses"))])
+async def list_delivery_zones(service: DeliveryZoneService = Depends(get_service)) -> list[DeliveryZoneRead]:
+    return await service.list_all()
+
+
+@router.post("", response_model=DeliveryZoneRead, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_permission("create", "addresses"))])
+async def create_delivery_zone(body: DeliveryZoneCreate, service: DeliveryZoneService = Depends(get_service)) -> DeliveryZoneRead:
+    return await service.create(**body.model_dump())
+
+
+@router.get("/{id}", response_model=DeliveryZoneRead, dependencies=[Depends(require_permission("view", "addresses"))])
+async def get_delivery_zone(id: int, service: DeliveryZoneService = Depends(get_service)) -> DeliveryZoneRead:
+    row = await service.get_by_id(id)
+    if row is None:
+        raise NotFoundError("Зона доставки не найдена")
+    return row
+
+
+@router.patch("/{id}", response_model=DeliveryZoneRead, dependencies=[Depends(require_permission("update", "addresses"))])
+async def update_delivery_zone(id: int, body: DeliveryZoneUpdate, service: DeliveryZoneService = Depends(get_service)) -> DeliveryZoneRead:
+    row = await service.update(id, **body.model_dump(exclude_unset=True))
+    if row is None:
+        raise NotFoundError("Зона доставки не найдена")
+    return row
+
+
+@router.delete("/{id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_permission("delete", "addresses"))])
+async def delete_delivery_zone(id: int, service: DeliveryZoneService = Depends(get_service)) -> None:
+    ok = await service.soft_delete(id)
+    if not ok:
+        raise NotFoundError("Зона доставки не найдена")
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/api/v1/parties/routes/depositors.py
+========================================
+# app/api/v1/parties/routes/depositors.py
+
+"""Роутер для поклажедателей."""
+
+from __future__ import annotations
+
+from fastapi import APIRouter, Depends, status
+
+from app.api.deps import SessionDep, require_permission
+from app.api.v1.parties.schemas import DepositorCreate, DepositorRead, DepositorUpdate
+from app.core.exceptions import NotFoundError
+from app.parties.repository import DepositorRepository
+from app.parties.services.depositor_service import DepositorService
+
+router = APIRouter(prefix="/depositors", tags=["depositors"])
+
+
+def get_service(session: SessionDep) -> DepositorService:
+    return DepositorService(DepositorRepository(session))
+
+
+@router.get("", response_model=list[DepositorRead], dependencies=[Depends(require_permission("view", "depositors"))])
+async def list_depositors(service: DepositorService = Depends(get_service)) -> list[DepositorRead]:
+    return await service.list_all()
+
+
+@router.post("", response_model=DepositorRead, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_permission("create", "depositors"))])
+async def create_depositor(body: DepositorCreate, service: DepositorService = Depends(get_service)) -> DepositorRead:
+    return await service.create(**body.model_dump())
+
+
+@router.get("/{id}", response_model=DepositorRead, dependencies=[Depends(require_permission("view", "depositors"))])
+async def get_depositor(id: int, service: DepositorService = Depends(get_service)) -> DepositorRead:
+    row = await service.get_by_id(id)
+    if row is None:
+        raise NotFoundError("Поклажедатель не найден")
+    return row
+
+
+@router.patch("/{id}", response_model=DepositorRead, dependencies=[Depends(require_permission("update", "depositors"))])
+async def update_depositor(id: int, body: DepositorUpdate, service: DepositorService = Depends(get_service)) -> DepositorRead:
+    row = await service.update(id, **body.model_dump(exclude_unset=True))
+    if row is None:
+        raise NotFoundError("Поклажедатель не найден")
+    return row
+
+
+@router.delete("/{id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_permission("delete", "depositors"))])
+async def delete_depositor(id: int, service: DepositorService = Depends(get_service)) -> None:
+    ok = await service.soft_delete(id)
+    if not ok:
+        raise NotFoundError("Поклажедатель не найден")
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/api/v1/parties/routes/__init__.py
+========================================
+# app/api/v1/parties/routes/__init__.py
+
+"""Роутеры модуля parties."""
+
+from fastapi import APIRouter
+
+from app.api.v1.parties.routes.addresses import router as addresses_router
+from app.api.v1.parties.routes.raw_addresses import router as raw_addresses_router
+from app.api.v1.parties.routes.legal_entities import router as legal_entities_router
+from app.api.v1.parties.routes.depositors import router as depositors_router
+from app.api.v1.parties.routes.clients import router as clients_router
+from app.api.v1.parties.routes.contracts import router as contracts_router
+from app.api.v1.parties.routes.tariffs import router as tariffs_router
+from app.api.v1.parties.routes.tariff_documents import router as tariff_documents_router
+from app.api.v1.parties.routes.delivery_zones import router as delivery_zones_router
+from app.api.v1.parties.routes.carriers import router as carriers_router
+from app.api.v1.parties.routes.keepers import router as keepers_router
+
+router = APIRouter()
+
+router.include_router(addresses_router)
+router.include_router(raw_addresses_router)
+router.include_router(legal_entities_router)
+router.include_router(depositors_router)
+router.include_router(clients_router)
+router.include_router(contracts_router)
+router.include_router(tariffs_router)
+router.include_router(tariff_documents_router)
+router.include_router(delivery_zones_router)
+router.include_router(carriers_router)
+router.include_router(keepers_router)
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/api/v1/parties/routes/keepers.py
+========================================
+# app/api/v1/parties/routes/keepers.py
+
+"""Роутер для хранителей."""
+
+from __future__ import annotations
+
+from fastapi import APIRouter, Depends, status
+
+from app.api.deps import SessionDep, require_permission
+from app.api.v1.parties.schemas import KeeperCreate, KeeperRead, KeeperUpdate
+from app.core.exceptions import NotFoundError
+from app.parties.repository import KeeperRepository
+from app.parties.services.keeper_service import KeeperService
+
+router = APIRouter(prefix="/keepers", tags=["keepers"])
+
+
+def get_service(session: SessionDep) -> KeeperService:
+    return KeeperService(KeeperRepository(session))
+
+
+@router.get("", response_model=list[KeeperRead], dependencies=[Depends(require_permission("view", "keepers"))])
+async def list_keepers(service: KeeperService = Depends(get_service)) -> list[KeeperRead]:
+    return await service.list_all()
+
+
+@router.post("", response_model=KeeperRead, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_permission("create", "keepers"))])
+async def create_keeper(body: KeeperCreate, service: KeeperService = Depends(get_service)) -> KeeperRead:
+    return await service.create(**body.model_dump())
+
+
+@router.get("/{id}", response_model=KeeperRead, dependencies=[Depends(require_permission("view", "keepers"))])
+async def get_keeper(id: int, service: KeeperService = Depends(get_service)) -> KeeperRead:
+    row = await service.get_by_id(id)
+    if row is None:
+        raise NotFoundError("Хранитель не найден")
+    return row
+
+
+@router.patch("/{id}", response_model=KeeperRead, dependencies=[Depends(require_permission("update", "keepers"))])
+async def update_keeper(id: int, body: KeeperUpdate, service: KeeperService = Depends(get_service)) -> KeeperRead:
+    row = await service.update(id, **body.model_dump(exclude_unset=True))
+    if row is None:
+        raise NotFoundError("Хранитель не найден")
+    return row
+
+
+@router.delete("/{id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_permission("delete", "keepers"))])
+async def delete_keeper(id: int, service: KeeperService = Depends(get_service)) -> None:
+    ok = await service.soft_delete(id)
+    if not ok:
+        raise NotFoundError("Хранитель не найден")
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/api/v1/parties/routes/legal_entities.py
+========================================
+# app/api/v1/parties/routes/legal_entities.py
+
+"""Роутер для юрлиц."""
+
+from __future__ import annotations
+
+from fastapi import APIRouter, Depends, status
+
+from app.api.deps import SessionDep, require_permission
+from app.api.v1.parties.schemas import LegalEntityCreate, LegalEntityRead, LegalEntityUpdate
+from app.core.exceptions import NotFoundError
+from app.parties.repository import LegalEntityRepository
+from app.parties.services.legal_entity_service import LegalEntityService
+
+router = APIRouter(prefix="/legal-entities", tags=["legal-entities"])
+
+
+def get_service(session: SessionDep) -> LegalEntityService:
+    return LegalEntityService(LegalEntityRepository(session))
+
+
+@router.get("", response_model=list[LegalEntityRead], dependencies=[Depends(require_permission("view", "legal_entities"))])
+async def list_legal_entities(service: LegalEntityService = Depends(get_service)) -> list[LegalEntityRead]:
+    return await service.list_all()
+
+
+@router.post("", response_model=LegalEntityRead, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_permission("create", "legal_entities"))])
+async def create_legal_entity(body: LegalEntityCreate, service: LegalEntityService = Depends(get_service)) -> LegalEntityRead:
+    return await service.create(**body.model_dump())
+
+
+@router.get("/{id}", response_model=LegalEntityRead, dependencies=[Depends(require_permission("view", "legal_entities"))])
+async def get_legal_entity(id: int, service: LegalEntityService = Depends(get_service)) -> LegalEntityRead:
+    row = await service.get_by_id(id)
+    if row is None:
+        raise NotFoundError("Юрлицо не найдено")
+    return row
+
+
+@router.patch("/{id}", response_model=LegalEntityRead, dependencies=[Depends(require_permission("update", "legal_entities"))])
+async def update_legal_entity(id: int, body: LegalEntityUpdate, service: LegalEntityService = Depends(get_service)) -> LegalEntityRead:
+    row = await service.update(id, **body.model_dump(exclude_unset=True))
+    if row is None:
+        raise NotFoundError("Юрлицо не найдено")
+    return row
+
+
+@router.delete("/{id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_permission("delete", "legal_entities"))])
+async def delete_legal_entity(id: int, service: LegalEntityService = Depends(get_service)) -> None:
+    ok = await service.soft_delete(id)
+    if not ok:
+        raise NotFoundError("Юрлицо не найдено")
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/api/v1/parties/routes.py
+========================================
+"""API для модуля parties."""
+
+from __future__ import annotations
+
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, Query, status
+
+from app.api.deps import (
+    get_address_service,
+    get_client_service,
+    get_contract_service,
+    get_depositor_service,
+    get_legal_entity_service,
+    get_tariff_service,
+)
+from app.api.deps import UserDep, require_permission
+from app.api.v1.parties import schemas
+from app.core.exceptions import BadRequestError, ConflictError, NotFoundError
+from app.parties.repository import (
+    AddressRepository,
+    TariffDocumentRepository,
+    TariffRepository,
+)
+from app.parties.services import (
+    AddressService,
+    ClientService,
+    ContractService,
+    DepositorService,
+    LegalEntityService,
+    TariffService,
+)
+
+router = APIRouter(prefix="/parties", tags=["parties"])
+
+
+# ========== Адреса ==========
+
+
+@router.get(
+    "/addresses/list",
+    response_model=list[schemas.AddressRead],
+    dependencies=[Depends(require_permission("view", "addresses"))],
+)
+async def list_addresses_for_table(
+    service: AddressService = Depends(get_address_service),
+) -> list[schemas.AddressRead]:
+    rows = await service.list_all()
+    return [schemas.AddressRead.model_validate(r) for r in rows]
+
+
+@router.get(
+    "/addresses",
+    response_model=list[schemas.AddressRead],
+    dependencies=[Depends(require_permission("view", "addresses"))],
+)
+async def list_addresses(
+    service: AddressService = Depends(get_address_service),
+) -> list[schemas.AddressRead]:
+    rows = await service.list_all()
+    return [schemas.AddressRead.model_validate(r) for r in rows]
+
+
+@router.post(
+    "/addresses/resolve",
+    response_model=schemas.AddressRead,
+    dependencies=[Depends(require_permission("create", "addresses"))],
+)
+async def resolve_address(
+    body: schemas.AddressResolve,
+    service: AddressService = Depends(get_address_service),
+    user_id: UserDep = None,
+) -> schemas.AddressRead:
+    address = await service.get_or_create(body.raw_text, body.source, user_id)
+    return schemas.AddressRead.model_validate(address)
+
+
+@router.get(
+    "/addresses/{address_id}/detail",
+    response_model=schemas.AddressRead,
+    dependencies=[Depends(require_permission("view", "addresses"))],
+)
+async def get_address_detail(
+    address_id: int, service: AddressService = Depends(get_address_service)
+) -> schemas.AddressRead:
+    address = await service.get_by_id(address_id)
+    if address is None:
+        raise NotFoundError("Адрес не найден")
+    return schemas.AddressRead.model_validate(address)
+
+
+@router.patch(
+    "/addresses/{address_id}",
+    response_model=schemas.AddressRead,
+    dependencies=[Depends(require_permission("update", "addresses"))],
+)
+async def update_address(
+    address_id: int,
+    body: schemas.AddressUpdate,
+    service: AddressService = Depends(get_address_service),
+    user_id: UserDep = None,
+) -> schemas.AddressRead:
+    address = await service.update(
+        address_id, user_id, **body.model_dump(exclude_unset=True)
+    )
+    if address is None:
+        raise NotFoundError("Адрес не найден")
+    return schemas.AddressRead.model_validate(address)
+
+
+@router.delete(
+    "/addresses/{address_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_permission("delete", "addresses"))],
+)
+async def delete_address(
+    address_id: int,
+    service: AddressService = Depends(get_address_service),
+    user_id: UserDep = None,
+) -> None:
+    ok = await service.soft_delete(address_id, user_id)
+    if not ok:
+        raise NotFoundError("Адрес не найден")
+
+
+# ========== Алиасы ==========
+
+
+@router.get(
+    "/aliases",
+    response_model=list[schemas.RawAddressRead],
+    dependencies=[Depends(require_permission("view", "addresses"))],
+)
+async def list_aliases(
+    session, limit: int = 1000, offset: int = 0
+) -> list[schemas.RawAddressRead]:
+    repo = AddressRepository(session)
+    rows = await repo.list_raw(limit, offset)
+    return [schemas.RawAddressRead.model_validate(r) for r in rows]
+
+
+# Роут
+@router.post("/aliases")
+async def create_alias(
+    body,
+    service: AddressService = Depends(get_address_service),
+    user_id: UserDep = None,
+):
+    address = await service.get_or_create(body.raw_text, body.source, user_id)
+    raw = await service.find_raw_by_text(body.raw_text)  # ← через сервис
+    return schemas.RawAddressRead.model_validate(raw)
+
+
+@router.get(
+    "/aliases/{alias_id}",
+    response_model=schemas.RawAddressRead,
+    dependencies=[Depends(require_permission("view", "addresses"))],
+)
+async def get_alias(alias_id: int, session) -> schemas.RawAddressRead:
+    raw = await AddressRepository(session).get_raw_by_id(alias_id)
+    if raw is None or raw.is_deleted:
+        raise NotFoundError("Вариант ввода не найден")
+    return schemas.RawAddressRead.model_validate(raw)
+
+
+@router.patch(
+    "/aliases/{alias_id}",
+    response_model=schemas.RawAddressRead,
+    dependencies=[Depends(require_permission("update", "addresses"))],
+)
+async def update_alias(
+    alias_id: int, body: schemas.AliasUpdate, session, user_id: UserDep = None
+) -> schemas.RawAddressRead:
+    repo = AddressRepository(session)
+    raw = await repo.get_raw_by_id(alias_id)
+    if raw is None or raw.is_deleted:
+        raise NotFoundError("Вариант ввода не найден")
+    update_data = body.model_dump(exclude_unset=True)
+    if "raw_text" in update_data:
+        update_data["hash"] = AddressService.get_hash(update_data["raw_text"])
+    raw = await repo.update(alias_id, **update_data)
+    return schemas.RawAddressRead.model_validate(raw)
+
+
+@router.delete(
+    "/aliases/{alias_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_permission("delete", "addresses"))],
+)
+async def delete_alias(alias_id: int, session, user_id: UserDep = None) -> None:
+    raw = await AddressRepository(session).get_raw_by_id(alias_id)
+    if raw is None or raw.is_deleted:
+        raise NotFoundError("Вариант ввода не найден")
+    await AddressRepository(session).update(
+        alias_id, is_deleted=True, is_active=False, updated_by_id=user_id
+    )
+
+
+# ========== Юрлица ==========
+
+
+@router.get(
+    "/legal-entities",
+    response_model=list[schemas.LegalEntityRead],
+    dependencies=[Depends(require_permission("view", "legal_entities"))],
+)
+async def list_legal_entities(
+    service: LegalEntityService = Depends(get_legal_entity_service),
+) -> list[schemas.LegalEntityRead]:
+    rows = await service.list_all()
+    return [schemas.LegalEntityRead.model_validate(r) for r in rows]
+
+
+@router.post(
+    "/legal-entities",
+    response_model=schemas.LegalEntityRead,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_permission("create", "legal_entities"))],
+)
+async def create_legal_entity(
+    body: schemas.LegalEntityCreate,
+    service: LegalEntityService = Depends(get_legal_entity_service),
+    user_id: UserDep = None,
+) -> schemas.LegalEntityRead:
+    try:
+        row = await service.create(user_id, **body.model_dump())
+    except ValueError as e:
+        raise ConflictError(str(e)) from e
+    return schemas.LegalEntityRead.model_validate(row)
+
+
+@router.get(
+    "/legal-entities/{entity_id}",
+    response_model=schemas.LegalEntityRead,
+    dependencies=[Depends(require_permission("view", "legal_entities"))],
+)
+async def get_legal_entity(
+    entity_id: int, service: LegalEntityService = Depends(get_legal_entity_service)
+) -> schemas.LegalEntityRead:
+    row = await service.get_by_id(entity_id)
+    if row is None:
+        raise NotFoundError("Юрлицо не найдено")
+    return schemas.LegalEntityRead.model_validate(row)
+
+
+@router.patch(
+    "/legal-entities/{entity_id}",
+    response_model=schemas.LegalEntityRead,
+    dependencies=[Depends(require_permission("update", "legal_entities"))],
+)
+async def update_legal_entity(
+    entity_id: int,
+    body: schemas.LegalEntityUpdate,
+    service: LegalEntityService = Depends(get_legal_entity_service),
+    user_id: UserDep = None,
+) -> schemas.LegalEntityRead:
+    row = await service.update(
+        entity_id, user_id, **body.model_dump(exclude_unset=True)
+    )
+    if row is None:
+        raise NotFoundError("Юрлицо не найдено")
+    return schemas.LegalEntityRead.model_validate(row)
+
+
+@router.delete(
+    "/legal-entities/{entity_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_permission("delete", "legal_entities"))],
+)
+async def delete_legal_entity(
+    entity_id: int,
+    service: LegalEntityService = Depends(get_legal_entity_service),
+    user_id: UserDep = None,
+) -> None:
+    ok = await service.soft_delete(entity_id, user_id)
+    if not ok:
+        raise NotFoundError("Юрлицо не найдено")
+
+
+# ========== Поклажедатели ==========
+
+
+@router.get(
+    "/depositors",
+    response_model=list[schemas.DepositorRead],
+    dependencies=[Depends(require_permission("view", "depositors"))],
+)
+async def list_depositors(
+    service: DepositorService = Depends(get_depositor_service),
+) -> list[schemas.DepositorRead]:
+    rows = await service.list_all()
+    return [schemas.DepositorRead.model_validate(r) for r in rows]
+
+
+@router.post(
+    "/depositors",
+    response_model=schemas.DepositorRead,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_permission("create", "depositors"))],
+)
+async def create_depositor(
+    body: schemas.DepositorCreate,
+    service: DepositorService = Depends(get_depositor_service),
+    user_id: UserDep = None,
+) -> schemas.DepositorRead:
+    try:
+        row = await service.create(body.legal_entity_id, body.code, user_id)
+    except ValueError as e:
+        raise ConflictError(str(e)) from e
+    return schemas.DepositorRead.model_validate(row)
+
+
+@router.get(
+    "/depositors/{depositor_id}",
+    response_model=schemas.DepositorRead,
+    dependencies=[Depends(require_permission("view", "depositors"))],
+)
+async def get_depositor(
+    depositor_id: int, service: DepositorService = Depends(get_depositor_service)
+) -> schemas.DepositorRead:
+    row = await service.get_by_id(depositor_id)
+    if row is None:
+        raise NotFoundError("Поклажедатель не найден")
+    return schemas.DepositorRead.model_validate(row)
+
+
+@router.patch(
+    "/depositors/{depositor_id}",
+    response_model=schemas.DepositorRead,
+    dependencies=[Depends(require_permission("update", "depositors"))],
+)
+async def update_depositor(
+    depositor_id: int,
+    body: schemas.DepositorUpdate,
+    service: DepositorService = Depends(get_depositor_service),
+    user_id: UserDep = None,
+) -> schemas.DepositorRead:
+    row = await service.update(
+        depositor_id, user_id, **body.model_dump(exclude_unset=True)
+    )
+    if row is None:
+        raise NotFoundError("Поклажедатель не найден")
+    return schemas.DepositorRead.model_validate(row)
+
+
+@router.delete(
+    "/depositors/{depositor_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_permission("delete", "depositors"))],
+)
+async def delete_depositor(
+    depositor_id: int,
+    service: DepositorService = Depends(get_depositor_service),
+    user_id: UserDep = None,
+) -> None:
+    ok = await service.soft_delete(depositor_id, user_id)
+    if not ok:
+        raise NotFoundError("Поклажедатель не найден")
+
+
+# ========== Клиенты ==========
+
+
+@router.get(
+    "/clients",
+    response_model=list[schemas.ClientRead],
+    dependencies=[Depends(require_permission("view", "clients"))],
+)
+async def list_clients(
+    service: ClientService = Depends(get_client_service),
+    depositor_id: Annotated[int | None, Query(ge=1)] = None,
+) -> list[schemas.ClientRead]:
+    if depositor_id:
+        rows = await service.list_by_depositor(depositor_id)
+    else:
+        rows = await service.list_all()
+    return [schemas.ClientRead.model_validate(r) for r in rows]
+
+
+@router.post(
+    "/clients",
+    response_model=schemas.ClientRead,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_permission("create", "clients"))],
+)
+async def create_client(
+    body: schemas.ClientCreate,
+    service: ClientService = Depends(get_client_service),
+    user_id: UserDep = None,
+) -> schemas.ClientRead:
+    try:
+        row = await service.create(user_id, **body.model_dump())
+    except ValueError as e:
+        raise ConflictError(str(e)) from e
+    return schemas.ClientRead.model_validate(row)
+
+
+@router.get(
+    "/clients/{client_id}",
+    response_model=schemas.ClientRead,
+    dependencies=[Depends(require_permission("view", "clients"))],
+)
+async def get_client(
+    client_id: int, service: ClientService = Depends(get_client_service)
+) -> schemas.ClientRead:
+    row = await service.get_by_id(client_id)
+    if row is None:
+        raise NotFoundError("Клиент не найден")
+    return schemas.ClientRead.model_validate(row)
+
+
+@router.patch(
+    "/clients/{client_id}",
+    response_model=schemas.ClientRead,
+    dependencies=[Depends(require_permission("update", "clients"))],
+)
+async def update_client(
+    client_id: int,
+    body: schemas.ClientUpdate,
+    service: ClientService = Depends(get_client_service),
+    user_id: UserDep = None,
+) -> schemas.ClientRead:
+    row = await service.update(
+        client_id, user_id, **body.model_dump(exclude_unset=True)
+    )
+    if row is None:
+        raise NotFoundError("Клиент не найден")
+    return schemas.ClientRead.model_validate(row)
+
+
+@router.delete(
+    "/clients/{client_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_permission("delete", "clients"))],
+)
+async def delete_client(
+    client_id: int,
+    service: ClientService = Depends(get_client_service),
+    user_id: UserDep = None,
+) -> None:
+    ok = await service.soft_delete(client_id, user_id)
+    if not ok:
+        raise NotFoundError("Клиент не найден")
+
+
+# ========== Договоры ==========
+
+
+@router.get(
+    "/contracts",
+    response_model=list[schemas.ContractRead],
+    dependencies=[Depends(require_permission("view", "contracts"))],
+)
+async def list_contracts(
+    service: ContractService = Depends(get_contract_service),
+) -> list[schemas.ContractRead]:
+    rows = await service.list_all()
+    return [schemas.ContractRead.model_validate(r) for r in rows]
+
+
+@router.post(
+    "/contracts",
+    response_model=schemas.ContractRead,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_permission("create", "contracts"))],
+)
+async def create_contract(
+    body: schemas.ContractCreate,
+    service: ContractService = Depends(get_contract_service),
+    user_id: UserDep = None,
+) -> schemas.ContractRead:
+    try:
+        row = await service.create(user_id, **body.model_dump())
+    except ValueError as e:
+        raise BadRequestError(str(e)) from e
+    return schemas.ContractRead.model_validate(row)
+
+
+@router.get(
+    "/contracts/{contract_id}",
+    response_model=schemas.ContractRead,
+    dependencies=[Depends(require_permission("view", "contracts"))],
+)
+async def get_contract(
+    contract_id: int, service: ContractService = Depends(get_contract_service)
+) -> schemas.ContractRead:
+    row = await service.get_by_id(contract_id)
+    if row is None:
+        raise NotFoundError("Договор не найден")
+    return schemas.ContractRead.model_validate(row)
+
+
+@router.patch(
+    "/contracts/{contract_id}",
+    response_model=schemas.ContractRead,
+    dependencies=[Depends(require_permission("update", "contracts"))],
+)
+async def update_contract(
+    contract_id: int,
+    body: schemas.ContractUpdate,
+    service: ContractService = Depends(get_contract_service),
+    user_id: UserDep = None,
+) -> schemas.ContractRead:
+    row = await service.update(
+        contract_id, user_id, **body.model_dump(exclude_unset=True)
+    )
+    if row is None:
+        raise NotFoundError("Договор не найден")
+    return schemas.ContractRead.model_validate(row)
+
+
+@router.delete(
+    "/contracts/{contract_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_permission("delete", "contracts"))],
+)
+async def delete_contract(
+    contract_id: int,
+    service: ContractService = Depends(get_contract_service),
+    user_id: UserDep = None,
+) -> None:
+    ok = await service.soft_delete(contract_id, user_id)
+    if not ok:
+        raise NotFoundError("Договор не найден")
+
+
+# ========== Тарифы ==========
+
+
+@router.get(
+    "/tariff-documents",
+    response_model=list[schemas.TariffDocumentRead],
+    dependencies=[Depends(require_permission("view", "tariffs"))],
+)
+async def list_tariff_documents(
+    service: TariffService = Depends(get_tariff_service),
+) -> list[schemas.TariffDocumentRead]:
+    rows = await service.list_documents()
+    return [schemas.TariffDocumentRead.model_validate(r) for r in rows]
+
+
+@router.post(
+    "/tariff-documents",
+    response_model=schemas.TariffDocumentRead,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_permission("create", "tariffs"))],
+)
+async def create_tariff_document(
+    body: schemas.TariffDocumentCreate,
+    service: TariffService = Depends(get_tariff_service),
+    user_id: UserDep = None,
+) -> schemas.TariffDocumentRead:
+    try:
+        row = await service.create_document(user_id, **body.model_dump())
+    except ValueError as e:
+        raise BadRequestError(str(e)) from e
+    return schemas.TariffDocumentRead.model_validate(row)
+
+
+@router.get(
+    "/tariff-documents/{doc_id}",
+    response_model=schemas.TariffDocumentRead,
+    dependencies=[Depends(require_permission("view", "tariffs"))],
+)
+async def get_tariff_document(
+    doc_id: int, service: TariffService = Depends(get_tariff_service)
+) -> schemas.TariffDocumentRead:
+    doc = await service.get_document(doc_id)
+    if doc is None:
+        raise NotFoundError("Тарифный документ не найден")
+    return schemas.TariffDocumentRead.model_validate(doc)
+
+
+@router.patch(
+    "/tariff-documents/{doc_id}",
+    response_model=schemas.TariffDocumentRead,
+    dependencies=[Depends(require_permission("update", "tariffs"))],
+)
+async def update_tariff_document(
+    doc_id: int,
+    body: schemas.TariffDocumentUpdate,
+    service: TariffService = Depends(get_tariff_service),
+    user_id: UserDep = None,
+) -> schemas.TariffDocumentRead:
+    doc = await service.update_document(
+        doc_id, user_id, **body.model_dump(exclude_unset=True)
+    )
+    if doc is None:
+        raise NotFoundError("Тарифный документ не найден")
+    return schemas.TariffDocumentRead.model_validate(doc)
+
+
+@router.delete(
+    "/tariff-documents/{doc_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_permission("delete", "tariffs"))],
+)
+async def delete_tariff_document(
+    doc_id: int,
+    service: TariffService = Depends(get_tariff_service),
+    user_id: UserDep = None,
+) -> None:
+    ok = await service.soft_delete_document(doc_id, user_id)
+    if not ok:
+        raise NotFoundError("Тарифный документ не найден")
+
+
+@router.get(
+    "/tariffs",
+    response_model=list[schemas.TariffRead],
+    dependencies=[Depends(require_permission("view", "tariffs"))],
+)
+async def list_tariffs(
+    service: TariffService = Depends(get_tariff_service), document_id: int | None = None
+) -> list[schemas.TariffRead]:
+    if document_id:
+        rows = await service.list_tariffs(document_id)
+    else:
+        rows = await service.list_all_tariffs()
+    return [schemas.TariffRead.model_validate(r) for r in rows]
+
+
+@router.post(
+    "/tariffs",
+    response_model=schemas.TariffRead,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_permission("create", "tariffs"))],
+)
+async def create_tariff(
+    body: schemas.TariffCreate,
+    service: TariffService = Depends(get_tariff_service),
+    user_id: UserDep = None,
+) -> schemas.TariffRead:
+    try:
+        row = await service.create_tariff(user_id, **body.model_dump())
+    except ValueError as e:
+        raise BadRequestError(str(e)) from e
+    return schemas.TariffRead.model_validate(row)
+
+
+@router.get(
+    "/tariffs/{tariff_id}",
+    response_model=schemas.TariffRead,
+    dependencies=[Depends(require_permission("view", "tariffs"))],
+)
+async def get_tariff(
+    tariff_id: int, service: TariffService = Depends(get_tariff_service)
+) -> schemas.TariffRead:
+    tariff = await service.get_tariff(tariff_id)
+    if tariff is None:
+        raise NotFoundError("Тариф не найден")
+    return schemas.TariffRead.model_validate(tariff)
+
+
+@router.patch(
+    "/tariffs/{tariff_id}",
+    response_model=schemas.TariffRead,
+    dependencies=[Depends(require_permission("update", "tariffs"))],
+)
+async def update_tariff(
+    tariff_id: int,
+    body: schemas.TariffUpdate,
+    service: TariffService = Depends(get_tariff_service),
+    user_id: UserDep = None,
+) -> schemas.TariffRead:
+    tariff = await service.update_tariff(
+        tariff_id, user_id, **body.model_dump(exclude_unset=True)
+    )
+    if tariff is None:
+        raise NotFoundError("Тариф не найден")
+    return schemas.TariffRead.model_validate(tariff)
+
+
+@router.delete(
+    "/tariffs/{tariff_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_permission("delete", "tariffs"))],
+)
+async def delete_tariff(
+    tariff_id: int,
+    service: TariffService = Depends(get_tariff_service),
+    user_id: UserDep = None,
+) -> None:
+    ok = await service.soft_delete_tariff(tariff_id, user_id)
+    if not ok:
+        raise NotFoundError("Тариф не найден")
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/api/v1/parties/routes/raw_addresses.py
+========================================
+# app/api/v1/parties/routes/raw_addresses.py
+
+"""Роутер для сырых адресов (алиасов)."""
+
+from __future__ import annotations
+
+from fastapi import APIRouter, Depends, status
+
+from app.api.deps import SessionDep, require_permission
+from app.api.v1.parties.schemas import RawAddressCreate, RawAddressRead, RawAddressUpdate
+from app.core.exceptions import NotFoundError
+from app.parties.repository import RawAddressRepository
+from app.parties.services.raw_address_service import RawAddressService
+
+router = APIRouter(prefix="/aliases", tags=["aliases"])
+
+
+def get_service(session: SessionDep) -> RawAddressService:
+    return RawAddressService(RawAddressRepository(session))
+
+
+@router.get("", response_model=list[RawAddressRead], dependencies=[Depends(require_permission("view", "addresses"))])
+async def list_aliases(service: RawAddressService = Depends(get_service)) -> list[RawAddressRead]:
+    return await service.list_all()
+
+
+@router.post("", response_model=RawAddressRead, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_permission("create", "addresses"))])
+async def create_alias(body: RawAddressCreate, service: RawAddressService = Depends(get_service)) -> RawAddressRead:
+    return await service.create(**body.model_dump())
+
+
+@router.get("/{id}", response_model=RawAddressRead, dependencies=[Depends(require_permission("view", "addresses"))])
+async def get_alias(id: int, service: RawAddressService = Depends(get_service)) -> RawAddressRead:
+    row = await service.get_by_id(id)
+    if row is None:
+        raise NotFoundError("Сырой адрес не найден")
+    return row
+
+
+@router.patch("/{id}", response_model=RawAddressRead, dependencies=[Depends(require_permission("update", "addresses"))])
+async def update_alias(id: int, body: RawAddressUpdate, service: RawAddressService = Depends(get_service)) -> RawAddressRead:
+    row = await service.update(id, **body.model_dump(exclude_unset=True))
+    if row is None:
+        raise NotFoundError("Сырой адрес не найден")
+    return row
+
+
+@router.delete("/{id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_permission("delete", "addresses"))])
+async def delete_alias(id: int, service: RawAddressService = Depends(get_service)) -> None:
+    ok = await service.soft_delete(id)
+    if not ok:
+        raise NotFoundError("Сырой адрес не найден")
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/api/v1/parties/routes/tariff_documents.py
+========================================
+# app/api/v1/parties/routes/tariff_documents.py
+
+"""Роутер для тарифных документов."""
+
+from __future__ import annotations
+
+from fastapi import APIRouter, Depends, status
+
+from app.api.deps import SessionDep, require_permission
+from app.api.v1.parties.schemas import TariffDocumentCreate, TariffDocumentRead, TariffDocumentUpdate
+from app.core.exceptions import NotFoundError
+from app.parties.repository import TariffDocumentRepository
+from app.parties.services.tariff_document_service import TariffDocumentService
+
+router = APIRouter(prefix="/tariff-documents", tags=["tariff-documents"])
+
+
+def get_service(session: SessionDep) -> TariffDocumentService:
+    return TariffDocumentService(TariffDocumentRepository(session))
+
+
+@router.get("", response_model=list[TariffDocumentRead], dependencies=[Depends(require_permission("view", "tariffs"))])
+async def list_tariff_documents(service: TariffDocumentService = Depends(get_service)) -> list[TariffDocumentRead]:
+    return await service.list_all()
+
+
+@router.post("", response_model=TariffDocumentRead, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_permission("create", "tariffs"))])
+async def create_tariff_document(body: TariffDocumentCreate, service: TariffDocumentService = Depends(get_service)) -> TariffDocumentRead:
+    return await service.create(**body.model_dump())
+
+
+@router.get("/{id}", response_model=TariffDocumentRead, dependencies=[Depends(require_permission("view", "tariffs"))])
+async def get_tariff_document(id: int, service: TariffDocumentService = Depends(get_service)) -> TariffDocumentRead:
+    row = await service.get_by_id(id)
+    if row is None:
+        raise NotFoundError("Тарифный документ не найден")
+    return row
+
+
+@router.patch("/{id}", response_model=TariffDocumentRead, dependencies=[Depends(require_permission("update", "tariffs"))])
+async def update_tariff_document(id: int, body: TariffDocumentUpdate, service: TariffDocumentService = Depends(get_service)) -> TariffDocumentRead:
+    row = await service.update(id, **body.model_dump(exclude_unset=True))
+    if row is None:
+        raise NotFoundError("Тарифный документ не найден")
+    return row
+
+
+@router.delete("/{id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_permission("delete", "tariffs"))])
+async def delete_tariff_document(id: int, service: TariffDocumentService = Depends(get_service)) -> None:
+    ok = await service.soft_delete(id)
+    if not ok:
+        raise NotFoundError("Тарифный документ не найден")
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/api/v1/parties/routes/tariffs.py
+========================================
+# app/api/v1/parties/routes/tariffs.py
+
+"""Роутер для тарифов."""
+
+from __future__ import annotations
+
+from fastapi import APIRouter, Depends, status
+
+from app.api.deps import SessionDep, require_permission
+from app.api.v1.parties.schemas import TariffCreate, TariffRead, TariffUpdate
+from app.core.exceptions import NotFoundError
+from app.parties.repository import TariffRepository
+from app.parties.services.tariff_service import TariffService
+
+router = APIRouter(prefix="/tariffs", tags=["tariffs"])
+
+
+def get_service(session: SessionDep) -> TariffService:
+    return TariffService(TariffRepository(session))
+
+
+@router.get("", response_model=list[TariffRead], dependencies=[Depends(require_permission("view", "tariffs"))])
+async def list_tariffs(service: TariffService = Depends(get_service)) -> list[TariffRead]:
+    return await service.list_all()
+
+
+@router.post("", response_model=TariffRead, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_permission("create", "tariffs"))])
+async def create_tariff(body: TariffCreate, service: TariffService = Depends(get_service)) -> TariffRead:
+    return await service.create(**body.model_dump())
+
+
+@router.get("/{id}", response_model=TariffRead, dependencies=[Depends(require_permission("view", "tariffs"))])
+async def get_tariff(id: int, service: TariffService = Depends(get_service)) -> TariffRead:
+    row = await service.get_by_id(id)
+    if row is None:
+        raise NotFoundError("Тариф не найден")
+    return row
+
+
+@router.patch("/{id}", response_model=TariffRead, dependencies=[Depends(require_permission("update", "tariffs"))])
+async def update_tariff(id: int, body: TariffUpdate, service: TariffService = Depends(get_service)) -> TariffRead:
+    row = await service.update(id, **body.model_dump(exclude_unset=True))
+    if row is None:
+        raise NotFoundError("Тариф не найден")
+    return row
+
+
+@router.delete("/{id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_permission("delete", "tariffs"))])
+async def delete_tariff(id: int, service: TariffService = Depends(get_service)) -> None:
+    ok = await service.soft_delete(id)
+    if not ok:
+        raise NotFoundError("Тариф не найден")
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/api/v1/parties/schemas.py
+========================================
+"""Схемы для модуля parties."""
+
+from __future__ import annotations
+
+from datetime import date
+from decimal import Decimal
+
+from pydantic import BaseModel, ConfigDict, Field
+
+from app.api.v1.base_schemas import BaseRead
+
+
+class DeliveryZoneRead(BaseRead):
+    name: str
+    model_config = ConfigDict(from_attributes=True)
+
+
+class DeliveryZoneUpdate(BaseModel):
+    """Обновление зоны доставки."""
+
+    name: str | None = None
+
+
+class DeliveryZoneCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
+
+
+class AddressRead(BaseRead):
+    full_address: str
+    region: str = ""
+    city: str = ""
+    street: str = ""
+    house: str = ""
+    building: str = ""
+    structure: str = ""
+    flat: str = ""
+    fias_id: str = ""
+    latitude: float | None = None
+    longitude: float | None = None
+    postal_code: str = ""
+    delivery_zone_id: int | None = None
+    delivery_zone: "DeliveryZoneRead | None" = None
+    model_config = ConfigDict(from_attributes=True)
+
+
+class AddressCreate(BaseModel):
+    """Создание адреса (валидированные данные)."""
+
+    full_address: str = Field(min_length=1, max_length=500)
+    region: str = Field(default="", max_length=255)
+    city: str = Field(default="", max_length=255)
+    street: str = Field(default="", max_length=255)
+    house: str = Field(default="", max_length=64)
+    building: str = Field(default="", max_length=32)
+    structure: str = Field(default="", max_length=32)
+    flat: str = Field(default="", max_length=32)
+    fias_id: str = Field(default="", max_length=36)
+    latitude: float | None = Field(default=None, ge=-90, le=90)
+    longitude: float | None = Field(default=None, ge=-180, le=180)
+    postal_code: str = Field(default="", max_length=10)
+    delivery_zone_id: int | None = None
+
+
+class AddressResolve(BaseModel):
+    raw_text: str = Field(min_length=1)
+    source: str = ""
+
+
+class AddressUpdate(BaseModel):
+    full_address: str | None = None
+    region: str | None = None
+    city: str | None = None
+    street: str | None = None
+    house: str | None = None
+    building: str | None = None
+    structure: str | None = None
+    flat: str | None = None
+    fias_id: str | None = None
+    latitude: float | None = None
+    longitude: float | None = None
+    postal_code: str | None = None
+    delivery_zone_id: int | None = None
+
+
+class LegalEntityRead(BaseRead):
+    name: str
+    legal_name: str = ""
+    inn: str = ""
+    kpp: str = ""
+    ogrn: str = ""
+    legal_address_id: int | None = None
+    actual_address_id: int | None = None
+    phone: str = ""
+    email: str = ""
+    edo_uuid: str | None = None
+    legal_address: "AddressRead | None" = None
+    actual_address: "AddressRead | None" = None
+    model_config = ConfigDict(from_attributes=True)
+
+
+class LegalEntityCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
+    legal_name: str = ""
+    inn: str = Field(max_length=12)
+    kpp: str = Field(max_length=9)
+    ogrn: str = Field(max_length=15)
+    legal_address_id: int | None = None
+    actual_address_id: int | None = None
+    phone: str = ""
+    email: str = ""
+    edo_uuid: str | None = None
+
+
+class LegalEntityUpdate(BaseModel):
+    name: str | None = None
+    legal_name: str | None = None
+    inn: str | None = None
+    kpp: str | None = None
+    ogrn: str | None = None
+    legal_address_id: int | None = None
+    actual_address_id: int | None = None
+    phone: str | None = None
+    email: str | None = None
+    edo_uuid: str | None = None
+
+
+class CarrierRead(BaseRead):
+    legal_entity_id: int
+    legal_entity: "LegalEntityRead | None" = None
+    model_config = ConfigDict(from_attributes=True)
+
+
+class CarrierUpdate(BaseModel):
+    """Обновление перевозчика."""
+
+    legal_entity_id: int | None = None
+
+
+class CarrierCreate(BaseModel):
+    legal_entity_id: int
+
+
+class KeeperRead(BaseRead):
+    legal_entity_id: int
+    legal_entity: "LegalEntityRead | None" = None
+    model_config = ConfigDict(from_attributes=True)
+
+
+class KeeperUpdate(BaseModel):
+    """Обновление хранителя."""
+
+    legal_entity_id: int | None = None
+
+
+class KeeperCreate(BaseModel):
+    legal_entity_id: int
+
+
+class DepositorRead(BaseRead):
+    legal_entity_id: int
+    code: str = ""
+    legal_entity: "LegalEntityRead"
+    model_config = ConfigDict(from_attributes=True)
+
+
+class DepositorCreate(BaseModel):
+    legal_entity_id: int
+    code: str = ""
+
+
+class DepositorUpdate(BaseModel):
+    code: str | None = None
+    legal_entity_id: int | None = None
+
+
+class ClientRead(BaseRead):
+    depositor_id: int
+    code: str
+    name: str
+    legal_name: str = ""
+    inn: str = ""
+    kpp: str = ""
+    legal_address_id: int | None = None
+    delivery_address_id: int | None = None
+    is_edo: bool = False
+    depositor: "DepositorRead | None" = None
+    legal_address: "AddressRead | None" = None
+    delivery_address: "AddressRead | None" = None
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ClientCreate(BaseModel):
+    depositor_id: int
+    code: str = Field(min_length=1, max_length=50)
+    name: str = Field(min_length=1, max_length=255)
+    legal_name: str = ""
+    inn: str = ""
+    kpp: str = ""
+    legal_address_id: int | None = None
+    delivery_address_id: int | None = None
+    is_edo: bool = False
+
+
+class ClientUpdate(BaseModel):
+    name: str | None = None
+    legal_name: str | None = None
+    inn: str | None = None
+    kpp: str | None = None
+    legal_address_id: int | None = None
+    delivery_address_id: int | None = None
+    is_edo: bool | None = None
+
+
+class ContractRead(BaseRead):
+    number: str
+    customer_id: int
+    executor_id: int
+    contract_type: str
+    start_date: date
+    end_date: date | None = None
+    status: str = "active"
+    terms: dict = Field(default_factory=dict)
+    customer: "LegalEntityRead | None" = None
+    executor: "LegalEntityRead | None" = None
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ContractCreate(BaseModel):
+    number: str = Field(min_length=1, max_length=50)
+    customer_id: int
+    executor_id: int
+    contract_type: str
+    start_date: date
+    end_date: date | None = None
+    terms: dict = Field(default_factory=dict)
+
+
+class ContractUpdate(BaseModel):
+    number: str | None = None
+    end_date: date | None = None
+    status: str | None = None
+    terms: dict | None = None
+
+
+class TariffDocumentRead(BaseRead):
+    contract_id: int
+    document_type: str
+    number: str
+    date: date
+    valid_from: date
+    valid_until: date | None = None
+    currency: str = "RUB"
+    vat_rate: str = "20"
+    contract: "ContractRead | None" = None
+    model_config = ConfigDict(from_attributes=True)
+
+
+class TariffDocumentCreate(BaseModel):
+    contract_id: int
+    document_type: str
+    number: str
+    date: date
+    valid_from: date
+    valid_until: date | None = None
+    currency: str = "RUB"
+    vat_rate: str = "20"
+
+
+class TariffDocumentUpdate(BaseModel):
+    number: str | None = None
+    document_date: date | None = None
+    valid_from: date | None = None
+    valid_until: date | None = None
+    currency: str | None = None
+    vat_rate: str | None = None
+
+
+class TariffRead(BaseRead):
+    document_id: int
+    service_group: str
+    name: str
+    description: str = ""
+    unit: str
+    price: Decimal
+    document: "TariffDocumentRead | None" = None
+    model_config = ConfigDict(from_attributes=True)
+
+
+class TariffCreate(BaseModel):
+    document_id: int
+    service_group: str
+    name: str
+    description: str = ""
+    unit: str
+    price: Decimal
+
+
+class TariffUpdate(BaseModel):
+    name: str | None = None
+    description: str | None = None
+    unit: str | None = None
+    price: Decimal | None = None
+    service_group: str | None = None
+
+
+class AliasCreate(BaseModel):
+    raw_text: str = Field(min_length=1)
+    source: str = ""
+
+
+class AliasUpdate(BaseModel):
+    raw_text: str | None = None
+    source: str | None = None
+    normalized_address_id: int | None = None
+
+
+class RawAddressCreate(BaseModel):
+    """Создание сырого адреса (алиаса)."""
+
+    raw_text: str = Field(min_length=1)
+    source: str = ""
+
+
+class RawAddressUpdate(BaseModel):
+    """Обновление сырого адреса."""
+
+    raw_text: str | None = None
+    source: str | None = None
+    normalized_address_id: int | None = None
+
+
+class RawAddressRead(BaseRead):
+    raw_text: str
+    hash: str
+    normalized_address_id: int
+    source: str = ""
+    normalized_address: "AddressRead | None" = None
+    model_config = ConfigDict(from_attributes=True)
+
+
+# --- В самом конце файла, после класса RawAddressCreate ---
+
+# Явно пересобираем схемы, чтобы Pydantic разрешил ленивые строковые аннотации (ForwardRefs)
+AddressRead.model_rebuild()
+LegalEntityRead.model_rebuild()
+CarrierRead.model_rebuild()
+KeeperRead.model_rebuild()
+DepositorRead.model_rebuild()
+ClientRead.model_rebuild()
+ContractRead.model_rebuild()
+TariffDocumentRead.model_rebuild()
+TariffRead.model_rebuild()
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/api/v1/router.py
+========================================
+# app/api/v1/router.py
+
+"""Главный роутер API v1."""
+
+from fastapi import APIRouter
+
+api_router = APIRouter(prefix="/api/v1")
+
+# ========== Parties ==========
+from app.api.v1.parties.routes import router as parties_router
+from app.api.v1.accounts.routes import router as accounts_router
+
+api_router.include_router(parties_router)
+api_router.include_router(accounts_router)
+
+# ========== Остальные модули — позже ==========
+# accounts, warehouse, delivery, documents, orders, notifications, integration, files
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/api/v1/warehouse/__init__.py
+========================================
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/api/v1/warehouse/routes.py
+========================================
+"""API для модуля warehouse."""
+
+from __future__ import annotations
+
+from fastapi import APIRouter, Depends, status
+
+from app.api.deps import SessionDep, UserDep, require_permission
+from app.api.v1.warehouse import schemas
+from app.core.exceptions import BadRequestError, ConflictError, NotFoundError
+from app.warehouse.repository import (
+    BatchRepository,
+    LPNRepository,
+    ProductRepository,
+    StockRepository,
+    TaskLineRepository,
+    TaskRepository,
+)
+from app.warehouse.services import (
+    BatchService,
+    LPNService,
+    ProductService,
+    StockService,
+    TaskService,
+)
+
+router = APIRouter(prefix="/warehouse", tags=["warehouse"])
+
+
+# ========== Товары ==========
+
+@router.get("/products", response_model=list[schemas.ProductRead], dependencies=[Depends(require_permission("view", "products"))])
+async def list_products(session: SessionDep, depositor_id: int | None = None) -> list[schemas.ProductRead]:
+    service = ProductService(ProductRepository(session))
+    if depositor_id:
+        rows = await service.list_by_depositor(depositor_id)
+    else:
+        rows = await service.list_all()
+    return [schemas.ProductRead.model_validate(r) for r in rows]
+
+
+@router.post("/products", response_model=schemas.ProductRead, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_permission("create", "products"))])
+async def create_product(body: schemas.ProductCreate, session: SessionDep, user_id: UserDep) -> schemas.ProductRead:
+    service = ProductService(ProductRepository(session))
+    try:
+        row = await service.create(user_id=user_id, **body.model_dump())
+    except ValueError as e:
+        raise ConflictError(str(e)) from e
+    return schemas.ProductRead.model_validate(row)
+
+
+@router.get("/products/{product_id}", response_model=schemas.ProductRead, dependencies=[Depends(require_permission("view", "products"))])
+async def get_product(product_id: int, session: SessionDep) -> schemas.ProductRead:
+    service = ProductService(ProductRepository(session))
+    product = await service.get_by_id(product_id)
+    if product is None:
+        raise NotFoundError("Товар не найден")
+    return schemas.ProductRead.model_validate(product)
+
+
+@router.patch("/products/{product_id}", response_model=schemas.ProductRead, dependencies=[Depends(require_permission("update", "products"))])
+async def update_product(product_id: int, body: schemas.ProductCreate, session: SessionDep, user_id: UserDep) -> schemas.ProductRead:
+    product = await ProductRepository(session).update(product_id, **body.model_dump(exclude_unset=True))
+    if product is None:
+        raise NotFoundError("Товар не найден")
+    return schemas.ProductRead.model_validate(product)
+
+
+@router.delete("/products/{product_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_permission("delete", "products"))])
+async def delete_product(product_id: int, session: SessionDep, user_id: UserDep) -> None:
+    ok = await ProductRepository(session).soft_delete(product_id, user_id)
+    if not ok:
+        raise NotFoundError("Товар не найден")
+
+
+# ========== Партии ==========
+
+@router.get("/batches", response_model=list[schemas.BatchRead], dependencies=[Depends(require_permission("view", "batches"))])
+async def list_batches(session: SessionDep, product_id: int | None = None) -> list[schemas.BatchRead]:
+    service = BatchService(BatchRepository(session))
+    rows = await service.list_all()
+    return [schemas.BatchRead.model_validate(r) for r in rows]
+
+
+@router.post("/batches", response_model=schemas.BatchRead, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_permission("create", "batches"))])
+async def create_batch(body: schemas.BatchCreate, session: SessionDep, user_id: UserDep) -> schemas.BatchRead:
+    service = BatchService(BatchRepository(session))
+    try:
+        row = await service.create(user_id=user_id, **body.model_dump())
+    except ValueError as e:
+        raise ConflictError(str(e)) from e
+    return schemas.BatchRead.model_validate(row)
+
+
+@router.get("/batches/{batch_id}", response_model=schemas.BatchRead, dependencies=[Depends(require_permission("view", "batches"))])
+async def get_batch(batch_id: int, session: SessionDep) -> schemas.BatchRead:
+    service = BatchService(BatchRepository(session))
+    batch = await service.get_by_id(batch_id)
+    if batch is None:
+        raise NotFoundError("Партия не найдена")
+    return schemas.BatchRead.model_validate(batch)
+
+
+@router.patch("/batches/{batch_id}", response_model=schemas.BatchRead, dependencies=[Depends(require_permission("update", "batches"))])
+async def update_batch(batch_id: int, body: schemas.BatchCreate, session: SessionDep, user_id: UserDep) -> schemas.BatchRead:
+    batch = await BatchRepository(session).update(batch_id, **body.model_dump(exclude_unset=True))
+    if batch is None:
+        raise NotFoundError("Партия не найдена")
+    return schemas.BatchRead.model_validate(batch)
+
+
+@router.delete("/batches/{batch_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_permission("delete", "batches"))])
+async def delete_batch(batch_id: int, session: SessionDep, user_id: UserDep) -> None:
+    ok = await BatchRepository(session).soft_delete(batch_id, user_id)
+    if not ok:
+        raise NotFoundError("Партия не найдена")
+
+
+# ========== LPN ==========
+
+@router.get("/lpns", response_model=list[schemas.LPNRead], dependencies=[Depends(require_permission("view", "lpns"))])
+async def list_lpns(session: SessionDep) -> list[schemas.LPNRead]:
+    repo = LPNRepository(session)
+    rows = await repo.list_all()
+    return [schemas.LPNRead.model_validate(r) for r in rows]
+
+
+@router.post("/lpns", response_model=schemas.LPNRead, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_permission("create", "lpns"))])
+async def create_lpn(body: schemas.LPNCreate, session: SessionDep, user_id: UserDep) -> schemas.LPNRead:
+    service = LPNService(LPNRepository(session))
+    row = await service.create(user_id=user_id, status=body.status)
+    return schemas.LPNRead.model_validate(row)
+
+
+@router.get("/lpns/{lpn_id}", response_model=schemas.LPNRead, dependencies=[Depends(require_permission("view", "lpns"))])
+async def get_lpn(lpn_id: int, session: SessionDep) -> schemas.LPNRead:
+    lpn = await LPNRepository(session).get_by_id(lpn_id)
+    if lpn is None:
+        raise NotFoundError("LPN не найдена")
+    return schemas.LPNRead.model_validate(lpn)
+
+
+@router.patch("/lpns/{lpn_id}", response_model=schemas.LPNRead, dependencies=[Depends(require_permission("update", "lpns"))])
+async def update_lpn(lpn_id: int, body: schemas.LPNCreate, session: SessionDep, user_id: UserDep) -> schemas.LPNRead:
+    lpn = await LPNRepository(session).update(lpn_id, status=body.status)
+    if lpn is None:
+        raise NotFoundError("LPN не найдена")
+    return schemas.LPNRead.model_validate(lpn)
+
+
+@router.delete("/lpns/{lpn_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_permission("delete", "lpns"))])
+async def delete_lpn(lpn_id: int, session: SessionDep, user_id: UserDep) -> None:
+    ok = await LPNRepository(session).soft_delete(lpn_id, user_id)
+    if not ok:
+        raise NotFoundError("LPN не найдена")
+
+
+# ========== Остатки ==========
+
+@router.get("/stock", dependencies=[Depends(require_permission("view", "stock"))])
+async def list_stock(session: SessionDep):
+    rows = await StockRepository(session).list_all()
+    return [schemas.StockBalanceRead.model_validate(r) for r in rows]
+
+
+@router.get("/stock/{stock_id}", response_model=schemas.StockBalanceRead, dependencies=[Depends(require_permission("view", "stock"))])
+async def get_stock(stock_id: int, session: SessionDep) -> schemas.StockBalanceRead:
+    stock = await StockRepository(session).get_by_id(stock_id)
+    if stock is None:
+        raise NotFoundError("Остаток не найден")
+    return schemas.StockBalanceRead.model_validate(stock)
+
+
+@router.post("/stock/add", response_model=schemas.StockBalanceRead, dependencies=[Depends(require_permission("create", "stock"))])
+async def add_stock(body: schemas.StockAdd, session: SessionDep, user_id: UserDep) -> schemas.StockBalanceRead:
+    service = StockService(StockRepository(session))
+    try:
+        balance = await service.add_stock(user_id=user_id, **body.model_dump())
+    except ValueError as e:
+        raise BadRequestError(str(e)) from e
+    return schemas.StockBalanceRead.model_validate(balance)
+
+
+@router.post("/stock/remove", response_model=schemas.StockBalanceRead, dependencies=[Depends(require_permission("delete", "stock"))])
+async def remove_stock(body: schemas.StockRemove, session: SessionDep, user_id: UserDep) -> schemas.StockBalanceRead:
+    service = StockService(StockRepository(session))
+    try:
+        balance = await service.remove_stock(user_id=user_id, **body.model_dump())
+    except ValueError as e:
+        raise BadRequestError(str(e)) from e
+    return schemas.StockBalanceRead.model_validate(balance)
+
+
+@router.post("/stock/move", response_model=schemas.StockBalanceRead, dependencies=[Depends(require_permission("update", "stock"))])
+async def move_stock(body: schemas.StockMove, session: SessionDep, user_id: UserDep) -> schemas.StockBalanceRead:
+    service = StockService(StockRepository(session))
+    try:
+        balance = await service.move_stock(user_id=user_id, **body.model_dump())
+    except ValueError as e:
+        raise BadRequestError(str(e)) from e
+    return schemas.StockBalanceRead.model_validate(balance)
+
+
+# ========== Задания ==========
+
+@router.get("/tasks/list", response_model=list[schemas.TaskList], dependencies=[Depends(require_permission("view", "tasks"))])
+async def list_tasks_for_table(session: SessionDep) -> list[schemas.TaskList]:
+    rows = await TaskRepository(session).list_all()
+    return [schemas.TaskList.model_validate(r) for r in rows]
+
+
+@router.get("/tasks", response_model=list[schemas.TaskRead], dependencies=[Depends(require_permission("view", "tasks"))])
+async def list_tasks(session: SessionDep) -> list[schemas.TaskRead]:
+    rows = await TaskRepository(session).list_all()
+    return [schemas.TaskRead.model_validate(r) for r in rows]
+
+
+@router.post("/tasks", response_model=schemas.TaskRead, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_permission("create", "tasks"))])
+async def create_task(body: schemas.TaskCreate, session: SessionDep, user_id: UserDep) -> schemas.TaskRead:
+    service = TaskService(TaskRepository(session), TaskLineRepository(session), StockService(StockRepository(session)))
+    task = await service.create(user_id=user_id, **body.model_dump())
+    return schemas.TaskRead.model_validate(task)
+
+
+@router.post("/tasks/from-document", response_model=schemas.TaskRead, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_permission("create", "tasks"))])
+async def create_task_from_document(body: schemas.PickingTaskCreate, session: SessionDep, user_id: UserDep) -> schemas.TaskRead:
+    """Создать задание на основании документа."""
+    service = TaskService(TaskRepository(session), TaskLineRepository(session), StockService(StockRepository(session)))
+    task = await service.create(user_id=user_id, task_type="picking", document_id=body.document_id, assignee_id=body.assignee_id)
+    return schemas.TaskRead.model_validate(task)
+
+
+@router.get("/tasks/{task_id}", response_model=schemas.TaskRead, dependencies=[Depends(require_permission("view", "tasks"))])
+async def get_task(task_id: int, session: SessionDep) -> schemas.TaskRead:
+    task = await TaskRepository(session).get_by_id(task_id)
+    if task is None:
+        raise NotFoundError("Задание не найдено")
+    return schemas.TaskRead.model_validate(task)
+
+
+@router.patch("/tasks/{task_id}", response_model=schemas.TaskRead, dependencies=[Depends(require_permission("update", "tasks"))])
+async def update_task(task_id: int, body: schemas.TaskUpdate, session: SessionDep, user_id: UserDep) -> schemas.TaskRead:
+    task = await TaskRepository(session).update(task_id, **body.model_dump(exclude_unset=True))
+    if task is None:
+        raise NotFoundError("Задание не найдено")
+    return schemas.TaskRead.model_validate(task)
+
+
+@router.delete("/tasks/{task_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_permission("delete", "tasks"))])
+async def delete_task(task_id: int, session: SessionDep, user_id: UserDep) -> None:
+    ok = await TaskRepository(session).soft_delete(task_id, user_id)
+    if not ok:
+        raise NotFoundError("Задание не найдено")
+
+
+@router.post("/tasks/{task_id}/start", response_model=schemas.TaskRead, dependencies=[Depends(require_permission("execute", "tasks"))])
+async def start_task(task_id: int, session: SessionDep, user_id: UserDep) -> schemas.TaskRead:
+    service = TaskService(TaskRepository(session), TaskLineRepository(session), StockService(StockRepository(session)))
+    task = await service.start(user_id=user_id, task_id=task_id)
+    if task is None:
+        raise NotFoundError("Задание не найдено")
+    return schemas.TaskRead.model_validate(task)
+
+
+@router.post("/tasks/{task_id}/complete", response_model=schemas.TaskRead, dependencies=[Depends(require_permission("complete", "tasks"))])
+async def complete_task(task_id: int, body: schemas.TaskComplete, session: SessionDep, user_id: UserDep) -> schemas.TaskRead:
+    service = TaskService(TaskRepository(session), TaskLineRepository(session), StockService(StockRepository(session)))
+    try:
+        task = await service.complete(user_id=user_id, task_id=task_id, force=body.force)
+    except ValueError as e:
+        raise BadRequestError(str(e)) from e
+    return schemas.TaskRead.model_validate(task)
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/api/v1/warehouse/routes_references.py
+========================================
+"""API для справочников склада."""
+
+from __future__ import annotations
+
+from fastapi import APIRouter, Depends, status
+from pydantic import BaseModel
+
+from app.api.deps import SessionDep, UserDep, require_permission
+from app.core.exceptions import ConflictError, NotFoundError
+from app.warehouse.repository import (
+    PackageRepository,
+    ProductGroupRepository,
+    ProductLocationRepository,
+    StockRepository,
+)
+
+class ProductGroupCreate(BaseModel):
+    name: str
+
+
+class PackageCreate(BaseModel):
+    product_id: int
+    name: str
+    quantity: int = 1
+    barcode: str | None = None
+    weight: float | None = None
+    width: float | None = None
+    height: float | None = None
+    depth: float | None = None
+    is_base_unit: bool = False
+
+
+class ProductLocationCreate(BaseModel):
+    product_id: int
+    location_id: int
+
+
+router = APIRouter(prefix="/warehouse", tags=["warehouse-references"])
+
+
+@router.get("/product-groups", dependencies=[Depends(require_permission("view", "products"))])
+async def list_product_groups(session: SessionDep):
+    rows = await ProductGroupRepository(session).list_all()
+    return [{"id": g.id, "name": g.name} for g in rows]
+
+
+@router.post("/product-groups", status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_permission("create", "products"))])
+async def create_product_group(body: ProductGroupCreate, session: SessionDep, user_id: UserDep):
+    repo = ProductGroupRepository(session)
+    existing = await repo.get_by_name(body["name"])
+    if existing:
+        raise ConflictError(f"Группа {body['name']} уже существует")
+    group = await repo.create(name=body["name"])
+    return {"id": group.id}
+
+
+@router.get("/product-groups/{group_id}", dependencies=[Depends(require_permission("view", "products"))])
+async def get_product_group(group_id: int, session: SessionDep):
+    group = await ProductGroupRepository(session).get_by_id(group_id)
+    if group is None:
+        raise NotFoundError("Группа не найдена")
+    return {"id": group.id, "name": group.name}
+
+
+@router.patch("/product-groups/{group_id}", dependencies=[Depends(require_permission("update", "products"))])
+async def update_product_group(group_id: int, body: ProductGroupCreate, session: SessionDep, user_id: UserDep):
+    group = await ProductGroupRepository(session).update(group_id, name=body.get("name"))
+    if group is None:
+        raise NotFoundError("Группа не найдена")
+    return {"id": group.id}
+
+
+@router.delete("/product-groups/{group_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_permission("delete", "products"))])
+async def delete_product_group(group_id: int, session: SessionDep, user_id: UserDep):
+    ok = await ProductGroupRepository(session).soft_delete(group_id, user_id)
+    if not ok:
+        raise NotFoundError("Группа не найдена")
+
+
+@router.get("/packages", dependencies=[Depends(require_permission("view", "products"))])
+async def list_packages(session: SessionDep):
+    rows = await PackageRepository(session).list_all()
+    return [{"id": p.id, "product_id": p.product_id, "name": p.name, "barcode": p.barcode, "weight": p.weight} for p in rows]
+
+
+@router.post("/packages", status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_permission("create", "products"))])
+async def create_package(body: PackageCreate, session: SessionDep, user_id: UserDep):
+    package = await PackageRepository(session).create(**body)
+    return {"id": package.id}
+
+
+@router.get("/packages/{package_id}", dependencies=[Depends(require_permission("view", "products"))])
+async def get_package(package_id: int, session: SessionDep):
+    package = await PackageRepository(session).get_by_id(package_id)
+    if package is None:
+        raise NotFoundError("Упаковка не найдена")
+    return {"id": package.id, "product_id": package.product_id, "name": package.name}
+
+
+@router.patch("/packages/{package_id}", dependencies=[Depends(require_permission("update", "products"))])
+async def update_package(package_id: int, body: PackageCreate, session: SessionDep, user_id: UserDep):
+    package = await PackageRepository(session).update(package_id, **body)
+    if package is None:
+        raise NotFoundError("Упаковка не найдена")
+    return {"id": package.id}
+
+
+@router.delete("/packages/{package_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_permission("delete", "products"))])
+async def delete_package(package_id: int, session: SessionDep, user_id: UserDep):
+    ok = await PackageRepository(session).soft_delete(package_id, user_id)
+    if not ok:
+        raise NotFoundError("Упаковка не найдена")
+
+
+@router.get("/product-locations", dependencies=[Depends(require_permission("view", "products"))])
+async def list_product_locations(session: SessionDep):
+    rows = await ProductLocationRepository(session).list_all()
+    return [{"id": pl.id, "product_id": pl.product_id, "location_id": pl.location_id} for pl in rows]
+
+
+@router.post("/product-locations", status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_permission("create", "products"))])
+async def create_product_location(body: ProductLocationCreate, session: SessionDep, user_id: UserDep):
+    pl = await ProductLocationRepository(session).create(**body)
+    return {"id": pl.id}
+
+
+@router.delete("/product-locations/{pl_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_permission("delete", "products"))])
+async def delete_product_location(pl_id: int, session: SessionDep, user_id: UserDep):
+    ok = await ProductLocationRepository(session).soft_delete(pl_id, user_id)
+    if not ok:
+        raise NotFoundError("Связь не найдена")
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/api/v1/warehouse/routes_topology.py
+========================================
+"""API для топологии склада."""
+
+from __future__ import annotations
+
+from fastapi import APIRouter, Depends, status
+
+from app.api.deps import SessionDep, UserDep, require_permission
+from app.api.v1.warehouse.schemas import (
+    LocationCreate, LocationRead,
+    RowCreate, RowRead,
+    VirtualWarehouseCreate, VirtualWarehouseRead,
+    WarehouseCreate, WarehouseRead,
+    ZoneCreate, ZoneRead,
+)
+from app.core.exceptions import NotFoundError
+from app.warehouse.repository import (
+    LocationRepository,
+    RowRepository,
+    VirtualWarehouseRepository,
+    WarehouseRepository,
+    ZoneRepository,
+)
+
+router = APIRouter(prefix="/warehouse/topology", tags=["warehouse-topology"])
+
+
+# ========== Склады ==========
+
+@router.get("/warehouses", response_model=list[WarehouseRead], dependencies=[Depends(require_permission("view", "warehouse"))])
+async def list_warehouses(session: SessionDep) -> list[WarehouseRead]:
+    rows = await WarehouseRepository(session).list_all()
+    return [WarehouseRead.model_validate(r) for r in rows]
+
+
+@router.post("/warehouses", response_model=WarehouseRead, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_permission("create", "warehouse"))])
+async def create_warehouse(body: WarehouseCreate, session: SessionDep, user_id: UserDep) -> WarehouseRead:
+    wh = await WarehouseRepository(session).create(**body.model_dump())
+    return WarehouseRead.model_validate(wh)
+
+
+@router.get("/warehouses/{warehouse_id}", response_model=WarehouseRead, dependencies=[Depends(require_permission("view", "warehouse"))])
+async def get_warehouse(warehouse_id: int, session: SessionDep) -> WarehouseRead:
+    wh = await WarehouseRepository(session).get_by_id(warehouse_id)
+    if wh is None:
+        raise NotFoundError("Склад не найден")
+    return WarehouseRead.model_validate(wh)
+
+
+@router.patch("/warehouses/{warehouse_id}", response_model=WarehouseRead, dependencies=[Depends(require_permission("update", "warehouse"))])
+async def update_warehouse(warehouse_id: int, body: WarehouseCreate, session: SessionDep, user_id: UserDep) -> WarehouseRead:
+    wh = await WarehouseRepository(session).update(warehouse_id, **body.model_dump(exclude_unset=True))
+    if wh is None:
+        raise NotFoundError("Склад не найден")
+    return WarehouseRead.model_validate(wh)
+
+
+@router.delete("/warehouses/{warehouse_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_permission("delete", "warehouse"))])
+async def delete_warehouse(warehouse_id: int, session: SessionDep, user_id: UserDep) -> None:
+    ok = await WarehouseRepository(session).soft_delete(warehouse_id, user_id)
+    if not ok:
+        raise NotFoundError("Склад не найден")
+
+
+# ========== Виртуальные склады ==========
+
+@router.get("/virtual-warehouses", response_model=list[VirtualWarehouseRead], dependencies=[Depends(require_permission("view", "warehouse"))])
+async def list_virtual_warehouses(session: SessionDep) -> list[VirtualWarehouseRead]:
+    rows = await VirtualWarehouseRepository(session).list_all()
+    return [VirtualWarehouseRead.model_validate(r) for r in rows]
+
+
+@router.post("/virtual-warehouses", response_model=VirtualWarehouseRead, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_permission("create", "warehouse"))])
+async def create_virtual_warehouse(body: VirtualWarehouseCreate, session: SessionDep, user_id: UserDep) -> VirtualWarehouseRead:
+    vw = await VirtualWarehouseRepository(session).create(**body.model_dump())
+    return VirtualWarehouseRead.model_validate(vw)
+
+
+@router.get("/virtual-warehouses/{vw_id}", response_model=VirtualWarehouseRead, dependencies=[Depends(require_permission("view", "warehouse"))])
+async def get_virtual_warehouse(vw_id: int, session: SessionDep) -> VirtualWarehouseRead:
+    vw = await VirtualWarehouseRepository(session).get_by_id(vw_id)
+    if vw is None:
+        raise NotFoundError("Виртуальный склад не найден")
+    return VirtualWarehouseRead.model_validate(vw)
+
+
+@router.patch("/virtual-warehouses/{vw_id}", response_model=VirtualWarehouseRead, dependencies=[Depends(require_permission("update", "warehouse"))])
+async def update_virtual_warehouse(vw_id: int, body: VirtualWarehouseCreate, session: SessionDep, user_id: UserDep) -> VirtualWarehouseRead:
+    vw = await VirtualWarehouseRepository(session).update(vw_id, **body.model_dump(exclude_unset=True))
+    if vw is None:
+        raise NotFoundError("Виртуальный склад не найден")
+    return VirtualWarehouseRead.model_validate(vw)
+
+
+@router.delete("/virtual-warehouses/{vw_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_permission("delete", "warehouse"))])
+async def delete_virtual_warehouse(vw_id: int, session: SessionDep, user_id: UserDep) -> None:
+    ok = await VirtualWarehouseRepository(session).soft_delete(vw_id, user_id)
+    if not ok:
+        raise NotFoundError("Виртуальный склад не найден")
+
+
+# ========== Зоны ==========
+
+@router.get("/zones", response_model=list[ZoneRead], dependencies=[Depends(require_permission("view", "warehouse"))])
+async def list_zones(session: SessionDep) -> list[ZoneRead]:
+    rows = await ZoneRepository(session).list_all()
+    return [ZoneRead.model_validate(r) for r in rows]
+
+
+@router.post("/zones", response_model=ZoneRead, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_permission("create", "warehouse"))])
+async def create_zone(body: ZoneCreate, session: SessionDep, user_id: UserDep) -> ZoneRead:
+    zone = await ZoneRepository(session).create(**body.model_dump())
+    return ZoneRead.model_validate(zone)
+
+
+@router.get("/zones/{zone_id}", response_model=ZoneRead, dependencies=[Depends(require_permission("view", "warehouse"))])
+async def get_zone(zone_id: int, session: SessionDep) -> ZoneRead:
+    zone = await ZoneRepository(session).get_by_id(zone_id)
+    if zone is None:
+        raise NotFoundError("Зона не найдена")
+    return ZoneRead.model_validate(zone)
+
+
+@router.patch("/zones/{zone_id}", response_model=ZoneRead, dependencies=[Depends(require_permission("update", "warehouse"))])
+async def update_zone(zone_id: int, body: ZoneCreate, session: SessionDep, user_id: UserDep) -> ZoneRead:
+    zone = await ZoneRepository(session).update(zone_id, **body.model_dump(exclude_unset=True))
+    if zone is None:
+        raise NotFoundError("Зона не найдена")
+    return ZoneRead.model_validate(zone)
+
+
+@router.delete("/zones/{zone_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_permission("delete", "warehouse"))])
+async def delete_zone(zone_id: int, session: SessionDep, user_id: UserDep) -> None:
+    ok = await ZoneRepository(session).soft_delete(zone_id, user_id)
+    if not ok:
+        raise NotFoundError("Зона не найдена")
+
+
+# ========== Ряды ==========
+
+@router.get("/rows", response_model=list[RowRead], dependencies=[Depends(require_permission("view", "warehouse"))])
+async def list_rows(session: SessionDep) -> list[RowRead]:
+    rows = await RowRepository(session).list_all()
+    return [RowRead.model_validate(r) for r in rows]
+
+
+@router.post("/rows", response_model=RowRead, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_permission("create", "warehouse"))])
+async def create_row(body: RowCreate, session: SessionDep, user_id: UserDep) -> RowRead:
+    row = await RowRepository(session).create(**body.model_dump())
+    return RowRead.model_validate(row)
+
+
+@router.get("/rows/{row_id}", response_model=RowRead, dependencies=[Depends(require_permission("view", "warehouse"))])
+async def get_row(row_id: int, session: SessionDep) -> RowRead:
+    row = await RowRepository(session).get_by_id(row_id)
+    if row is None:
+        raise NotFoundError("Ряд не найден")
+    return RowRead.model_validate(row)
+
+
+@router.patch("/rows/{row_id}", response_model=RowRead, dependencies=[Depends(require_permission("update", "warehouse"))])
+async def update_row(row_id: int, body: RowCreate, session: SessionDep, user_id: UserDep) -> RowRead:
+    row = await RowRepository(session).update(row_id, **body.model_dump(exclude_unset=True))
+    if row is None:
+        raise NotFoundError("Ряд не найден")
+    return RowRead.model_validate(row)
+
+
+@router.delete("/rows/{row_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_permission("delete", "warehouse"))])
+async def delete_row(row_id: int, session: SessionDep, user_id: UserDep) -> None:
+    ok = await RowRepository(session).soft_delete(row_id, user_id)
+    if not ok:
+        raise NotFoundError("Ряд не найден")
+
+
+# ========== Ячейки ==========
+
+@router.get("/locations", response_model=list[LocationRead], dependencies=[Depends(require_permission("view", "warehouse"))])
+async def list_locations(session: SessionDep) -> list[LocationRead]:
+    rows = await LocationRepository(session).list_all()
+    return [LocationRead.model_validate(r) for r in rows]
+
+
+@router.post("/locations", response_model=LocationRead, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_permission("create", "warehouse"))])
+async def create_location(body: LocationCreate, session: SessionDep, user_id: UserDep) -> LocationRead:
+    loc = await LocationRepository(session).create(**body.model_dump())
+    return LocationRead.model_validate(loc)
+
+
+@router.get("/locations/{location_id}", response_model=LocationRead, dependencies=[Depends(require_permission("view", "warehouse"))])
+async def get_location(location_id: int, session: SessionDep) -> LocationRead:
+    loc = await LocationRepository(session).get_by_id(location_id)
+    if loc is None:
+        raise NotFoundError("Ячейка не найдена")
+    return LocationRead.model_validate(loc)
+
+
+@router.patch("/locations/{location_id}", response_model=LocationRead, dependencies=[Depends(require_permission("update", "warehouse"))])
+async def update_location(location_id: int, body: LocationCreate, session: SessionDep, user_id: UserDep) -> LocationRead:
+    loc = await LocationRepository(session).update(location_id, **body.model_dump(exclude_unset=True))
+    if loc is None:
+        raise NotFoundError("Ячейка не найдена")
+    return LocationRead.model_validate(loc)
+
+
+@router.delete("/locations/{location_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_permission("delete", "warehouse"))])
+async def delete_location(location_id: int, session: SessionDep, user_id: UserDep) -> None:
+    ok = await LocationRepository(session).soft_delete(location_id, user_id)
+    if not ok:
+        raise NotFoundError("Ячейка не найдена")
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/api/v1/warehouse/schemas.py
+========================================
+"""Схемы для модуля warehouse."""
+
+from __future__ import annotations
+
+from datetime import date
+from decimal import Decimal
+
+from typing import Any
+from pydantic import BaseModel, Field
+
+from app.api.v1.base_schemas import BaseRead
+from app.core.statuses import TaskStatus
+
+
+
+
+class WarehouseRead(BaseRead):
+    name: str
+    address_id: int | None = None
+
+
+class WarehouseCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
+    address_id: int | None = None
+
+
+class ZoneRead(BaseRead):
+    warehouse_id: int
+    name: str
+    zone_type: str
+
+
+class ZoneCreate(BaseModel):
+    warehouse_id: int
+    name: str
+    zone_type: str
+
+
+class LocationRead(BaseRead):
+    row_id: int
+    position: int
+    level: int = 1
+    max_weight: float | None = None
+    max_volume: float | None = None
+
+
+class VirtualWarehouseRead(BaseRead):
+    depositor_id: int
+    warehouse_id: int
+    code: str
+    name: str
+
+
+class VirtualWarehouseCreate(BaseModel):
+    depositor_id: int
+    warehouse_id: int
+    code: str = Field(min_length=1, max_length=50)
+    name: str = Field(min_length=1, max_length=255)
+
+
+class RowRead(BaseRead):
+    zone_id: int
+    code: str
+    row_type: str
+
+
+class RowCreate(BaseModel):
+    zone_id: int
+    code: str = Field(min_length=1, max_length=10)
+    row_type: str = Field(min_length=1, max_length=20)
+
+
+class LocationCreate(BaseModel):
+    row_id: int
+    position: int
+    level: int = 1
+    max_weight: float | None = None
+    max_volume: float | None = None
+
+
+class ProductRead(BaseRead):
+    depositor_id: int
+    external_id: str
+    sku: str = ""
+    name: str
+    legal_name: str = ""
+    weight: Decimal
+    volume: Decimal
+    price: Decimal | None = None
+    shelf_life_days: int | None = None
+    min_shelf_life_days: int | None = None
+    is_marked: bool = False
+    is_serial_tracked: bool = False
+    is_batch_tracked: bool = False
+    is_expiration_tracked: bool = False
+    temperature_requirements: str = ""
+
+
+class ProductCreate(BaseModel):
+    depositor_id: int
+    external_id: str = Field(min_length=1, max_length=255)
+    name: str = Field(min_length=1, max_length=255)
+    sku: str = ""
+    legal_name: str = ""
+    weight: Decimal = Decimal("0")
+    volume: Decimal = Decimal("0")
+    price: Decimal | None = None
+    shelf_life_days: int | None = None
+    min_shelf_life_days: int | None = None
+    is_marked: bool = False
+    is_serial_tracked: bool = False
+    is_batch_tracked: bool = False
+    is_expiration_tracked: bool = False
+    temperature_requirements: str = ""
+
+
+class BatchRead(BaseRead):
+    product_id: int
+    batch_number: str
+    production_date: date | None = None
+    expiration_date: date | None = None
+
+
+class BatchCreate(BaseModel):
+    product_id: int
+    batch_number: str | None = None
+    production_date: date | None = None
+    expiration_date: date | None = None
+
+
+class LPNRead(BaseRead):
+    number: str
+    status: str
+
+
+class LPNCreate(BaseModel):
+    status: str = "created"
+
+
+class StockBalanceRead(BaseRead):
+    product_id: int
+    location_id: int
+    lpn_id: int | None = None
+    batch_id: int
+    quantity: Decimal
+    reserved_quantity: Decimal = Decimal("0")
+
+
+class StockAdd(BaseModel):
+    product_id: int
+    location_id: int
+    quantity: Decimal
+    lpn_id: int | None = None
+    batch_id: int | None = None
+    document_id: int | None = None
+
+
+class StockRemove(BaseModel):
+    product_id: int
+    location_id: int
+    quantity: Decimal

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class BaseRead(BaseModel):
@@ -12,12 +12,12 @@ class BaseRead(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
-    id: int
-    is_active: bool = True
-    is_deleted: bool = False
-    created_at: datetime
-    updated_at: datetime
-    created_by_id: int | None = None
-    updated_by_id: int | None = None
-    deleted_at: datetime | None = None
-    deleted_by_id: int | None = None
+    id: int = Field(..., title="ID")
+    is_active: bool = Field(True, title="Активна")
+    is_deleted: bool = Field(False, title="Удалена")
+    created_at: datetime = Field(..., title="Создана")
+    updated_at: datetime = Field(..., title="Обновлена")
+    created_by_id: int | None = Field(None, title="Создал")
+    updated_by_id: int | None = Field(None, title="Изменил")
+    deleted_at: datetime | None = Field(None, title="Удалена (когда)")
+    deleted_by_id: int | None = Field(None, title="Удалил")

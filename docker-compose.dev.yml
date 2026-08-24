@@ -1,0 +1,84 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: lms_dev_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: lms_user
+      POSTGRES_PASSWORD: lms_password
+      POSTGRES_DB: lms_fastapi
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./data/postgres_dev:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lms_user -d lms_fastapi"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: lms_dev_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+
+  fastapi:
+    build: .
+    container_name: lms_dev_fastapi
+    restart: unless-stopped
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8080 --reload
+    env_file:
+      - .env.docker
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    volumes:
+      - ./app:/app/app
+      - ./logs:/app/logs
+      - ./uploads:/app/uploads
+      - ./alembic:/app/alembic
+      - ./alembic.ini:/app/alembic.ini
+      - ./logs:/app/logs
+      - ./uploads:/app/uploads
+
+  celery_worker:
+    build: .
+    container_name: lms_dev_celery
+    restart: unless-stopped
+    command: celery -A app.tasks.celery_app worker --loglevel=info -Q imports --concurrency=2
+    env_file:
+      - .env.docker
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    volumes:
+      - ./app:/app/app
+      - ./logs:/app/logs
+      - ./uploads:/app/uploads
+
+  frontend:
+    image: node:20-alpine
+    container_name: lms_dev_frontend
+    working_dir: /app
+    volumes:
+      - ./frontend:/app
+      - frontend_node_modules:/app/node_modules
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0 --port 5173"
+    ports:
+      - "5173:5173"
+    restart: unless-stopped
+    depends_on:
+      - fastapi
+
+volumes:
+  frontend_node_modules:

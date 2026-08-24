@@ -36,9 +36,9 @@ class DeliveryOrder(Base):
     is_edo: Mapped[bool] = mapped_column(default=False, comment="Признак ЭДО")
     comment: Mapped[str] = mapped_column(Text, default="", comment="Комментарий")
 
-    contract: Mapped["Contract | None"] = relationship()
-    document: Mapped["Document | None"] = relationship()
-    outbound_order: Mapped["OutboundOrder | None"] = relationship()
+    contract: Mapped["Contract | None"] = relationship(lazy="selectin")
+    document: Mapped["Document | None"] = relationship(lazy="selectin")
+    outbound_order: Mapped["OutboundOrder | None"] = relationship(lazy="selectin")
     deviations: Mapped[list["DeliveryDeviation"]] = relationship(back_populates="delivery_order")
 
 

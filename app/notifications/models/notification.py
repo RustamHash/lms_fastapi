@@ -24,4 +24,4 @@ class Notification(Base):
     sent_at: Mapped[str | None] = mapped_column(String(50), nullable=True, comment="Когда отправлено")
     read_at: Mapped[str | None] = mapped_column(String(50), nullable=True, comment="Когда прочитано")
 
-    user: Mapped["User"] = relationship(foreign_keys=[user_id])
+    user: Mapped["User"] = relationship(foreign_keys=[user_id], lazy="selectin")

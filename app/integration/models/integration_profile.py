@@ -23,10 +23,14 @@ class IntegrationProfile(Base):
         ForeignKey("parties_depositor.id"), nullable=False, comment="Поклажедатель"
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False, comment="Название")
-    source_type: Mapped[str] = mapped_column(String(20), nullable=False, comment="Тип источника")
-    config: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, comment="Настройки")
+    source_type: Mapped[str] = mapped_column(
+        String(20), nullable=False, comment="Тип источника"
+    )
+    config: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, default=dict, comment="Настройки"
+    )
 
-    depositor: Mapped["Depositor"] = relationship()
+    depositor: Mapped["Depositor"] = relationship(lazy="selectin")
     logs: Mapped[list["IntegrationLog"]] = relationship(back_populates="profile")
 
 
@@ -39,19 +43,27 @@ class IntegrationLog(Base):
         String(36), default=lambda: str(uuid4()), comment="UUID задачи импорта"
     )
     profile_id: Mapped[int | None] = mapped_column(
-        ForeignKey("integration_profile.id"), nullable=True, comment="Профиль (если импорт по одному)"
+        ForeignKey("integration_profile.id"),
+        nullable=True,
+        comment="Профиль (если импорт по одному)",
     )
     status: Mapped[str] = mapped_column(
-        String(20), default="starting", comment="Статус: starting, processing, completed, failed"
+        String(20),
+        default="starting",
+        comment="Статус: starting, processing, completed, failed",
     )
     document_type: Mapped[str | None] = mapped_column(
         String(20), nullable=True, comment="Тип: porder, order, all"
     )
     total_rows: Mapped[int] = mapped_column(Integer, default=0, comment="Всего файлов")
-    processed_rows: Mapped[int] = mapped_column(Integer, default=0, comment="Обработано файлов")
+    processed_rows: Mapped[int] = mapped_column(
+        Integer, default=0, comment="Обработано файлов"
+    )
     success_rows: Mapped[int] = mapped_column(Integer, default=0, comment="Успешно")
     error_rows: Mapped[int] = mapped_column(Integer, default=0, comment="С ошибками")
-    messages: Mapped[list[dict]] = mapped_column(JSONB, default=list, comment="Лог сообщений")
+    messages: Mapped[list[str]] = mapped_column(
+        JSONB, default=list, comment="Лог сообщений"
+    )
     errors: Mapped[list[str]] = mapped_column(JSONB, default=list, comment="Ошибки")
     current_step: Mapped[str] = mapped_column(
         String(255), default="", comment="Текущий шаг"
@@ -75,7 +87,11 @@ class IntegrationError(Base):
         ForeignKey("integration_log.id"), nullable=False, comment="Журнал"
     )
     row_number: Mapped[int] = mapped_column(Integer, default=0, comment="Номер строки")
-    error_message: Mapped[str] = mapped_column(String, default="", comment="Сообщение об ошибке")
-    raw_data: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, comment="Исходные данные")
+    error_message: Mapped[str] = mapped_column(
+        String, default="", comment="Сообщение об ошибке"
+    )
+    raw_data: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, default=dict, comment="Исходные данные"
+    )
 
     log: Mapped["IntegrationLog"] = relationship()

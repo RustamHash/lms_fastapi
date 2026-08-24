@@ -4,7 +4,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 from fastapi import FastAPI, Request
-from fastapi.exceptions import HTTPException
+from fastapi.exceptions import HTTPException, ResponseValidationError
 from pydantic import ValidationError
 from fastapi.responses import JSONResponse
 
@@ -27,6 +27,22 @@ app = FastAPI(title="LMS FastAPI")
 
 
 logger = logging.getLogger(__name__)
+
+
+@app.exception_handler(ResponseValidationError)
+async def response_validation_exception_handler(
+    request: Request, exc: ResponseValidationError
+) -> JSONResponse:
+    """Обработчик ошибок валидации ответа (response_model)."""
+    logger.error(
+        "Response Validation Error on path %s | Method: %s",
+        request.url.path,
+        request.method,
+    )
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Ошибка валидации ответа"},
+    )
 
 
 @app.exception_handler(Exception)
@@ -64,7 +80,9 @@ async def http_exception_handler(request: Request, exc: HTTPException) -> JSONRe
 
 
 @app.exception_handler(ValidationError)
-async def validation_exception_handler(request: Request, exc: ValidationError) -> JSONResponse:
+async def validation_exception_handler(
+    request: Request, exc: ValidationError
+) -> JSONResponse:
     """Обработчик ошибок валидации Pydantic."""
     logger.warning(
         "Validation error: %s | Path: %s",
@@ -100,10 +118,10 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from pathlib import Path
 
-# Раздача фронтенда
+# Раздача фронтенда (только если собран)
 frontend_dist = Path(__file__).parent.parent / "frontend" / "dist"
 
-if frontend_dist.exists():
+if frontend_dist.exists() and (frontend_dist / "assets").exists():
     app.mount("/assets", StaticFiles(directory=frontend_dist / "assets"), name="assets")
 
     @app.get("/{full_path:path}")
@@ -112,3 +130,6 @@ if frontend_dist.exists():
         if file_path.exists() and file_path.is_file():
             return FileResponse(file_path)
         return FileResponse(frontend_dist / "index.html")
+
+else:
+    logger.info("Фронтенд не собран — работаем в dev-режиме (только API)")

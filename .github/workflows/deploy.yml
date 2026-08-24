@@ -6,7 +6,7 @@ on:
 
 jobs:
   deploy:
-    name: Deploy LMS FastAPI
+    name: Deploy LMS (Docker)
     runs-on: self-hosted
 
     steps:
@@ -30,20 +30,12 @@ jobs:
             --exclude='*.pyc' \
             --exclude='node_modules' \
             --exclude='dist' \
+            --exclude='data' \
+            --exclude='logs' \
+            --exclude='letsencrypt' \
             "${{ github.workspace }}/" "$DEPLOY_DIR/"
           echo "Проверка содержимого..."
           ls -la "$DEPLOY_DIR"
-
-      - name: Install backend deps
-        working-directory: /data/projects/lms_fastapi
-        run: |
-          set -e
-          if [ ! -d .venv ]; then
-            python3 -m venv .venv
-          fi
-          source .venv/bin/activate
-          pip install -U pip wheel
-          pip install -r requirements.txt
 
       - name: Build frontend
         working-directory: /data/projects/lms_fastapi/frontend
@@ -54,23 +46,34 @@ jobs:
           fi
           npm run build
 
-      - name: Run migrations
+      - name: Deploy with Docker Compose
         working-directory: /data/projects/lms_fastapi
         run: |
           set -e
-          source .venv/bin/activate
-          alembic upgrade head
+          echo "Запуск Docker Compose..."
+          docker compose up -d --build
+          
+          echo "Ожидание готовности..."
+          sleep 10
+          
+          echo "Проверка контейнеров..."
+          docker compose ps
+          
+          echo "Проверка статусов..."
+          for container in lms_postgres lms_redis lms_fastapi lms_celery_worker lms_flower; do
+            status=$(docker inspect --format='{{.State.Status}}' $container 2>/dev/null || echo "not_found")
+            if [ "$status" != "running" ]; then
+              echo "❌ Контейнер $container не запущен (статус: $status)"
+              docker compose logs $container --tail=50 || true
+              exit 1
+            fi
+            echo "✅ $container: running"
+          done
 
-      - name: Restart service
+      - name: Health check
         run: |
           set -e
-          if [ -f /etc/systemd/system/lms.service ]; then
-            sudo systemctl daemon-reload
-            sudo systemctl restart lms
-            sudo systemctl status lms --no-pager || true
-          else
-            echo "Unit lms.service не найден. Создайте его вручную:"
-            echo "sudo cp deploy/lms.service /etc/systemd/system/"
-            echo "sudo systemctl daemon-reload"
-            echo "sudo systemctl enable --now lms"
-          fi
+          echo "Проверка API..."
+          curl -s -o /dev/null -w "HTTP %{http_code}\n" http://localhost:8002/docs || true
+          echo "Проверка Flower..."
+          curl -s -o /dev/null -w "HTTP %{http_code}\n" http://localhost:5555 || true

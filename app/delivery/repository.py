@@ -1,9 +1,12 @@
+# app/delivery/repository.py
+
 """Репозитории для модуля delivery."""
 
 from __future__ import annotations
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.delivery.models import DeliveryDeviation, DeliveryOrder, Driver, Route, RouteLine, Vehicle
 
@@ -12,33 +15,34 @@ class DeliveryOrderRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._s = session
 
-    async def get_by_id(self, order_id: int) -> DeliveryOrder | None:
-        return await self._s.get(DeliveryOrder, order_id)
+    async def get_by_id(self, id: int) -> DeliveryOrder | None:
+        stmt = select(DeliveryOrder).where(DeliveryOrder.id == id).options(selectinload(DeliveryOrder.outbound_order), selectinload(DeliveryOrder.document), selectinload(DeliveryOrder.deviations))
+        return await self._s.scalar(stmt)
 
     async def list_all(self) -> list[DeliveryOrder]:
-        stmt = select(DeliveryOrder)
+        stmt = select(DeliveryOrder).options(selectinload(DeliveryOrder.outbound_order))
         return list(await self._s.scalars(stmt))
 
     async def create(self, **kwargs) -> DeliveryOrder:
-        order = DeliveryOrder(**kwargs)
-        self._s.add(order)
+        row = DeliveryOrder(**kwargs)
+        self._s.add(row)
         await self._s.flush()
-        return order
+        return row
 
-    async def update(self, order_id: int, **kwargs) -> DeliveryOrder | None:
-        order = await self.get_by_id(order_id)
-        if order is None:
+    async def update(self, id: int, **kwargs) -> DeliveryOrder | None:
+        row = await self._s.get(DeliveryOrder, id)
+        if row is None:
             return None
         for field, value in kwargs.items():
-            setattr(order, field, value)
+            setattr(row, field, value)
         await self._s.flush()
-        return order
+        return row
 
-    async def delete(self, order_id: int) -> bool:
-        order = await self.get_by_id(order_id)
-        if order is None:
+    async def soft_delete(self, id: int, user_id: int | None = None) -> bool:
+        row = await self._s.get(DeliveryOrder, id)
+        if row is None:
             return False
-        await self._s.delete(order)
+        row.soft_delete(user_id)
         await self._s.flush()
         return True
 
@@ -47,33 +51,32 @@ class DriverRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._s = session
 
-    async def get_by_id(self, driver_id: int) -> Driver | None:
-        return await self._s.get(Driver, driver_id)
+    async def get_by_id(self, id: int) -> Driver | None:
+        return await self._s.get(Driver, id)
 
     async def list_all(self) -> list[Driver]:
-        stmt = select(Driver)
-        return list(await self._s.scalars(stmt))
+        return list(await self._s.scalars(select(Driver)))
 
     async def create(self, **kwargs) -> Driver:
-        driver = Driver(**kwargs)
-        self._s.add(driver)
+        row = Driver(**kwargs)
+        self._s.add(row)
         await self._s.flush()
-        return driver
+        return row
 
-    async def update(self, driver_id: int, **kwargs) -> Driver | None:
-        driver = await self.get_by_id(driver_id)
-        if driver is None:
+    async def update(self, id: int, **kwargs) -> Driver | None:
+        row = await self._s.get(Driver, id)
+        if row is None:
             return None
         for field, value in kwargs.items():
-            setattr(driver, field, value)
+            setattr(row, field, value)
         await self._s.flush()
-        return driver
+        return row
 
-    async def delete(self, driver_id: int) -> bool:
-        driver = await self.get_by_id(driver_id)
-        if driver is None:
+    async def soft_delete(self, id: int, user_id: int | None = None) -> bool:
+        row = await self._s.get(Driver, id)
+        if row is None:
             return False
-        await self._s.delete(driver)
+        row.soft_delete(user_id)
         await self._s.flush()
         return True
 
@@ -82,33 +85,32 @@ class VehicleRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._s = session
 
-    async def get_by_id(self, vehicle_id: int) -> Vehicle | None:
-        return await self._s.get(Vehicle, vehicle_id)
+    async def get_by_id(self, id: int) -> Vehicle | None:
+        return await self._s.get(Vehicle, id)
 
     async def list_all(self) -> list[Vehicle]:
-        stmt = select(Vehicle)
-        return list(await self._s.scalars(stmt))
+        return list(await self._s.scalars(select(Vehicle)))
 
     async def create(self, **kwargs) -> Vehicle:
-        vehicle = Vehicle(**kwargs)
-        self._s.add(vehicle)
+        row = Vehicle(**kwargs)
+        self._s.add(row)
         await self._s.flush()
-        return vehicle
+        return row
 
-    async def update(self, vehicle_id: int, **kwargs) -> Vehicle | None:
-        vehicle = await self.get_by_id(vehicle_id)
-        if vehicle is None:
+    async def update(self, id: int, **kwargs) -> Vehicle | None:
+        row = await self._s.get(Vehicle, id)
+        if row is None:
             return None
         for field, value in kwargs.items():
-            setattr(vehicle, field, value)
+            setattr(row, field, value)
         await self._s.flush()
-        return vehicle
+        return row
 
-    async def delete(self, vehicle_id: int) -> bool:
-        vehicle = await self.get_by_id(vehicle_id)
-        if vehicle is None:
+    async def soft_delete(self, id: int, user_id: int | None = None) -> bool:
+        row = await self._s.get(Vehicle, id)
+        if row is None:
             return False
-        await self._s.delete(vehicle)
+        row.soft_delete(user_id)
         await self._s.flush()
         return True
 
@@ -117,33 +119,34 @@ class RouteRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._s = session
 
-    async def get_by_id(self, route_id: int) -> Route | None:
-        return await self._s.get(Route, route_id)
+    async def get_by_id(self, id: int) -> Route | None:
+        stmt = select(Route).where(Route.id == id).options(selectinload(Route.driver), selectinload(Route.vehicle), selectinload(Route.lines))
+        return await self._s.scalar(stmt)
 
     async def list_all(self) -> list[Route]:
-        stmt = select(Route)
+        stmt = select(Route).options(selectinload(Route.driver), selectinload(Route.vehicle))
         return list(await self._s.scalars(stmt))
 
     async def create(self, **kwargs) -> Route:
-        route = Route(**kwargs)
-        self._s.add(route)
+        row = Route(**kwargs)
+        self._s.add(row)
         await self._s.flush()
-        return route
+        return row
 
-    async def update(self, route_id: int, **kwargs) -> Route | None:
-        route = await self.get_by_id(route_id)
-        if route is None:
+    async def update(self, id: int, **kwargs) -> Route | None:
+        row = await self._s.get(Route, id)
+        if row is None:
             return None
         for field, value in kwargs.items():
-            setattr(route, field, value)
+            setattr(row, field, value)
         await self._s.flush()
-        return route
+        return row
 
-    async def delete(self, route_id: int) -> bool:
-        route = await self.get_by_id(route_id)
-        if route is None:
+    async def soft_delete(self, id: int, user_id: int | None = None) -> bool:
+        row = await self._s.get(Route, id)
+        if row is None:
             return False
-        await self._s.delete(route)
+        row.soft_delete(user_id)
         await self._s.flush()
         return True
 
@@ -152,8 +155,8 @@ class RouteLineRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._s = session
 
-    async def get_by_id(self, line_id: int) -> RouteLine | None:
-        return await self._s.get(RouteLine, line_id)
+    async def get_by_id(self, id: int) -> RouteLine | None:
+        return await self._s.get(RouteLine, id)
 
     async def list_all(self) -> list[RouteLine]:
         return list(await self._s.scalars(select(RouteLine)))
@@ -163,25 +166,25 @@ class RouteLineRepository:
         return list(await self._s.scalars(stmt))
 
     async def create(self, **kwargs) -> RouteLine:
-        line = RouteLine(**kwargs)
-        self._s.add(line)
+        row = RouteLine(**kwargs)
+        self._s.add(row)
         await self._s.flush()
-        return line
+        return row
 
-    async def update(self, line_id: int, **kwargs) -> RouteLine | None:
-        line = await self.get_by_id(line_id)
-        if line is None:
+    async def update(self, id: int, **kwargs) -> RouteLine | None:
+        row = await self._s.get(RouteLine, id)
+        if row is None:
             return None
         for field, value in kwargs.items():
-            setattr(line, field, value)
+            setattr(row, field, value)
         await self._s.flush()
-        return line
+        return row
 
-    async def delete(self, line_id: int) -> bool:
-        line = await self.get_by_id(line_id)
-        if line is None:
+    async def soft_delete(self, id: int, user_id: int | None = None) -> bool:
+        row = await self._s.get(RouteLine, id)
+        if row is None:
             return False
-        await self._s.delete(line)
+        row.soft_delete(user_id)
         await self._s.flush()
         return True
 
@@ -190,37 +193,35 @@ class DeviationRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._s = session
 
-    async def get_by_id(self, deviation_id: int) -> DeliveryDeviation | None:
-        return await self._s.get(DeliveryDeviation, deviation_id)
+    async def get_by_id(self, id: int) -> DeliveryDeviation | None:
+        return await self._s.get(DeliveryDeviation, id)
 
     async def list_all(self) -> list[DeliveryDeviation]:
         return list(await self._s.scalars(select(DeliveryDeviation)))
 
     async def list_by_order(self, order_id: int) -> list[DeliveryDeviation]:
-        stmt = select(DeliveryDeviation).where(
-            DeliveryDeviation.delivery_order_id == order_id
-        )
+        stmt = select(DeliveryDeviation).where(DeliveryDeviation.delivery_order_id == order_id)
         return list(await self._s.scalars(stmt))
 
     async def create(self, **kwargs) -> DeliveryDeviation:
-        deviation = DeliveryDeviation(**kwargs)
-        self._s.add(deviation)
+        row = DeliveryDeviation(**kwargs)
+        self._s.add(row)
         await self._s.flush()
-        return deviation
+        return row
 
-    async def update(self, deviation_id: int, **kwargs) -> DeliveryDeviation | None:
-        deviation = await self.get_by_id(deviation_id)
-        if deviation is None:
+    async def update(self, id: int, **kwargs) -> DeliveryDeviation | None:
+        row = await self._s.get(DeliveryDeviation, id)
+        if row is None:
             return None
         for field, value in kwargs.items():
-            setattr(deviation, field, value)
+            setattr(row, field, value)
         await self._s.flush()
-        return deviation
+        return row
 
-    async def delete(self, deviation_id: int) -> bool:
-        deviation = await self.get_by_id(deviation_id)
-        if deviation is None:
+    async def soft_delete(self, id: int, user_id: int | None = None) -> bool:
+        row = await self._s.get(DeliveryDeviation, id)
+        if row is None:
             return False
-        await self._s.delete(deviation)
+        row.soft_delete(user_id)
         await self._s.flush()
         return True

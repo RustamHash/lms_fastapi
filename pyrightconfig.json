@@ -1,8 +1,16 @@
+// {
+//   "reportMissingImports": false,
+//   "reportUnknownMemberType": false,
+//   "reportUnknownVariableType": false,
+//   "reportUnknownParameterType": false,
+//   "reportUndefinedVariable": false,
+//   "reportGeneralTypeIssues": false
+// }
 {
-  "reportMissingImports": false,
-  "reportUnknownMemberType": false,
-  "reportUnknownVariableType": false,
-  "reportUnknownParameterType": false,
-  "reportUndefinedVariable": false,
-  "reportGeneralTypeIssues": false
+  "reportMissingImports": "warning",
+  "reportUnknownMemberType": "warning",
+  "reportUnknownVariableType": "warning",
+  "reportUnknownParameterType": "warning",
+  "reportUndefinedVariable": "error",
+  "reportGeneralTypeIssues": "warning"
 }

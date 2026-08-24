@@ -1,4 +1,6 @@
-"""Сервис клиентов и торговых точек."""
+# app/parties/services/client_service.py
+
+"""Сервис клиентов."""
 
 from __future__ import annotations
 
@@ -10,50 +12,17 @@ class ClientService:
     def __init__(self, repo: ClientRepository) -> None:
         self._repo = repo
 
-    async def create(self, user_id: int | None, **kwargs) -> Client:
-        if not kwargs.get("depositor_id"):
-            raise ValueError("Поклажедатель обязателен")
-        if not kwargs.get("code"):
-            raise ValueError("Внешний код обязателен")
-        if not kwargs.get("name"):
-            raise ValueError("Наименование обязательно")
+    async def get_by_id(self, id: int) -> Client | None:
+        return await self._repo.get_by_id(id)
 
-        existing = await self._repo.get_by_code_and_address(
-            kwargs["depositor_id"],
-            kwargs["code"],
-            kwargs.get("delivery_address_id"),
-        )
-        if existing:
-            raise ValueError(f"Клиент с кодом {kwargs['code']} и адресом уже существует")
+    async def list_all(self) -> list[Client]:
+        return await self._repo.list_all()
 
-        return await self._repo.insert(
-            **kwargs,
-        )
+    async def create(self, **kwargs) -> Client:
+        return await self._repo.create(**kwargs)
 
-    async def get_or_create(self, user_id: int | None, **kwargs) -> tuple[Client, bool]:
-        client = await self._repo.get_by_code_and_address(
-            kwargs.get("depositor_id"),
-            kwargs.get("code"),
-            kwargs.get("delivery_address_id"),
-        )
-        if client:
-            return client, False
-        client = await self.create(user_id=user_id, **kwargs)
-        return client, True
+    async def update(self, id: int, **kwargs) -> Client | None:
+        return await self._repo.update(id, **kwargs)
 
-    async def get_by_id(self, client_id: int) -> Client | None:
-        return await self._repo.get_by_id(client_id)
-
-    async def list_by_depositor(self, depositor_id: int) -> list[Client]:
-        return await self._repo.list_by_depositor(depositor_id)
-
-    async def update(self, client_id: int, user_id: int | None, **fields) -> Client | None:
-        return await self._repo.update(client_id, **fields)
-
-    async def soft_delete(self, client_id: int, user_id: int | None = None) -> bool:
-        client = await self._repo.get_by_id(client_id)
-        if not client:
-            return False
-        client.soft_delete(user_id)
-        await self._repo.session.flush()
-        return True
+    async def soft_delete(self, id: int, user_id: int | None = None) -> bool:
+        return await self._repo.soft_delete(id, user_id)

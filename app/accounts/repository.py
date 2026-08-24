@@ -1,202 +1,273 @@
-"""Репозиторий для модуля accounts."""
+# app/accounts/repository.py
+
+"""Репозитории для модуля accounts."""
 
 from __future__ import annotations
 
-from sqlalchemy import or_, select
-from sqlalchemy.orm import selectinload
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
-from app.accounts.models import Audit, Role, User, UserDepositor, UserSettings, UserTableSettings
+from app.accounts.models import Audit, Role, User, UserDepositor, UserSettings, UserTableSettings, UserListPreset
 
 
 class UserRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._s = session
 
-    async def get_by_id(self, user_id: int) -> User | None:
-        stmt = select(User).where(User.id == user_id).options(selectinload(User.roles))
+    async def get_by_id(self, id: int) -> User | None:
+        stmt = select(User).where(User.id == id).options(selectinload(User.roles))
         return await self._s.scalar(stmt)
 
     async def get_by_username(self, username: str) -> User | None:
         stmt = select(User).where(User.username == username).options(selectinload(User.roles))
         return await self._s.scalar(stmt)
 
-    async def create(self, **kwargs) -> User:
-        user = User(**kwargs)
-        self._s.add(user)
-        await self._s.flush()
-        await self._s.refresh(user)
-        return user
-
     async def list_all(self) -> list[User]:
-        stmt = select(User)
+        stmt = select(User).options(selectinload(User.roles))
         return list(await self._s.scalars(stmt))
 
-    async def update(self, user_id: int, **kwargs) -> User | None:
-        user = await self._s.get(User, user_id)
-        if user is None:
+    async def create(self, **kwargs) -> User:
+        row = User(**kwargs)
+        self._s.add(row)
+        await self._s.flush()
+        return row
+
+    async def update(self, id: int, **kwargs) -> User | None:
+        row = await self._s.get(User, id)
+        if row is None:
             return None
         for field, value in kwargs.items():
-            setattr(user, field, value)
+            setattr(row, field, value)
         await self._s.flush()
-        return user
+        return row
+
+    async def soft_delete(self, id: int, user_id: int | None = None) -> bool:
+        row = await self._s.get(User, id)
+        if row is None:
+            return False
+        row.soft_delete(user_id)
+        await self._s.flush()
+        return True
 
 
 class RoleRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._s = session
 
-    async def get_by_id(self, role_id: int) -> Role | None:
-        return await self._s.get(Role, role_id)
+    async def get_by_id(self, id: int) -> Role | None:
+        return await self._s.get(Role, id)
 
     async def get_by_code(self, code: str) -> Role | None:
         stmt = select(Role).where(Role.code == code)
         return await self._s.scalar(stmt)
 
-    async def create(self, **kwargs) -> Role:
-        role = Role(**kwargs)
-        self._s.add(role)
-        await self._s.flush()
-        return role
-
     async def list_all(self) -> list[Role]:
         stmt = select(Role)
         return list(await self._s.scalars(stmt))
 
-    async def update(self, role_id: int, **kwargs) -> Role | None:
-        role = await self._s.get(Role, role_id)
-        if role is None:
+    async def create(self, **kwargs) -> Role:
+        row = Role(**kwargs)
+        self._s.add(row)
+        await self._s.flush()
+        return row
+
+    async def update(self, id: int, **kwargs) -> Role | None:
+        row = await self._s.get(Role, id)
+        if row is None:
             return None
         for field, value in kwargs.items():
-            setattr(role, field, value)
+            setattr(row, field, value)
         await self._s.flush()
-        return role
+        return row
+
+    async def soft_delete(self, id: int, user_id: int | None = None) -> bool:
+        row = await self._s.get(Role, id)
+        if row is None:
+            return False
+        row.soft_delete(user_id)
+        await self._s.flush()
+        return True
 
 
 class AuditRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._s = session
 
-    async def create(self, **kwargs) -> Audit:
-        audit = Audit(**kwargs)
-        self._s.add(audit)
-        await self._s.flush()
-        return audit
-
-    async def get_by_id(self, audit_id: int) -> Audit | None:
-        return await self._s.get(Audit, audit_id)
+    async def get_by_id(self, id: int) -> Audit | None:
+        return await self._s.get(Audit, id)
 
     async def list_all(self, limit: int = 100) -> list[Audit]:
         stmt = select(Audit).order_by(Audit.created_at.desc()).limit(limit)
         return list(await self._s.scalars(stmt))
 
-    async def list_by_user(self, user_id: int, limit: int = 100) -> list[Audit]:
-        stmt = select(Audit).where(Audit.user_id == user_id).order_by(Audit.created_at.desc()).limit(limit)
-        return list(await self._s.scalars(stmt))
+    async def create(self, **kwargs) -> Audit:
+        row = Audit(**kwargs)
+        self._s.add(row)
+        await self._s.flush()
+        return row
 
 
 class UserSettingsRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._s = session
 
-    async def get_by_id(self, settings_id: int) -> UserSettings | None:
-        return await self._s.get(UserSettings, settings_id)
-
-    async def list_all(self) -> list[UserSettings]:
-        return list(await self._s.scalars(select(UserSettings)))
+    async def get_by_id(self, id: int) -> UserSettings | None:
+        return await self._s.get(UserSettings, id)
 
     async def get_by_user(self, user_id: int) -> UserSettings | None:
         stmt = select(UserSettings).where(UserSettings.user_id == user_id)
         return await self._s.scalar(stmt)
 
-    async def get_or_create(self, user_id: int) -> UserSettings:
-        settings = await self.get_by_user(user_id)
-        if settings:
-            return settings
-        settings = UserSettings(user_id=user_id)
-        self._s.add(settings)
-        await self._s.flush()
-        return settings
+    async def list_all(self) -> list[UserSettings]:
+        stmt = select(UserSettings)
+        return list(await self._s.scalars(stmt))
 
-    async def update(self, user_id: int, **kwargs) -> UserSettings | None:
-        settings = await self.get_by_user(user_id)
-        if settings is None:
+    async def create(self, **kwargs) -> UserSettings:
+        row = UserSettings(**kwargs)
+        self._s.add(row)
+        await self._s.flush()
+        return row
+
+    async def update(self, id: int, **kwargs) -> UserSettings | None:
+        row = await self._s.get(UserSettings, id)
+        if row is None:
             return None
         for field, value in kwargs.items():
-            setattr(settings, field, value)
+            setattr(row, field, value)
         await self._s.flush()
-        return settings
+        return row
+
+    async def soft_delete(self, id: int, user_id: int | None = None) -> bool:
+        row = await self._s.get(UserSettings, id)
+        if row is None:
+            return False
+        row.soft_delete(user_id)
+        await self._s.flush()
+        return True
 
 
 class UserTableSettingsRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._s = session
 
+    async def get_by_id(self, id: int) -> UserTableSettings | None:
+        return await self._s.get(UserTableSettings, id)
+
     async def get_by_user_and_table(self, user_id: int, table_id: str) -> UserTableSettings | None:
-        stmt = select(UserTableSettings).where(
-            UserTableSettings.user_id == user_id,
-            UserTableSettings.table_id == table_id,
-        )
+        stmt = select(UserTableSettings).where(UserTableSettings.user_id == user_id, UserTableSettings.table_id == table_id)
         return await self._s.scalar(stmt)
 
     async def get_or_create(self, user_id: int, table_id: str) -> UserTableSettings:
-        settings = await self.get_by_user_and_table(user_id, table_id)
-        if settings:
-            return settings
-        settings = UserTableSettings(user_id=user_id, table_id=table_id)
-        self._s.add(settings)
+        row = await self.get_by_user_and_table(user_id, table_id)
+        if row:
+            return row
+        row = UserTableSettings(user_id=user_id, table_id=table_id)
+        self._s.add(row)
         await self._s.flush()
-        return settings
+        return row
+
+    async def list_all(self) -> list[UserTableSettings]:
+        stmt = select(UserTableSettings)
+        return list(await self._s.scalars(stmt))
+
+    async def create(self, user_id: int, table_id: str, **kwargs) -> UserTableSettings:
+        row = UserTableSettings(user_id=user_id, table_id=table_id, **kwargs)
+        self._s.add(row)
+        await self._s.flush()
+        return row
 
     async def update(self, user_id: int, table_id: str, **kwargs) -> UserTableSettings | None:
-        settings = await self.get_by_user_and_table(user_id, table_id)
-        if settings is None:
+        row = await self.get_by_user_and_table(user_id, table_id)
+        if row is None:
             return None
         for field, value in kwargs.items():
-            setattr(settings, field, value)
+            setattr(row, field, value)
         await self._s.flush()
-        return settings
+        return row
+
+    async def soft_delete(self, id: int, user_id: int | None = None) -> bool:
+        row = await self._s.get(UserTableSettings, id)
+        if row is None:
+            return False
+        row.soft_delete(user_id)
+        await self._s.flush()
+        return True
 
 
-class UserDepositorRepository:
-    """Привязка пользователя к поклажедателю."""
-
+class ListPresetRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._s = session
 
-    async def get_by_id(self, ud_id: int) -> UserDepositor | None:
-        return await self._s.get(UserDepositor, ud_id)
+    async def get_by_id(self, id: int) -> UserListPreset | None:
+        return await self._s.get(UserListPreset, id)
+
+    async def list_by_user_and_table(self, user_id: int, table_id: str) -> list[UserListPreset]:
+        stmt = select(UserListPreset).where(UserListPreset.user_id == user_id, UserListPreset.table_id == table_id)
+        return list(await self._s.scalars(stmt))
+
+    async def list_all(self) -> list[UserListPreset]:
+        stmt = select(UserListPreset)
+        return list(await self._s.scalars(stmt))
+
+    async def create(self, **kwargs) -> UserListPreset:
+        row = UserListPreset(**kwargs)
+        self._s.add(row)
+        await self._s.flush()
+        return row
+
+    async def update(self, id: int, **kwargs) -> UserListPreset | None:
+        row = await self._s.get(UserListPreset, id)
+        if row is None:
+            return None
+        for field, value in kwargs.items():
+            setattr(row, field, value)
+        await self._s.flush()
+        return row
+
+    async def soft_delete(self, id: int, user_id: int | None = None) -> bool:
+        row = await self._s.get(UserListPreset, id)
+        if row is None:
+            return False
+        row.soft_delete(user_id)
+        await self._s.flush()
+        return True
+
+
+class UserDepositorRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self._s = session
+
+    async def get_by_id(self, id: int) -> UserDepositor | None:
+        return await self._s.get(UserDepositor, id)
+
+    async def get_by_user_and_depositor(self, user_id: int, depositor_id: int) -> UserDepositor | None:
+        stmt = select(UserDepositor).where(UserDepositor.user_id == user_id, UserDepositor.depositor_id == depositor_id)
+        return await self._s.scalar(stmt)
 
     async def list_all(self) -> list[UserDepositor]:
         stmt = select(UserDepositor)
         return list(await self._s.scalars(stmt))
 
-    async def get_by_user_and_depositor(self, user_id: int, depositor_id: int) -> UserDepositor | None:
-        stmt = select(UserDepositor).where(
-            UserDepositor.user_id == user_id,
-            UserDepositor.depositor_id == depositor_id,
-        )
-        return await self._s.scalar(stmt)
-
     async def create(self, **kwargs) -> UserDepositor:
-        ud = UserDepositor(**kwargs)
-        self._s.add(ud)
+        row = UserDepositor(**kwargs)
+        self._s.add(row)
         await self._s.flush()
-        return ud
+        return row
 
-    async def update(self, ud_id: int, **kwargs) -> UserDepositor | None:
-        ud = await self.get_by_id(ud_id)
-        if ud is None:
+    async def update(self, id: int, **kwargs) -> UserDepositor | None:
+        row = await self._s.get(UserDepositor, id)
+        if row is None:
             return None
         for field, value in kwargs.items():
-            setattr(ud, field, value)
+            setattr(row, field, value)
         await self._s.flush()
-        return ud
+        return row
 
-    async def delete(self, ud_id: int) -> bool:
-        ud = await self.get_by_id(ud_id)
-        if ud is None:
+    async def soft_delete(self, id: int, user_id: int | None = None) -> bool:
+        row = await self._s.get(UserDepositor, id)
+        if row is None:
             return False
-        await self._s.delete(ud)
+        row.soft_delete(user_id)
         await self._s.flush()
         return True

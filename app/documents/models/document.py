@@ -17,10 +17,18 @@ class Document(Base):
 
     __tablename__ = "documents_document"
 
-    document_number: Mapped[str] = mapped_column(String(50), nullable=False, comment="Номер документа")
-    document_date: Mapped[date | None] = mapped_column(Date, nullable=True, comment="Дата документа")
-    delivery_date: Mapped[date | None] = mapped_column(Date, nullable=True, comment="Дата доставки")
-    document_type: Mapped[str] = mapped_column(String(20), nullable=False, comment="Тип документа")
+    document_number: Mapped[str] = mapped_column(
+        String(50), nullable=False, comment="Номер документа"
+    )
+    document_date: Mapped[date | None] = mapped_column(
+        Date, nullable=True, comment="Дата документа"
+    )
+    delivery_date: Mapped[date | None] = mapped_column(
+        Date, nullable=True, comment="Дата доставки"
+    )
+    document_type: Mapped[str] = mapped_column(
+        String(20), nullable=False, comment="Тип документа"
+    )
     contract_id: Mapped[int | None] = mapped_column(
         ForeignKey("parties_contract.id"), nullable=True, comment="Договор"
     )
@@ -28,13 +36,22 @@ class Document(Base):
         ForeignKey("warehouse_warehouse.id"), nullable=False, comment="Склад"
     )
     virtual_warehouse_id: Mapped[int | None] = mapped_column(
-        ForeignKey("warehouse_virtual_warehouse.id"), nullable=True, comment="Виртуальный склад"
+        ForeignKey("warehouse_virtual_warehouse.id"),
+        nullable=True,
+        comment="Виртуальный склад",
     )
-    status: Mapped[str] = mapped_column(String(20), default=DocumentStatus.DRAFT.value, comment="Статус")
-    is_delivery: Mapped[bool] = mapped_column(Boolean, default=False, comment="Признак доставки")
+    status: Mapped[str] = mapped_column(
+        String(20), default=DocumentStatus.DRAFT.value, comment="Статус"
+    )
+    is_delivery: Mapped[bool] = mapped_column(
+        Boolean, default=False, comment="Признак доставки"
+    )
     is_edo: Mapped[bool] = mapped_column(Boolean, default=False, comment="Признак ЭДО")
 
-    lines: Mapped[list["DocumentLine"]] = relationship(back_populates="document", cascade="all, delete-orphan")
+    lines: Mapped[list["DocumentLine"]] = relationship(
+        back_populates="document", cascade="all, delete-orphan"
+    )
+    warehouse: Mapped["Warehouse | None"] = relationship(lazy="selectin")
 
 
 class DocumentLine(Base):
@@ -51,11 +68,13 @@ class DocumentLine(Base):
     batch_id: Mapped[int | None] = mapped_column(
         ForeignKey("warehouse_batch.id"), nullable=True, comment="Партия"
     )
-    quantity: Mapped[Decimal] = mapped_column(Numeric(20, 3), nullable=False, comment="Количество")
+    quantity: Mapped[Decimal] = mapped_column(
+        Numeric(20, 3), nullable=False, comment="Количество"
+    )
     processed_quantity: Mapped[Decimal] = mapped_column(
         Numeric(20, 3), default=Decimal("0"), comment="Обработано"
     )
 
     document: Mapped["Document"] = relationship(back_populates="lines")
-    product: Mapped["Product"] = relationship()
-    batch: Mapped["Batch | None"] = relationship()
+    product: Mapped["Product"] = relationship(lazy="selectin")
+    batch: Mapped["Batch | None"] = relationship(lazy="selectin")

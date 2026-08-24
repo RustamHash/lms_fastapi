@@ -2,22 +2,25 @@
 
 from __future__ import annotations
 
+from app.delivery.models import DeliveryOrder
 from app.delivery.repository import DeliveryOrderRepository
 from app.infrastructure.events import event_bus
 from app.infrastructure.events.event_types import EventTypes
-from app.core.statuses import DeliveryStatus
 
 
 class DeliveryOrderService:
     def __init__(self, repo: DeliveryOrderRepository) -> None:
         self._repo = repo
 
-    async def create(self, *, user_id: int, **kwargs) -> object:
-        order = await self._repo.create(
-            **kwargs,
-        )
+    async def get_by_id(self, order_id: int) -> DeliveryOrder | None:
+        return await self._repo.get_by_id(order_id)
 
-        # Отправить событие
+    async def list_all(self) -> list[DeliveryOrder]:
+        return await self._repo.list_all()
+
+    async def create(self, *, user_id: int | None = None, **kwargs) -> DeliveryOrder:
+        order = await self._repo.create(**kwargs)
+
         await event_bus.emit(EventTypes.DELIVERY_ORDER_CREATED, {
             "_event_type": EventTypes.DELIVERY_ORDER_CREATED,
             "order_id": order.id,
@@ -26,23 +29,11 @@ class DeliveryOrderService:
 
         return order
 
-    async def get_by_id(self, order_id: int):
-        return await self._repo.get_by_id(order_id)
+    async def update(self, order_id: int, user_id: int | None = None, **kwargs) -> DeliveryOrder | None:
+        return await self._repo.update(order_id, **kwargs)
 
-    async def set_status(self, *, user_id: int, order_id: int, status: str):
+    async def soft_delete(self, order_id: int, user_id: int | None = None) -> bool:
+        return await self._repo.soft_delete(order_id, user_id)
+
+    async def set_status(self, *, user_id: int, order_id: int, status: str) -> DeliveryOrder | None:
         return await self._repo.update(order_id, status=status)
-
-    async def assign(self, *, user_id: int, order_id: int):
-        return await self.set_status(user_id=user_id, order_id=order_id, status="assigned")
-
-    async def mark_in_transit(self, *, user_id: int, order_id: int):
-        return await self.set_status(user_id=user_id, order_id=order_id, status="in_transit")
-
-    async def mark_delivered(self, *, user_id: int, order_id: int):
-        return await self.set_status(user_id=user_id, order_id=order_id, status="delivered")
-
-    async def cancel(self, *, user_id: int, order_id: int):
-        return await self.set_status(user_id=user_id, order_id=order_id, status="cancelled")
-
-    async def list_all(self):
-        return await self._repo.list_all()

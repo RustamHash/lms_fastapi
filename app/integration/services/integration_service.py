@@ -7,7 +7,12 @@ import logging
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.orders.models import InboundOrder, InboundOrderLine, OutboundOrder, OutboundOrderLine
+from app.orders.models import (
+    InboundOrder,
+    InboundOrderLine,
+    OutboundOrder,
+    OutboundOrderLine,
+)
 from app.delivery.models import DeliveryOrder
 from app.delivery.repository import DeliveryOrderRepository
 from app.delivery.services import DeliveryOrderService
@@ -117,7 +122,9 @@ class IntegrationService:
             try:
                 await savepoint.rollback()
             except Exception as rollback_error:
-                logger.error("Ошибка отката транзакции: %s", rollback_error, exc_info=True)
+                logger.error(
+                    "Ошибка отката транзакции: %s", rollback_error, exc_info=True
+                )
             logger.error("Ошибка импорта: %s", e, exc_info=True)
             return None, [f"Ошибка: {e}"]
 
@@ -231,7 +238,9 @@ class IntegrationService:
         await self._s.flush()
 
         # 7. Создать складской документ (receipt)
-        doc_service = DocumentService(DocumentRepository(self._s), DocumentLineRepository(self._s))
+        doc_service = DocumentService(
+            DocumentRepository(self._s), DocumentLineRepository(self._s)
+        )
         document = await doc_service.create(
             user_id=user_id,
             document_type="receipt",
@@ -245,6 +254,7 @@ class IntegrationService:
         # Строки документа
         for line in doc.get("lines", []):
             from app.warehouse.models import Product
+
             stmt = select(Product).where(
                 Product.depositor_id == depositor_id,
                 Product.external_id == line["external_id"],
@@ -362,7 +372,9 @@ class IntegrationService:
         await self._s.flush()
 
         # 7. Создать складской документ (shipment)
-        doc_service = DocumentService(DocumentRepository(self._s), DocumentLineRepository(self._s))
+        doc_service = DocumentService(
+            DocumentRepository(self._s), DocumentLineRepository(self._s)
+        )
         document = await doc_service.create(
             user_id=user_id,
             document_type="shipment",
@@ -376,6 +388,7 @@ class IntegrationService:
         # Строки документа
         for line in doc.get("lines", []):
             from app.warehouse.models import Product
+
             stmt = select(Product).where(
                 Product.depositor_id == depositor_id,
                 Product.external_id == line["external_id"],

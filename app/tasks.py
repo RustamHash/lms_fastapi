@@ -25,21 +25,73 @@ celery_app.conf.update(
 @celery_app.task(name="app.tasks.run_import", bind=True, max_retries=3)
 def run_import_task(self, task_id: str, user_id: int, document_type: str | None):
     """Задача импорта — выполняется в Celery worker."""
-    # Импортируем внутри задачи — чтобы не зависеть от глобального engine
     from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
     from app.core.config import get_settings
     from app.core.context import set_current_user_id
-    
-    # Импортируем ВСЕ модели для регистрации в SQLAlchemy metadata
-    from app.accounts.models import User, Role, Audit, UserSettings, UserTableSettings, UserListPreset, UserDepositor
-    from app.parties.models import Address, RawAddress, DeliveryZone, LegalEntity, Depositor, Keeper, Carrier, Client, Contract, TariffDocument, Tariff
-    from app.warehouse.models import Warehouse, VirtualWarehouse, Zone, Row, Location, ProductGroup, Product, Package, Batch, LPN, StockBalance, StockMovement, Task, TaskLine, ProductLocation
-    from app.orders.models import InboundOrder, InboundOrderLine, OutboundOrder, OutboundOrderLine, ReturnOrder, ReturnOrderLine
-    from app.delivery.models import DeliveryOrder, DeliveryDeviation, Driver, Vehicle, Route, RouteLine
+
+    from app.accounts.models import (
+        User,
+        Role,
+        Audit,
+        UserSettings,
+        UserTableSettings,
+        UserListPreset,
+        UserDepositor,
+    )
+    from app.parties.models import (
+        Address,
+        RawAddress,
+        DeliveryZone,
+        LegalEntity,
+        Depositor,
+        Keeper,
+        Carrier,
+        Client,
+        Contract,
+        TariffDocument,
+        Tariff,
+    )
+    from app.warehouse.models import (
+        Warehouse,
+        VirtualWarehouse,
+        Zone,
+        Row,
+        Location,
+        ProductGroup,
+        Product,
+        Package,
+        Batch,
+        LPN,
+        StockBalance,
+        StockMovement,
+        Task,
+        TaskLine,
+        ProductLocation,
+    )
+    from app.orders.models import (
+        InboundOrder,
+        InboundOrderLine,
+        OutboundOrder,
+        OutboundOrderLine,
+        ReturnOrder,
+        ReturnOrderLine,
+    )
+    from app.delivery.models import (
+        DeliveryOrder,
+        DeliveryDeviation,
+        Driver,
+        Vehicle,
+        Route,
+        RouteLine,
+    )
     from app.documents.models import Document, DocumentLine
     from app.notifications.models import Notification, NotificationRule
     from app.files.models import File
-    from app.integration.models import IntegrationLog, IntegrationProfile, IntegrationError
+    from app.integration.models import (
+        IntegrationLog,
+        IntegrationProfile,
+        IntegrationError,
+    )
     from app.integration.services.ftp_service import FTPService
     from app.integration.adapters import ZLNAdapter
     from app.integration.services.integration_service import IntegrationService
@@ -51,18 +103,17 @@ def run_import_task(self, task_id: str, user_id: int, document_type: str | None)
     settings = get_settings()
 
     async def run_import():
-        """Выполняет импорт с отдельным engine для этого event loop."""
         set_current_user_id(user_id)
 
-        # Создаём engine для ТЕКУЩЕГО event loop
         engine = create_async_engine(settings.database_url)
-        session_factory = async_sessionmaker(engine, expire_on_commit=False, autoflush=False)
+        session_factory = async_sessionmaker(
+            engine, expire_on_commit=False, autoflush=False
+        )
 
         async with session_factory() as session:
             logger.info("Начало импорта: task_id=%s, type=%s", task_id, document_type)
 
             try:
-                # Найти или создать лог
                 log = await session.scalar(
                     select(IntegrationLog).where(IntegrationLog.task_id == task_id)
                 )
@@ -80,7 +131,6 @@ def run_import_task(self, task_id: str, user_id: int, document_type: str | None)
                 log.status = "processing"
                 await session.commit()
 
-                # Поиск профилей
                 profiles = list(
                     await session.scalars(
                         select(IntegrationProfile).where(
@@ -150,7 +200,9 @@ def run_import_task(self, task_id: str, user_id: int, document_type: str | None)
                             continue
 
                         log.total_rows = len(files)
-                        log.messages = (log.messages or []) + [f"Найдено файлов: {len(files)}"]
+                        log.messages = (log.messages or []) + [
+                            f"Найдено файлов: {len(files)}"
+                        ]
                         log.current_step = "Обработка файлов"
                         await session.commit()
 
@@ -161,12 +213,22 @@ def run_import_task(self, task_id: str, user_id: int, document_type: str | None)
 
                             with tempfile.TemporaryDirectory() as tmp_dir:
                                 local_path = ftp.download(remote_path, tmp_dir)
-                                universal_doc, parse_errors = await adapter.parse(local_path)
+                                universal_doc, parse_errors = await adapter.parse(
+                                    local_path
+                                )
 
                                 if parse_errors:
                                     log.error_rows += 1
                                     for err in parse_errors:
                                         log.errors = (log.errors or []) + [err]
+                                    await session.commit()
+                                    continue
+
+                                if universal_doc is None:
+                                    log.error_rows += 1
+                                    log.errors = (log.errors or []) + [
+                                        "Ошибка парсинга: пустой документ"
+                                    ]
                                     await session.commit()
                                     continue
 

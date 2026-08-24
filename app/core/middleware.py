@@ -20,8 +20,6 @@ logger = logging.getLogger(__name__)
 AUDIT_METHODS = {"POST", "PATCH", "PUT", "DELETE"}
 
 
-
-
 class RateLimitMiddleware(BaseHTTPMiddleware):
     """Простой rate limiting для auth-эндпоинтов."""
 
@@ -36,13 +34,13 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         if "/auth/" in request.url.path:
             client_ip = request.client.host if request.client else "unknown"
             current_time = __import__("time").time()
-            
+
             # Очистка старых записей
             self._requests = {
                 ip: [t for t in times if current_time - t < self.window_seconds]
                 for ip, times in self._requests.items()
             }
-            
+
             # Проверка лимита
             times = self._requests.get(client_ip, [])
             if len(times) >= self.max_requests:
@@ -51,13 +49,12 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                     content='{"detail": "Слишком много запросов. Попробуйте позже."}',
                     media_type="application/json",
                 )
-            
+
             # Запоминаем запрос
             times.append(current_time)
             self._requests[client_ip] = times
-        
-        return await call_next(request)
 
+        return await call_next(request)
 
 
 class AuditMiddleware(BaseHTTPMiddleware):
@@ -97,16 +94,28 @@ class AuditMiddleware(BaseHTTPMiddleware):
         # Логируем только успешные (2xx) запросы
         if user_id and 200 <= response.status_code < 300:
             try:
-                await self._log_audit(request, response, user_id, body)
+                # Получаем сессию из request.state (если есть)
+                session = getattr(request.state, "session", None)
+
+                if session is not None:
+                    # Используем ту же сессию, что и основной запрос
+                    await self._write_audit(session, request, user_id, body)
+                else:
+                    # Fallback: если сессии нет — создаем свою
+                    from app.core.database import async_session_factory
+
+                    async with async_session_factory() as session:
+                        await self._write_audit(session, request, user_id, body)
             except Exception as e:
                 logger.error("Ошибка записи аудита: %s", e, exc_info=True)
 
         return response
 
-    async def _log_audit(self, request: Request, response: Response, user_id: int, body: dict | None) -> None:
-        """Записать в аудит."""
+    async def _write_audit(
+        self, session, request: Request, user_id: int, body: dict | None
+    ) -> None:
+        """Создать запись аудита в переданной сессии."""
         from app.accounts.models import Audit
-        from app.core.database import async_session_factory
 
         # Определяем action по методу
         action_map = {
@@ -118,7 +127,6 @@ class AuditMiddleware(BaseHTTPMiddleware):
         action = action_map.get(request.method, "unknown")
 
         # Определяем entity_type из пути
-        # /api/v1/products/5 → products
         path_parts = [p for p in request.url.path.split("/") if p]
         entity_type = path_parts[-1] if path_parts else "unknown"
         if entity_type.isdigit() and len(path_parts) > 1:
@@ -129,19 +137,17 @@ class AuditMiddleware(BaseHTTPMiddleware):
         if len(path_parts) >= 2 and path_parts[-1].isdigit():
             entity_id = path_parts[-1]
 
-        # Записываем
-        async with async_session_factory() as session:
-            audit = Audit(
-                user_id=user_id,
-                action=action,
-                entity_type=entity_type,
-                entity_id=entity_id,
-                changes=body or {},
-                ip_address=request.client.host if request.client else "",
-                user_agent=request.headers.get("user-agent", ""),
-            )
-            session.add(audit)
-            await session.commit()
+        # Записываем в переданную сессию (без commit — UoW сделает)
+        audit = Audit(
+            user_id=user_id,
+            action=action,
+            entity_type=entity_type,
+            entity_id=entity_id,
+            changes=body or {},
+            ip_address=request.client.host if request.client else "",
+            user_agent=request.headers.get("user-agent", ""),
+        )
+        session.add(audit)
 
 
 def setup_middleware(app: FastAPI, settings: Settings) -> None:

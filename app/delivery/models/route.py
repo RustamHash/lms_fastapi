@@ -23,8 +23,8 @@ class Route(Base):
     date: Mapped[date] = mapped_column(Date, nullable=False, comment="Дата")
     status: Mapped[str] = mapped_column(String(20), default="planned", comment="Статус")
 
-    driver: Mapped["Driver"] = relationship(back_populates="routes")
-    vehicle: Mapped["Vehicle"] = relationship(back_populates="routes")
+    driver: Mapped["Driver"] = relationship(back_populates="routes", lazy="selectin")
+    vehicle: Mapped["Vehicle"] = relationship(back_populates="routes", lazy="selectin")
     lines: Mapped[list["RouteLine"]] = relationship(back_populates="route", cascade="all, delete-orphan")
 
 

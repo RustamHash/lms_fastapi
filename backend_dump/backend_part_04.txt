@@ -1,0 +1,3000 @@
+    async def _get_or_create_warehouse(
+        self, depositor_id: int, vw_code: str, user_id: int | None = None
+    ) -> tuple[int, int | None]:
+        """Найти или создать виртуальный склад, вернуть (warehouse_id, vw_id)."""
+        from app.warehouse.models import Warehouse
+
+        if vw_code:
+            # Ищем виртуальный склад
+            stmt = select(VirtualWarehouse).where(
+                VirtualWarehouse.depositor_id == depositor_id,
+                VirtualWarehouse.code == vw_code,
+            )
+            vw = await self._s.scalar(stmt)
+            if vw:
+                return vw.warehouse_id, vw.id
+
+            # Не нашли — создаем
+            warehouse = await self._s.scalar(select(Warehouse).limit(1))
+            if warehouse is None:
+                raise ValueError("Склад не найден")
+
+            vw = VirtualWarehouse(
+                depositor_id=depositor_id,
+                warehouse_id=warehouse.id,
+                code=vw_code,
+                name=vw_code,
+                created_by_id=user_id,
+                updated_by_id=user_id,
+            )
+            self._s.add(vw)
+            await self._s.flush()
+            return vw.warehouse_id, vw.id
+
+        # Без кода — ошибка, заказ не создаем
+        raise ValueError("Виртуальный склад не указан (LOC)")
+
+    async def _create_inbound_order(
+        self,
+        doc: dict,
+        depositor_id: int,
+        user_id: int,
+    ) -> InboundOrder:
+        """Создать входящий заказ (приёмка)."""
+        # 1. Проверить дубликат
+        existing = await self._s.scalar(
+            select(InboundOrder).where(
+                InboundOrder.depositor_id == depositor_id,
+                InboundOrder.number == doc["document_number"],
+            )
+        )
+        if existing:
+            raise ValueError(f"Заказ {doc['document_number']} уже существует")
+
+        # 2. Найти/создать поставщика (Client без адреса)
+        client_service = ClientService(ClientRepository(self._s))
+        vendor_code = doc.get("vendor_code", "")
+        if vendor_code:
+            supplier, _ = await client_service.get_or_create(
+                user_id=user_id,
+                depositor_id=depositor_id,
+                code=vendor_code,
+                name=doc.get("vendor_name", vendor_code),
+                legal_name=doc.get("vendor_legal_name", ""),
+                inn=doc.get("vendor_inn", ""),
+                kpp=doc.get("vendor_kpp", ""),
+            )
+        else:
+            supplier = None
+
+        # 3. Найти склад
+        warehouse_id, vw_id = await self._get_or_create_warehouse(
+            depositor_id, doc.get("virtual_warehouse_code", ""), user_id
+        )
+
+        # 4. Создать заказ
+        order = InboundOrder(
+            depositor_id=depositor_id,
+            warehouse_id=warehouse_id,
+            number=doc["document_number"],
+            supplier_code=vendor_code,
+            supplier_id=supplier.id if supplier else None,
+            order_date=doc.get("document_date") or doc.get("delivery_date"),
+            planned_date=doc.get("delivery_date"),
+        )
+        self._s.add(order)
+        await self._s.flush()
+
+        # 5. Создать строки
+        for line in doc.get("lines", []):
+            from app.warehouse.models import Product
+
+            stmt = select(Product).where(
+                Product.depositor_id == depositor_id,
+                Product.external_id == line["external_id"],
+            )
+            product = await self._s.scalar(stmt)
+
+            if product is None:
+                continue
+
+            order_line = InboundOrderLine(
+                order_id=order.id,
+                product_id=product.id,
+                quantity=line["quantity"],
+            )
+            self._s.add(order_line)
+
+        await self._s.flush()
+
+        # 7. Создать складской документ (receipt)
+        doc_service = DocumentService(DocumentRepository(self._s), DocumentLineRepository(self._s))
+        document = await doc_service.create(
+            user_id=user_id,
+            document_type="receipt",
+            warehouse_id=warehouse_id,
+            document_number=doc["document_number"],
+            document_date=doc.get("document_date"),
+            delivery_date=doc.get("delivery_date"),
+            status="draft",
+        )
+
+        # Строки документа
+        for line in doc.get("lines", []):
+            from app.warehouse.models import Product
+            stmt = select(Product).where(
+                Product.depositor_id == depositor_id,
+                Product.external_id == line["external_id"],
+            )
+            product = await self._s.scalar(stmt)
+            if product:
+                await doc_service.add_line(
+                    user_id=user_id,
+                    document_id=document.id,
+                    product_id=product.id,
+                    quantity=line["quantity"],
+                )
+
+        # Обновить статус заказа
+        order.status = "document_created"
+        await self._s.flush()
+
+        return order
+
+    async def _create_outbound_order(
+        self,
+        doc: dict,
+        depositor_id: int,
+        user_id: int,
+    ) -> OutboundOrder:
+        """Создать исходящий заказ (отгрузка)."""
+        customer_code = doc.get("customer_code", "")
+        delivery_address = doc.get("delivery_address", "")
+
+        # 1. Проверить дубликат
+        existing = await self._s.scalar(
+            select(OutboundOrder).where(
+                OutboundOrder.depositor_id == depositor_id,
+                OutboundOrder.number == doc["document_number"],
+            )
+        )
+        if existing:
+            raise ValueError(f"Заказ {doc['document_number']} уже существует")
+
+        # 2. Найти/создать адрес доставки
+        address_service = AddressService(AddressRepository(self._s))
+        address = await address_service.get_or_create(
+            delivery_address, "import", user_id
+        )
+
+        # 3. Найти/создать клиента (code + delivery_address_id)
+        client_service = ClientService(ClientRepository(self._s))
+        client, _ = await client_service.get_or_create(
+            user_id=user_id,
+            depositor_id=depositor_id,
+            code=customer_code,
+            name=doc.get("customer_name", customer_code),
+            legal_name=doc.get("customer_legal_name", ""),
+            inn=doc.get("customer_inn", ""),
+            kpp=doc.get("customer_kpp", ""),
+            delivery_address_id=address.id,
+            is_edo=doc.get("use_edo", False),
+        )
+
+        # 4. Найти склад
+        warehouse_id, vw_id = await self._get_or_create_warehouse(
+            depositor_id, doc.get("virtual_warehouse_code", ""), user_id
+        )
+
+        # 5. Создать заказ
+        # Рассчитать вес и количество
+        total_weight = Decimal("0")
+        total_qty = 0
+        for line in doc.get("lines", []):
+            total_qty += line["quantity"]
+            for item in doc.get("items", []):
+                if item["external_id"] == line["external_id"]:
+                    total_weight += item["net_mass"] * line["quantity"]
+                    break
+
+        order = OutboundOrder(
+            depositor_id=depositor_id,
+            warehouse_id=warehouse_id,
+            number=doc["document_number"],
+            customer_code=customer_code,
+            customer_name=client.name,
+            delivery_address_name=delivery_address,
+            client_id=client.id,
+            order_date=doc.get("document_date") or doc.get("delivery_date"),
+            shipping_date=doc.get("delivery_date"),
+            needs_delivery=doc.get("is_delivery", False),
+            declared_weight=total_weight,
+            address_comment=doc.get("address_comment", ""),
+            shipping_contact=doc.get("shipping_contact", ""),
+            total_quantity=total_qty,
+        )
+        self._s.add(order)
+        await self._s.flush()
+
+        # 6. Создать строки
+        for line in doc.get("lines", []):
+            from app.warehouse.models import Product
+
+            stmt = select(Product).where(
+                Product.depositor_id == depositor_id,
+                Product.external_id == line["external_id"],
+            )
+            product = await self._s.scalar(stmt)
+
+            if product is None:
+                continue
+
+            order_line = OutboundOrderLine(
+                order_id=order.id,
+                product_id=product.id,
+                quantity=line["quantity"],
+            )
+            self._s.add(order_line)
+
+        await self._s.flush()
+
+        # 7. Создать складской документ (shipment)
+        doc_service = DocumentService(DocumentRepository(self._s), DocumentLineRepository(self._s))
+        document = await doc_service.create(
+            user_id=user_id,
+            document_type="shipment",
+            warehouse_id=warehouse_id,
+            document_number=doc["document_number"],
+            document_date=doc.get("document_date"),
+            delivery_date=doc.get("delivery_date"),
+            status="draft",
+        )
+
+        # Строки документа
+        for line in doc.get("lines", []):
+            from app.warehouse.models import Product
+            stmt = select(Product).where(
+                Product.depositor_id == depositor_id,
+                Product.external_id == line["external_id"],
+            )
+            product = await self._s.scalar(stmt)
+            if product:
+                await doc_service.add_line(
+                    user_id=user_id,
+                    document_id=document.id,
+                    product_id=product.id,
+                    quantity=line["quantity"],
+                )
+
+        # 8. Если нужна доставка — создать заявку через сервис
+        if order.needs_delivery:
+            delivery_service = DeliveryOrderService(DeliveryOrderRepository(self._s))
+            await delivery_service.create(
+                user_id=user_id,
+                number=order.number,
+                contract_id=None,
+                document_id=document.id,
+                outbound_order_id=order.id,
+                contact_person=order.delivery_contact or "",
+                phone="",
+                delivery_date=order.shipping_date,
+                status="created",
+                is_edo=False,
+                comment="",
+            )
+
+        # Обновить статус заказа
+        order.status = "document_created"
+        await self._s.flush()
+
+        return order
+
+
+class AdapterService:
+    """Выбор адаптера."""
+
+    ADAPTERS = {
+        "ZLN": ZLNAdapter,
+    }
+
+    @classmethod
+    def get_adapter(cls, partner_code: str):
+        adapter = cls.ADAPTERS.get(partner_code)
+        if not adapter:
+            raise ValueError(f"Адаптер для {partner_code} не найден")
+        return adapter()
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/main.py
+========================================
+"""Точка входа FastAPI."""
+
+import logging
+
+logger = logging.getLogger(__name__)
+from fastapi import FastAPI, Request
+from fastapi.exceptions import HTTPException, ResponseValidationError
+from pydantic import ValidationError
+from fastapi.responses import JSONResponse
+
+from app.api.v1.router import api_router
+from app.core.config import get_settings
+from app.core.model_rebuilder import rebuild_all_models
+from app.core.middleware import setup_middleware
+from app.infrastructure.logging import setup_logging
+from app.core.init_db import init_db
+from app.notifications.services.dispatcher import setup_notification_dispatcher
+
+settings = get_settings()
+setup_logging(settings)
+
+logger.info("Environment: %s", settings.environment)
+logger.info("Log level: %s", settings.log_level)
+setup_notification_dispatcher(None)
+
+app = FastAPI(title="LMS FastAPI")
+
+
+logger = logging.getLogger(__name__)
+
+
+@app.exception_handler(ResponseValidationError)
+async def response_validation_exception_handler(
+    request: Request, exc: ResponseValidationError
+) -> JSONResponse:
+    """Обработчик ошибок валидации ответа (response_model)."""
+    logger.error(
+        "Response Validation Error on path %s | Method: %s",
+        request.url.path,
+        request.method,
+    )
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Ошибка валидации ответа"},
+    )
+
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    """Глобальный обработчик необработанных исключений."""
+    logger.error(
+        "Unhandled exception: %s | Path: %s | Method: %s",
+        exc,
+        request.url.path,
+        request.method,
+        exc_info=True,
+    )
+    return JSONResponse(
+        status_code=500,
+        content={
+            "detail": "Внутренняя ошибка сервера",
+            "error_type": exc.__class__.__name__,
+        },
+    )
+
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
+    """Обработчик HTTP-исключений с логированием."""
+    logger.warning(
+        "HTTP %s: %s | Path: %s",
+        exc.status_code,
+        exc.detail,
+        request.url.path,
+    )
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": exc.detail},
+    )
+
+
+@app.exception_handler(ValidationError)
+async def validation_exception_handler(
+    request: Request, exc: ValidationError
+) -> JSONResponse:
+    """Обработчик ошибок валидации Pydantic."""
+    logger.warning(
+        "Validation error: %s | Path: %s",
+        exc.errors(),
+        request.url.path,
+    )
+    return JSONResponse(
+        status_code=422,
+        content={"detail": exc.errors()},
+    )
+
+
+# Пересборка Pydantic-моделей для решения циклических зависимостей
+rebuild_all_models()
+
+# Middleware
+setup_middleware(app, settings)
+
+# Роутер
+app.include_router(api_router)
+
+
+@app.on_event("startup")
+async def startup_event():
+    """Инициализация при старте."""
+    from app.core.database import async_session_factory
+
+    async with async_session_factory() as session:
+        await init_db(session)
+
+
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+from pathlib import Path
+
+# Раздача фронтенда (только если собран)
+frontend_dist = Path(__file__).parent.parent / "frontend" / "dist"
+
+if frontend_dist.exists() and (frontend_dist / "assets").exists():
+    app.mount("/assets", StaticFiles(directory=frontend_dist / "assets"), name="assets")
+
+    @app.get("/{full_path:path}")
+    async def serve_frontend(full_path: str):
+        file_path = frontend_dist / full_path
+        if file_path.exists() and file_path.is_file():
+            return FileResponse(file_path)
+        return FileResponse(frontend_dist / "index.html")
+
+else:
+    logger.info("Фронтенд не собран — работаем в dev-режиме (только API)")
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/notifications/adapters/app_adapter.py
+========================================
+"""Адаптер доставки в приложение."""
+
+from __future__ import annotations
+
+from typing import Any
+
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.notifications.adapters.base import BaseAdapter
+from app.notifications.models import Notification
+
+
+class AppAdapter(BaseAdapter):
+    """Создает уведомление в БД."""
+
+    channel = "app"
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._s = session
+
+    async def send(self, recipient: dict[str, Any], notification: dict[str, Any]) -> None:
+        """Создать уведомление в БД."""
+        notify = Notification(
+            user_id=recipient["user_id"],
+            title=notification["title"],
+            text=notification["text"],
+            notification_type=notification.get("notification_type", "system"),
+            link=notification.get("link", ""),
+        )
+        self._s.add(notify)
+        await self._s.flush()
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/notifications/adapters/base.py
+========================================
+"""Базовый адаптер доставки."""
+
+from __future__ import annotations
+
+from abc import ABC, abstractmethod
+from typing import Any
+
+
+class BaseAdapter(ABC):
+    """Базовый класс адаптера."""
+
+    channel: str = "base"
+
+    @abstractmethod
+    async def send(self, recipient: dict[str, Any], notification: dict[str, Any]) -> None:
+        """Отправить уведомление."""
+        ...
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/notifications/adapters/email_adapter.py
+========================================
+"""Адаптер доставки по email (заглушка)."""
+
+from __future__ import annotations
+
+import logging
+from pathlib import Path
+import aiofiles
+from typing import Any
+
+from app.notifications.adapters.base import BaseAdapter
+
+logger = logging.getLogger(__name__)
+
+EMAIL_DIR = Path("logs/emails")
+
+
+class EmailAdapter(BaseAdapter):
+    """Сохраняет письма в файл (заглушка)."""
+
+    channel = "email"
+
+    async def send(self, recipient: dict[str, Any], notification: dict[str, Any]) -> None:
+        """Сохранить письмо в файл."""
+        EMAIL_DIR.mkdir(parents=True, exist_ok=True)
+
+        email_to = recipient.get("email", "unknown@example.com")
+        title = notification.get("title", "Без темы")
+        text = notification.get("text", "")
+
+        filename = EMAIL_DIR / f"email_{title.replace(' ', '_')}.txt"
+        async with aiofiles.open(filename, "a", encoding="utf-8") as f:
+            await f.write(f"Кому: {email_to}\n")
+            await f.write(f"Тема: {title}\n")
+            await f.write(f"Содержание:\n{text}\n")
+            await f.write("---\n")
+
+        logger.info("Письмо сохранено: %s", filename)
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/notifications/adapters/__init__.py
+========================================
+"""Адаптеры доставки уведомлений."""
+
+from app.notifications.adapters.base import BaseAdapter
+from app.notifications.adapters.app_adapter import AppAdapter
+from app.notifications.adapters.email_adapter import EmailAdapter
+
+__all__ = ["BaseAdapter", "AppAdapter", "EmailAdapter"]
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/notifications/__init__.py
+========================================
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/notifications/models/__init__.py
+========================================
+"""Модели модуля notifications."""
+
+from app.notifications.models.notification import Notification
+from app.notifications.models.notification_rule import NotificationRule
+
+__all__ = ["Notification", "NotificationRule"]
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/notifications/models/notification.py
+========================================
+"""Уведомления."""
+
+from __future__ import annotations
+
+from sqlalchemy import ForeignKey, String, Text
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.infrastructure.orm_base import Base
+
+
+class Notification(Base):
+    __tablename__ = "notifications_notification"
+
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("accounts_user.id"), nullable=False, comment="Получатель"
+    )
+    title: Mapped[str] = mapped_column(String(255), nullable=False, comment="Заголовок")
+    text: Mapped[str] = mapped_column(Text, nullable=False, comment="Текст")
+    notification_type: Mapped[str] = mapped_column(
+        String(20), default="system", comment="Тип уведомления"
+    )
+    status: Mapped[str] = mapped_column(String(20), default="pending", comment="Статус")
+    link: Mapped[str] = mapped_column(String(500), default="", comment="Ссылка")
+    sent_at: Mapped[str | None] = mapped_column(String(50), nullable=True, comment="Когда отправлено")
+    read_at: Mapped[str | None] = mapped_column(String(50), nullable=True, comment="Когда прочитано")
+
+    user: Mapped["User"] = relationship(foreign_keys=[user_id])
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/notifications/models/notification_rule.py
+========================================
+"""Правила уведомлений."""
+
+from __future__ import annotations
+
+from sqlalchemy import Boolean, ForeignKey, String
+from sqlalchemy.orm import Mapped, mapped_column
+
+from app.infrastructure.orm_base import Base
+
+
+class NotificationRule(Base):
+    """Правило: при событии отправить уведомление через канал."""
+
+    __tablename__ = "notifications_rule"
+
+    event_type: Mapped[str] = mapped_column(
+        String(100), nullable=False, comment="Тип события"
+    )
+    channel: Mapped[str] = mapped_column(
+        String(20), nullable=False, comment="Канал: app, email"
+    )
+    recipient_type: Mapped[str] = mapped_column(
+        String(30), nullable=False, comment="Тип получателя: user, role"
+    )
+    recipient_id: Mapped[int | None] = mapped_column(
+        ForeignKey("accounts_user.id"),
+        nullable=True,
+        comment="ID пользователя (если recipient_type=user)",
+    )
+    role_code: Mapped[str | None] = mapped_column(
+        ForeignKey("accounts_role.code"),
+        nullable=True,
+        comment="Код роли (если recipient_type=role)",
+    )
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, default=True, comment="Правило активно"
+    )
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/notifications/repository.py
+========================================
+# app/notifications/repository.py
+
+"""Репозитории для модуля notifications."""
+
+from __future__ import annotations
+
+from sqlalchemy import select, update
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.notifications.models import Notification, NotificationRule
+
+
+class NotificationRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self._s = session
+
+    async def get_by_id(self, id: int) -> Notification | None:
+        return await self._s.get(Notification, id)
+
+    async def list_all(self) -> list[Notification]:
+        stmt = select(Notification)
+        return list(await self._s.scalars(stmt))
+
+    async def list_by_user(self, user_id: int) -> list[Notification]:
+        stmt = select(Notification).where(Notification.user_id == user_id)
+        return list(await self._s.scalars(stmt))
+
+    async def list_unread(self, user_id: int) -> list[Notification]:
+        stmt = select(Notification).where(Notification.user_id == user_id, Notification.status == "pending")
+        return list(await self._s.scalars(stmt))
+
+    async def create(self, **kwargs) -> Notification:
+        row = Notification(**kwargs)
+        self._s.add(row)
+        await self._s.flush()
+        return row
+
+    async def update(self, id: int, **kwargs) -> Notification | None:
+        row = await self._s.get(Notification, id)
+        if row is None:
+            return None
+        for field, value in kwargs.items():
+            setattr(row, field, value)
+        await self._s.flush()
+        return row
+
+    async def mark_all_read(self, user_id: int) -> int:
+        from datetime import datetime
+        stmt = update(Notification).where(Notification.user_id == user_id, Notification.status == "pending").values(status="read", read_at=datetime.now().isoformat())
+        result = await self._s.execute(stmt)
+        return result.rowcount
+
+    async def soft_delete(self, id: int, user_id: int | None = None) -> bool:
+        row = await self._s.get(Notification, id)
+        if row is None:
+            return False
+        row.soft_delete(user_id)
+        await self._s.flush()
+        return True
+
+
+class NotificationRuleRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self._s = session
+
+    async def get_by_id(self, id: int) -> NotificationRule | None:
+        return await self._s.get(NotificationRule, id)
+
+    async def list_all(self) -> list[NotificationRule]:
+        stmt = select(NotificationRule)
+        return list(await self._s.scalars(stmt))
+
+    async def list_active_by_event(self, event_type: str) -> list[NotificationRule]:
+        stmt = select(NotificationRule).where(NotificationRule.event_type == event_type, NotificationRule.is_active.is_(True))
+        return list(await self._s.scalars(stmt))
+
+    async def create(self, **kwargs) -> NotificationRule:
+        row = NotificationRule(**kwargs)
+        self._s.add(row)
+        await self._s.flush()
+        return row
+
+    async def update(self, id: int, **kwargs) -> NotificationRule | None:
+        row = await self._s.get(NotificationRule, id)
+        if row is None:
+            return None
+        for field, value in kwargs.items():
+            setattr(row, field, value)
+        await self._s.flush()
+        return row
+
+    async def soft_delete(self, id: int, user_id: int | None = None) -> bool:
+        row = await self._s.get(NotificationRule, id)
+        if row is None:
+            return False
+        row.soft_delete(user_id)
+        await self._s.flush()
+        return True
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/notifications/services/dispatcher.py
+========================================
+"""Диспетчер уведомлений — подписчик на события."""
+
+from __future__ import annotations
+
+import logging
+
+from sqlalchemy import select
+
+from app.accounts.models import Role, User
+from app.infrastructure.events import event_bus
+from app.infrastructure.events.event_types import EventTypes
+from app.notifications.adapters import AppAdapter, EmailAdapter
+from app.notifications.models import NotificationRule
+from app.notifications.repository import NotificationRuleRepository
+
+logger = logging.getLogger(__name__)
+
+
+class NotificationDispatcher:
+    """При событии читает правила и отправляет уведомления."""
+
+    def __init__(self, session) -> None:
+        self._s = session
+        self._app_adapter = AppAdapter(session)
+        self._email_adapter = EmailAdapter()
+
+    async def handle_event(self, data: dict) -> None:
+        """Обработать событие — найти правила и отправить."""
+        from app.core.database import async_session_factory
+
+        event_type = data.get("_event_type", "")
+
+        async with async_session_factory() as session:
+            self._s = session
+            self._app_adapter = AppAdapter(session)
+
+            # Найти активные правила для события
+            rule_repo = NotificationRuleRepository(session)
+            rules = await rule_repo.list_active_by_event(event_type)
+
+            for rule in rules:
+                recipients = await self._get_recipients(rule)
+                notification = self._build_notification(event_type, data)
+
+                for recipient in recipients:
+                    if rule.channel == "app":
+                        await self._app_adapter.send(recipient, notification)
+                    elif rule.channel == "email":
+                        await self._email_adapter.send(recipient, notification)
+
+            await session.commit()
+
+    async def _get_recipients(self, rule: NotificationRule) -> list[dict]:
+        """Получить получателей по правилу."""
+        if rule.recipient_type == "user" and rule.recipient_id:
+            user = await self._s.get(User, rule.recipient_id)
+            if user:
+                return [{"user_id": user.id, "email": user.email}]
+
+        elif rule.recipient_type == "role" and rule.role_code:
+            stmt = (
+                select(User)
+                .join(User.roles)
+                .where(Role.code == rule.role_code, User.is_active.is_(True))
+            )
+            users = list(await self._s.scalars(stmt))
+            return [{"user_id": u.id, "email": u.email} for u in users]
+
+        return []
+
+    def _build_notification(self, event_type: str, data: dict) -> dict:
+        """Создать текст уведомления на основе события."""
+        templates = {
+            EventTypes.IMPORT_COMPLETED: {
+                "title": "Импорт завершен",
+                "text": f"Импорт завершен. Успешно: {data.get('success_rows', 0)}, ошибок: {data.get('error_rows', 0)}",
+                "notification_type": "info",
+            },
+            EventTypes.IMPORT_FAILED: {
+                "title": "Ошибка импорта",
+                "text": f"Импорт завершился с ошибкой: {data.get('error', '')}",
+                "notification_type": "error",
+            },
+            EventTypes.DELIVERY_ORDER_CREATED: {
+                "title": "Новая заявка на доставку",
+                "text": f"Создана заявка №{data.get('order_number', '')}",
+                "notification_type": "info",
+            },
+            EventTypes.ROUTE_ASSIGNED: {
+                "title": "Назначен маршрут",
+                "text": f"Вы назначены на маршрут №{data.get('route_number', '')}",
+                "notification_type": "info",
+                "link": f"/routes/{data.get('route_id', '')}",
+            },
+            EventTypes.TASK_COMPLETED: {
+                "title": "Задание выполнено",
+                "text": f"Задание №{data.get('task_id', '')} выполнено",
+                "notification_type": "info",
+            },
+        }
+        return templates.get(
+            event_type,
+            {
+                "title": "Событие",
+                "text": str(data),
+                "notification_type": "system",
+            },
+        )
+
+
+def setup_notification_dispatcher(session=None) -> None:
+    """Подписать диспетчер на все события."""
+    dispatcher = NotificationDispatcher(session)
+
+    event_bus.subscribe(EventTypes.IMPORT_COMPLETED, dispatcher.handle_event)
+    event_bus.subscribe(EventTypes.IMPORT_FAILED, dispatcher.handle_event)
+    event_bus.subscribe(EventTypes.DELIVERY_ORDER_CREATED, dispatcher.handle_event)
+    event_bus.subscribe(EventTypes.ROUTE_ASSIGNED, dispatcher.handle_event)
+    event_bus.subscribe(EventTypes.TASK_COMPLETED, dispatcher.handle_event)
+
+    logger.info("Диспетчер уведомлений подписан на события")
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/notifications/services/__init__.py
+========================================
+"""Сервисы модуля notifications."""
+
+from app.notifications.services.notification_service import NotificationService
+
+__all__ = ["NotificationService"]
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/notifications/services/notification_service.py
+========================================
+"""Сервис уведомлений."""
+
+from __future__ import annotations
+
+from datetime import datetime
+
+from app.notifications.models import Notification
+from app.notifications.repository import NotificationRepository
+
+
+class NotificationService:
+    def __init__(self, repo: NotificationRepository) -> None:
+        self._repo = repo
+
+    async def get_by_id(self, notification_id: int) -> Notification | None:
+        return await self._repo.get_by_id(notification_id)
+
+    async def list_by_user(self, user_id: int) -> list[Notification]:
+        return await self._repo.list_by_user(user_id)
+
+    async def get_unread(self, user_id: int) -> list[Notification]:
+        return await self._repo.list_unread(user_id)
+
+    async def create(
+        self, user_id: int, title: str, text: str, notification_type: str = "system", link: str = ""
+    ) -> Notification:
+        return await self._repo.create(
+            user_id=user_id,
+            title=title,
+            text=text,
+            notification_type=notification_type,
+            link=link,
+        )
+
+    async def mark_read(self, notification_id: int) -> Notification | None:
+        return await self._repo.update(
+            notification_id,
+            status="read",
+            read_at=datetime.now().isoformat(),
+        )
+
+    async def mark_all_read(self, user_id: int) -> int:
+        return await self._repo.mark_all_read(user_id)
+
+    async def soft_delete(self, notification_id: int, user_id: int | None = None) -> bool:
+        return await self._repo.soft_delete(notification_id, user_id)
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/orders/__init__.py
+========================================
+"""Модуль заказов."""
+
+from app.orders.models.inbound import InboundOrder, InboundOrderLine
+from app.orders.models.outbound import OutboundOrder, OutboundOrderLine
+from app.orders.models.return_order import ReturnOrder, ReturnOrderLine
+
+__all__ = [
+    "InboundOrder",
+    "InboundOrderLine",
+    "OutboundOrder",
+    "OutboundOrderLine",
+    "ReturnOrder",
+    "ReturnOrderLine",
+]
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/orders/models/inbound.py
+========================================
+"""Входящие заказы (заявки на приёмку)."""
+
+from __future__ import annotations
+
+from datetime import date
+from decimal import Decimal
+
+from sqlalchemy import Boolean, Date, ForeignKey, Numeric, String, Text
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy import UniqueConstraint
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+from app.parties.models import Client
+from app.warehouse.models import Warehouse
+
+from app.infrastructure.orm_base import Base
+from app.core.statuses import OrderStatus
+
+
+class InboundOrder(Base):
+    """Заявка на приёмку товара."""
+
+    __tablename__ = "orders_inbound"
+    __table_args__ = (
+        UniqueConstraint("depositor_id", "number", name="uq_inbound_depositor_number"),
+    )
+
+    depositor_id: Mapped[int] = mapped_column(
+        ForeignKey("parties_depositor.id"), nullable=False, comment="Поклажедатель"
+    )
+    warehouse_id: Mapped[int | None] = mapped_column(
+        ForeignKey("warehouse_warehouse.id"), nullable=True, comment="Склад"
+    )
+    number: Mapped[str] = mapped_column(
+        String(100), nullable=False, comment="Номер заявки"
+    )
+    supplier_code: Mapped[str] = mapped_column(
+        String(100), default="", comment="Код поставщика"
+    )
+    supplier_id: Mapped[int | None] = mapped_column(
+        ForeignKey("parties_client.id"), nullable=True, comment="Поставщик"
+    )
+    order_date: Mapped[date] = mapped_column(Date, nullable=False, comment="Дата заявки")
+    planned_date: Mapped[date | None] = mapped_column(
+        Date, nullable=True, comment="Планируемая дата приёмки"
+    )
+    notes: Mapped[str] = mapped_column(Text, default="", comment="Примечания")
+    status: Mapped[str] = mapped_column(
+        String(50), default=OrderStatus.NEW.value, comment="Статус заявки"
+    )
+    pordrsp_exported: Mapped[bool] = mapped_column(
+        Boolean, default=False, comment="Отклик pordrsp выгружен"
+    )
+    recadv_exported: Mapped[bool] = mapped_column(
+        Boolean, default=False, comment="Подтверждение recadv выгружено"
+    )
+    has_shortage: Mapped[bool] = mapped_column(
+        Boolean, default=False, comment="Есть недогруз"
+    )
+
+    lines: Mapped[list["InboundOrderLine"]] = relationship(back_populates="order")
+    depositor: Mapped["Depositor"] = relationship()
+    warehouse: Mapped["Warehouse | None"] = relationship()
+    supplier: Mapped["Client | None"] = relationship(foreign_keys=[supplier_id])
+
+
+class InboundOrderLine(Base):
+    """Строка заявки на приёмку."""
+
+    __tablename__ = "orders_inbound_line"
+
+    order_id: Mapped[int] = mapped_column(
+        ForeignKey("orders_inbound.id"), nullable=False, comment="Заявка"
+    )
+    product_id: Mapped[int | None] = mapped_column(
+        ForeignKey("warehouse_product.id"), nullable=True, comment="Товар"
+    )
+    quantity: Mapped[Decimal] = mapped_column(
+        Numeric(10, 3), nullable=False, comment="Количество"
+    )
+    batch_number: Mapped[str] = mapped_column(
+        String(100), default="", comment="Номер партии"
+    )
+    manufacture_date: Mapped[date | None] = mapped_column(
+        Date, nullable=True, comment="Дата изготовления"
+    )
+    serial_numbers: Mapped[list] = mapped_column(
+        JSONB, default=list, comment="Серийные номера"
+    )
+
+    order: Mapped["InboundOrder"] = relationship(back_populates="lines")
+    product: Mapped["Product | None"] = relationship()
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/orders/models/__init__.py
+========================================
+"""Модели заказов."""
+
+from app.orders.models.inbound import InboundOrder, InboundOrderLine
+from app.orders.models.outbound import OutboundOrder, OutboundOrderLine
+from app.orders.models.return_order import ReturnOrder, ReturnOrderLine
+
+__all__ = [
+    "InboundOrder",
+    "InboundOrderLine",
+    "OutboundOrder",
+    "OutboundOrderLine",
+    "ReturnOrder",
+    "ReturnOrderLine",
+]
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/orders/models/outbound.py
+========================================
+"""Исходящие заказы (заявки на отгрузку)."""
+
+from __future__ import annotations
+
+from datetime import date
+from decimal import Decimal
+from uuid import uuid4
+
+from sqlalchemy import Boolean, Date, ForeignKey, Integer, Numeric, String, Text
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy import UniqueConstraint
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.infrastructure.orm_base import Base
+from app.core.statuses import OrderStatus, DeliveryStatus
+
+
+class OutboundOrder(Base):
+    """Заявка на отгрузку товара."""
+
+    __tablename__ = "orders_outbound"
+    __table_args__ = (
+        UniqueConstraint("depositor_id", "number", name="uq_outbound_depositor_number"),
+    )
+
+    depositor_id: Mapped[int] = mapped_column(
+        ForeignKey("parties_depositor.id"), nullable=False, comment="Поклажедатель"
+    )
+    warehouse_id: Mapped[int | None] = mapped_column(
+        ForeignKey("warehouse_warehouse.id"), nullable=True, comment="Склад"
+    )
+    number: Mapped[str] = mapped_column(
+        String(100), nullable=False, comment="Номер заявки"
+    )
+    customer_code: Mapped[str] = mapped_column(
+        String(100), default="", comment="Код клиента"
+    )
+    customer_name: Mapped[str] = mapped_column(
+        String(255), default="", comment="Наименование клиента"
+    )
+    client_id: Mapped[int | None] = mapped_column(
+        ForeignKey("parties_client.id"), nullable=True, comment="Клиент"
+    )
+    delivery_address_name: Mapped[str] = mapped_column(
+        String(255), default="", comment="Адрес доставки"
+    )
+    order_date: Mapped[date] = mapped_column(
+        Date, nullable=False, comment="Дата заявки"
+    )
+    shipping_date: Mapped[date | None] = mapped_column(
+        Date, nullable=True, comment="Планируемая дата отгрузки"
+    )
+    needs_delivery: Mapped[bool] = mapped_column(
+        Boolean, default=False, comment="Нужна доставка"
+    )
+    delivery_only: Mapped[bool] = mapped_column(
+        Boolean, default=False, comment="Только доставка (без склада)"
+    )
+    places_count: Mapped[int | None] = mapped_column(
+        nullable=True, comment="Количество мест"
+    )
+    declared_weight: Mapped[Decimal | None] = mapped_column(
+        Numeric(12, 3), nullable=True, comment="Заявленный вес, кг"
+    )
+    delivery_contact: Mapped[str] = mapped_column(
+        String(255), default="", comment="Контакт для доставки"
+    )
+    notes: Mapped[str] = mapped_column(Text, default="", comment="Примечания")
+    status: Mapped[str] = mapped_column(
+        String(50), default=OrderStatus.NEW.value, comment="Статус заявки"
+    )
+    ordrsp_exported: Mapped[bool] = mapped_column(
+        Boolean, default=False, comment="Отклик ordrsp выгружен"
+    )
+    desadv_exported: Mapped[bool] = mapped_column(
+        Boolean, default=False, comment="Уведомление desadv выгружено"
+    )
+    zone_id: Mapped[int | None] = mapped_column(
+        ForeignKey("parties_delivery_zone.id"), nullable=True, comment="Зона доставки"
+    )
+    document_number: Mapped[str] = mapped_column(
+        String(100), default="", comment="Номер документа"
+    )
+    is_printed: Mapped[bool] = mapped_column(
+        Boolean, default=False, comment="Документы распечатаны"
+    )
+    uuid: Mapped[str] = mapped_column(
+        String(36), default=lambda: str(uuid4()), unique=True, comment="UUID для QR"
+    )
+    delivery_status: Mapped[str | None] = mapped_column(
+        String(20), nullable=True, comment="Статус доставки"
+    )
+    is_edo: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="false", default=False, comment="Признак ЭДО"
+    )
+    address_comment: Mapped[str] = mapped_column(
+        String(255), nullable=False, server_default="", default="", comment="Комментарий к адресу"
+    )
+    shipping_contact: Mapped[str] = mapped_column(
+        String(255), nullable=False, server_default="", default="", comment="Контакт для доставки"
+    )
+    total_quantity: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="0", default=0, comment="Общее количество штук"
+    )
+
+    lines: Mapped[list["OutboundOrderLine"]] = relationship(back_populates="order")
+    depositor: Mapped["Depositor"] = relationship()
+    client: Mapped["Client | None"] = relationship()
+    warehouse: Mapped["Warehouse | None"] = relationship()
+
+
+class OutboundOrderLine(Base):
+    """Строка заявки на отгрузку."""
+
+    __tablename__ = "orders_outbound_line"
+
+    order_id: Mapped[int] = mapped_column(
+        ForeignKey("orders_outbound.id"), nullable=False, comment="Заявка"
+    )
+    product_id: Mapped[int | None] = mapped_column(
+        ForeignKey("warehouse_product.id"), nullable=True, comment="Товар"
+    )
+    quantity: Mapped[Decimal] = mapped_column(
+        Numeric(10, 3), nullable=False, comment="Количество"
+    )
+    location_id: Mapped[int | None] = mapped_column(
+        ForeignKey("warehouse_location.id"), nullable=True, comment="Ячейка"
+    )
+    batch_number: Mapped[str] = mapped_column(
+        String(100), default="", comment="Номер партии"
+    )
+    manufacture_date: Mapped[date | None] = mapped_column(
+        Date, nullable=True, comment="Дата изготовления"
+    )
+    serial_numbers: Mapped[list] = mapped_column(
+        JSONB, default=list, comment="Серийные номера"
+    )
+
+    order: Mapped["OutboundOrder"] = relationship(back_populates="lines")
+    product: Mapped["Product | None"] = relationship()
+    location: Mapped["Location | None"] = relationship()
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/orders/models/return_order.py
+========================================
+"""Возвраты товара."""
+
+from __future__ import annotations
+
+from datetime import date
+from decimal import Decimal
+
+from sqlalchemy import Date, ForeignKey, Numeric, String, Text
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.infrastructure.orm_base import Base
+
+
+class ReturnOrder(Base):
+    """Возврат товара от клиента."""
+
+    __tablename__ = "orders_return"
+
+    outbound_order_id: Mapped[int] = mapped_column(
+        ForeignKey("orders_outbound.id"), nullable=False, comment="Исходный исходящий заказ"
+    )
+    inbound_order_id: Mapped[int | None] = mapped_column(
+        ForeignKey("orders_inbound.id"), nullable=True, comment="Созданный приходный заказ"
+    )
+    depositor_id: Mapped[int] = mapped_column(
+        ForeignKey("parties_depositor.id"), nullable=False, comment="Поклажедатель"
+    )
+    warehouse_id: Mapped[int | None] = mapped_column(
+        ForeignKey("warehouse_warehouse.id"), nullable=True, comment="Склад"
+    )
+    customer_code: Mapped[str] = mapped_column(
+        String(100), default="", comment="Код клиента"
+    )
+    customer_name: Mapped[str] = mapped_column(
+        String(255), default="", comment="Наименование клиента"
+    )
+    return_date: Mapped[date] = mapped_column(Date, nullable=False, comment="Дата возврата")
+    return_type: Mapped[str] = mapped_column(
+        String(20), default="partial", comment="Тип возврата: full, partial"
+    )
+    status: Mapped[str] = mapped_column(
+        String(50), default="new", comment="Статус возврата"
+    )
+    notes: Mapped[str] = mapped_column(Text, default="", comment="Примечания")
+
+    lines: Mapped[list["ReturnOrderLine"]] = relationship(back_populates="return_order")
+
+
+class ReturnOrderLine(Base):
+    """Строка возврата."""
+
+    __tablename__ = "orders_return_line"
+
+    return_order_id: Mapped[int] = mapped_column(
+        ForeignKey("orders_return.id"), nullable=False, comment="Возврат"
+    )
+    outbound_order_line_id: Mapped[int | None] = mapped_column(
+        ForeignKey("orders_outbound_line.id"), nullable=True, comment="Исходная строка"
+    )
+    product_id: Mapped[int] = mapped_column(
+        ForeignKey("warehouse_product.id"), nullable=False, comment="Товар"
+    )
+    qty_returned: Mapped[Decimal] = mapped_column(
+        Numeric(10, 3), nullable=False, comment="Количество возвращаемого товара"
+    )
+    batch_number: Mapped[str] = mapped_column(
+        String(100), default="", comment="Партия"
+    )
+    manufacture_date: Mapped[date | None] = mapped_column(
+        Date, nullable=True, comment="Дата производства"
+    )
+    reason: Mapped[str] = mapped_column(
+        Text, default="", comment="Причина возврата"
+    )
+
+    return_order: Mapped["ReturnOrder"] = relationship(back_populates="lines")
+    product: Mapped["Product"] = relationship()
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/orders/repository.py
+========================================
+# app/orders/repository.py
+
+"""Репозитории для модуля orders."""
+
+from __future__ import annotations
+
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
+
+from app.orders.models import InboundOrder, InboundOrderLine, OutboundOrder, OutboundOrderLine, ReturnOrder, ReturnOrderLine
+
+
+class InboundOrderRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self._s = session
+
+    async def get_by_id(self, id: int) -> InboundOrder | None:
+        stmt = select(InboundOrder).where(InboundOrder.id == id).options(selectinload(InboundOrder.depositor), selectinload(InboundOrder.supplier), selectinload(InboundOrder.warehouse), selectinload(InboundOrder.lines))
+        return await self._s.scalar(stmt)
+
+    async def list_all(self) -> list[InboundOrder]:
+        stmt = select(InboundOrder).options(selectinload(InboundOrder.depositor), selectinload(InboundOrder.supplier), selectinload(InboundOrder.warehouse))
+        return list(await self._s.scalars(stmt))
+
+    async def create(self, **kwargs) -> InboundOrder:
+        row = InboundOrder(**kwargs)
+        self._s.add(row)
+        await self._s.flush()
+        return row
+
+    async def update(self, id: int, **kwargs) -> InboundOrder | None:
+        row = await self._s.get(InboundOrder, id)
+        if row is None:
+            return None
+        for field, value in kwargs.items():
+            setattr(row, field, value)
+        await self._s.flush()
+        return row
+
+    async def soft_delete(self, id: int, user_id: int | None = None) -> bool:
+        row = await self._s.get(InboundOrder, id)
+        if row is None:
+            return False
+        row.soft_delete(user_id)
+        await self._s.flush()
+        return True
+
+
+class InboundOrderLineRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self._s = session
+
+    async def get_by_id(self, id: int) -> InboundOrderLine | None:
+        return await self._s.get(InboundOrderLine, id)
+
+    async def list_all(self) -> list[InboundOrderLine]:
+        return list(await self._s.scalars(select(InboundOrderLine)))
+
+    async def list_by_order(self, order_id: int) -> list[InboundOrderLine]:
+        stmt = select(InboundOrderLine).where(InboundOrderLine.order_id == order_id)
+        return list(await self._s.scalars(stmt))
+
+    async def create(self, **kwargs) -> InboundOrderLine:
+        row = InboundOrderLine(**kwargs)
+        self._s.add(row)
+        await self._s.flush()
+        return row
+
+    async def update(self, id: int, **kwargs) -> InboundOrderLine | None:
+        row = await self._s.get(InboundOrderLine, id)
+        if row is None:
+            return None
+        for field, value in kwargs.items():
+            setattr(row, field, value)
+        await self._s.flush()
+        return row
+
+    async def soft_delete(self, id: int, user_id: int | None = None) -> bool:
+        row = await self._s.get(InboundOrderLine, id)
+        if row is None:
+            return False
+        row.soft_delete(user_id)
+        await self._s.flush()
+        return True
+
+
+class OutboundOrderRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self._s = session
+
+    async def get_by_id(self, id: int) -> OutboundOrder | None:
+        stmt = select(OutboundOrder).where(OutboundOrder.id == id).options(selectinload(OutboundOrder.depositor), selectinload(OutboundOrder.client), selectinload(OutboundOrder.warehouse), selectinload(OutboundOrder.lines))
+        return await self._s.scalar(stmt)
+
+    async def list_all(self) -> list[OutboundOrder]:
+        stmt = select(OutboundOrder).options(selectinload(OutboundOrder.depositor), selectinload(OutboundOrder.client), selectinload(OutboundOrder.warehouse))
+        return list(await self._s.scalars(stmt))
+
+    async def create(self, **kwargs) -> OutboundOrder:
+        row = OutboundOrder(**kwargs)
+        self._s.add(row)
+        await self._s.flush()
+        return row
+
+    async def update(self, id: int, **kwargs) -> OutboundOrder | None:
+        row = await self._s.get(OutboundOrder, id)
+        if row is None:
+            return None
+        for field, value in kwargs.items():
+            setattr(row, field, value)
+        await self._s.flush()
+        return row
+
+    async def soft_delete(self, id: int, user_id: int | None = None) -> bool:
+        row = await self._s.get(OutboundOrder, id)
+        if row is None:
+            return False
+        row.soft_delete(user_id)
+        await self._s.flush()
+        return True
+
+
+class OutboundOrderLineRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self._s = session
+
+    async def get_by_id(self, id: int) -> OutboundOrderLine | None:
+        return await self._s.get(OutboundOrderLine, id)
+
+    async def list_all(self) -> list[OutboundOrderLine]:
+        return list(await self._s.scalars(select(OutboundOrderLine)))
+
+    async def list_by_order(self, order_id: int) -> list[OutboundOrderLine]:
+        stmt = select(OutboundOrderLine).where(OutboundOrderLine.order_id == order_id)
+        return list(await self._s.scalars(stmt))
+
+    async def create(self, **kwargs) -> OutboundOrderLine:
+        row = OutboundOrderLine(**kwargs)
+        self._s.add(row)
+        await self._s.flush()
+        return row
+
+    async def update(self, id: int, **kwargs) -> OutboundOrderLine | None:
+        row = await self._s.get(OutboundOrderLine, id)
+        if row is None:
+            return None
+        for field, value in kwargs.items():
+            setattr(row, field, value)
+        await self._s.flush()
+        return row
+
+    async def soft_delete(self, id: int, user_id: int | None = None) -> bool:
+        row = await self._s.get(OutboundOrderLine, id)
+        if row is None:
+            return False
+        row.soft_delete(user_id)
+        await self._s.flush()
+        return True
+
+
+class ReturnOrderRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self._s = session
+
+    async def get_by_id(self, id: int) -> ReturnOrder | None:
+        return await self._s.get(ReturnOrder, id)
+
+    async def list_all(self) -> list[ReturnOrder]:
+        return list(await self._s.scalars(select(ReturnOrder)))
+
+    async def create(self, **kwargs) -> ReturnOrder:
+        row = ReturnOrder(**kwargs)
+        self._s.add(row)
+        await self._s.flush()
+        return row
+
+    async def update(self, id: int, **kwargs) -> ReturnOrder | None:
+        row = await self._s.get(ReturnOrder, id)
+        if row is None:
+            return None
+        for field, value in kwargs.items():
+            setattr(row, field, value)
+        await self._s.flush()
+        return row
+
+    async def soft_delete(self, id: int, user_id: int | None = None) -> bool:
+        row = await self._s.get(ReturnOrder, id)
+        if row is None:
+            return False
+        row.soft_delete(user_id)
+        await self._s.flush()
+        return True
+
+
+class ReturnOrderLineRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self._s = session
+
+    async def get_by_id(self, id: int) -> ReturnOrderLine | None:
+        return await self._s.get(ReturnOrderLine, id)
+
+    async def list_all(self) -> list[ReturnOrderLine]:
+        return list(await self._s.scalars(select(ReturnOrderLine)))
+
+    async def list_by_order(self, order_id: int) -> list[ReturnOrderLine]:
+        stmt = select(ReturnOrderLine).where(ReturnOrderLine.return_order_id == order_id)
+        return list(await self._s.scalars(stmt))
+
+    async def create(self, **kwargs) -> ReturnOrderLine:
+        row = ReturnOrderLine(**kwargs)
+        self._s.add(row)
+        await self._s.flush()
+        return row
+
+    async def update(self, id: int, **kwargs) -> ReturnOrderLine | None:
+        row = await self._s.get(ReturnOrderLine, id)
+        if row is None:
+            return None
+        for field, value in kwargs.items():
+            setattr(row, field, value)
+        await self._s.flush()
+        return row
+
+    async def soft_delete(self, id: int, user_id: int | None = None) -> bool:
+        row = await self._s.get(ReturnOrderLine, id)
+        if row is None:
+            return False
+        row.soft_delete(user_id)
+        await self._s.flush()
+        return True
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/orders/services/__init__.py
+========================================
+"""Сервисы модуля orders."""
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/parties/__init__.py
+========================================
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/parties/models/address.py
+========================================
+"""Адреса и зоны доставки."""
+
+from __future__ import annotations
+
+from decimal import Decimal
+
+from sqlalchemy import ForeignKey, Numeric, String, Text
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.infrastructure.orm_base import Base
+
+
+class DeliveryZone(Base):
+    """Зона доставки."""
+
+    __tablename__ = "parties_delivery_zone"
+
+    name: Mapped[str] = mapped_column(
+        String(255), unique=True, nullable=False, comment="Название"
+    )
+
+    addresses: Mapped[list["Address"]] = relationship(back_populates="delivery_zone")
+
+    def __repr__(self) -> str:
+        return f"<DeliveryZone(id={self.id}, name={self.name})>"
+
+
+class Address(Base):
+    """Нормализованный адрес."""
+
+    __tablename__ = "parties_address"
+
+    full_address: Mapped[str] = mapped_column(
+        Text, nullable=False, comment="Полный адрес"
+    )
+    region: Mapped[str] = mapped_column(String(255), default="", comment="Регион")
+    city: Mapped[str] = mapped_column(String(255), default="", comment="Город")
+    street: Mapped[str] = mapped_column(String(255), default="", comment="Улица")
+    house: Mapped[str] = mapped_column(String(64), default="", comment="Дом")
+    building: Mapped[str] = mapped_column(String(32), default="", comment="Корпус")
+    structure: Mapped[str] = mapped_column(String(32), default="", comment="Строение")
+    flat: Mapped[str] = mapped_column(String(32), default="", comment="Квартира")
+    fias_id: Mapped[str] = mapped_column(String(36), default="", comment="FIAS ID")
+    latitude: Mapped[Decimal | None] = mapped_column(
+        Numeric(9, 6), nullable=True, comment="Широта"
+    )
+    longitude: Mapped[Decimal | None] = mapped_column(
+        Numeric(9, 6), nullable=True, comment="Долгота"
+    )
+    postal_code: Mapped[str] = mapped_column(String(10), default="", comment="Индекс")
+    delivery_zone_id: Mapped[int | None] = mapped_column(
+        ForeignKey("parties_delivery_zone.id"), nullable=True, comment="Зона доставки"
+    )
+
+    delivery_zone: Mapped[DeliveryZone | None] = relationship(
+        back_populates="addresses", lazy="selectin"
+    )
+    raw_addresses: Mapped[list["RawAddress"]] = relationship(
+        back_populates="normalized_address", lazy="selectin"
+    )
+
+    def __repr__(self) -> str:
+        return f"id={self.id}"
+
+
+class RawAddress(Base):
+    """Сырой адрес до нормализации."""
+
+    __tablename__ = "parties_raw_address"
+
+    raw_text: Mapped[str] = mapped_column(Text, nullable=False, comment="Сырой адрес")
+    hash: Mapped[str] = mapped_column(
+        String(64), unique=True, comment="SHA256 от нормализованного"
+    )
+    normalized_address_id: Mapped[int] = mapped_column(
+        ForeignKey("parties_address.id"),
+        nullable=False,
+        comment="Нормализованный адрес",
+    )
+    source: Mapped[str] = mapped_column(String(50), default="", comment="Источник")
+
+    normalized_address: Mapped[Address] = relationship(
+        back_populates="raw_addresses", lazy="selectin"
+    )
+
+    def __repr__(self) -> str:
+        return f"id={self.id}"
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/parties/models/client.py
+========================================
+"""Клиент."""
+
+from __future__ import annotations
+
+from sqlalchemy import Boolean, ForeignKey, String, UniqueConstraint
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.infrastructure.orm_base import Base
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from app.parties.models.address import Address
+    from app.parties.models.counterparty import Depositor
+
+
+class Client(Base):
+    """Клиент поклажедателя (код + адрес доставки)."""
+
+    __tablename__ = "parties_client"
+    __table_args__ = (
+        UniqueConstraint(
+            "depositor_id",
+            "code",
+            "delivery_address_id",
+            name="uq_client_depositor_code_address",
+        ),
+    )
+
+    depositor_id: Mapped[int] = mapped_column(
+        ForeignKey("parties_depositor.id"), nullable=False, comment="Поклажедатель"
+    )
+    code: Mapped[str] = mapped_column(String(50), nullable=False, comment="Код клиента")
+    name: Mapped[str] = mapped_column(
+        String(255), nullable=False, comment="Наименование"
+    )
+    legal_name: Mapped[str] = mapped_column(
+        String(255), default="", comment="Полное наименование"
+    )
+    inn: Mapped[str] = mapped_column(String(12), default="", comment="ИНН")
+    kpp: Mapped[str] = mapped_column(String(9), default="", comment="КПП")
+    legal_address_id: Mapped[int | None] = mapped_column(
+        ForeignKey("parties_address.id"), nullable=True, comment="Юридический адрес"
+    )
+    delivery_address_id: Mapped[int | None] = mapped_column(
+        ForeignKey("parties_address.id"), nullable=True, comment="Адрес доставки"
+    )
+    is_edo: Mapped[bool] = mapped_column(Boolean, default=False, comment="Признак ЭДО")
+
+    depositor: Mapped["Depositor"] = relationship()
+    legal_address: Mapped["Address | None"] = relationship(
+        foreign_keys=[legal_address_id], lazy="selectin"
+    )
+    delivery_address: Mapped["Address"] = relationship(
+        foreign_keys=[delivery_address_id], lazy="selectin"
+    )
+
+    def __repr__(self) -> str:
+        return f"<Client(id={self.id}, code={self.code})>"
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/parties/models/contract.py
+========================================
+"""Договор."""
+
+from __future__ import annotations
+
+from datetime import date
+from typing import Any
+
+from sqlalchemy import Date, ForeignKey, JSON, String
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.infrastructure.orm_base import Base
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from app.parties.models.legal_entity import LegalEntity
+    from app.parties.models.tariff import TariffDocument
+
+
+class Contract(Base):
+    """Договор между юрлицами."""
+
+    __tablename__ = "parties_contract"
+
+    number: Mapped[str] = mapped_column(
+        String(50), nullable=False, comment="Номер договора"
+    )
+    customer_id: Mapped[int] = mapped_column(
+        ForeignKey("parties_legal_entity.id"), nullable=False, comment="Заказчик"
+    )
+    executor_id: Mapped[int] = mapped_column(
+        ForeignKey("parties_legal_entity.id"), nullable=False, comment="Исполнитель"
+    )
+    contract_type: Mapped[str] = mapped_column(
+        String(20), nullable=False, comment="Тип договора"
+    )
+    start_date: Mapped[date] = mapped_column(
+        Date, nullable=False, comment="Дата начала"
+    )
+    end_date: Mapped[date | None] = mapped_column(
+        Date, nullable=True, comment="Дата окончания"
+    )
+    status: Mapped[str] = mapped_column(String(20), default="active", comment="Статус")
+    terms: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, comment="Условия")
+
+    customer: Mapped["LegalEntity"] = relationship(
+        foreign_keys=[customer_id], lazy="selectin"
+    )
+    executor: Mapped["LegalEntity"] = relationship(
+        foreign_keys=[executor_id], lazy="selectin"
+    )
+    tariff_documents: Mapped[list["TariffDocument"]] = relationship(
+        back_populates="contract", lazy="selectin"
+    )
+
+    def __repr__(self) -> str:
+        return f"<Contract(id={self.id}, number={self.number})>"
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/parties/models/counterparty.py
+========================================
+"""Поклажедатель, хранитель, перевозчик."""
+
+from __future__ import annotations
+
+from sqlalchemy import ForeignKey, String
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.infrastructure.orm_base import Base
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from app.parties.models.legal_entity import LegalEntity
+
+
+class Depositor(Base):
+    """Поклажедатель."""
+
+    __tablename__ = "parties_depositor"
+
+    legal_entity_id: Mapped[int] = mapped_column(
+        ForeignKey("parties_legal_entity.id"),
+        unique=True,
+        nullable=False,
+        comment="Юрлицо",
+    )
+
+    legal_entity: Mapped["LegalEntity"] = relationship()
+    code: Mapped[str] = mapped_column(
+        String(50), default="", comment="Код поклажедателя"
+    )
+
+    def __repr__(self) -> str:
+        return f"<Depositor(id={self.id}, code={self.code})>"
+
+
+class Keeper(Base):
+    """Хранитель."""
+
+    __tablename__ = "parties_keeper"
+
+    legal_entity_id: Mapped[int] = mapped_column(
+        ForeignKey("parties_legal_entity.id"),
+        unique=True,
+        nullable=False,
+        comment="Юрлицо",
+    )
+
+    legal_entity: Mapped["LegalEntity"] = relationship()
+
+    def __repr__(self) -> str:
+        return f"<Keeper(id={self.id})>"
+
+
+class Carrier(Base):
+    """Перевозчик."""
+
+    __tablename__ = "parties_carrier"
+
+    legal_entity_id: Mapped[int] = mapped_column(
+        ForeignKey("parties_legal_entity.id"),
+        unique=True,
+        nullable=False,
+        comment="Юрлицо",
+    )
+
+    legal_entity: Mapped["LegalEntity"] = relationship()
+
+    def __repr__(self) -> str:
+        return f"<Carrier(id={self.id})>"
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/parties/models/__init__.py
+========================================
+"""Модели модуля parties."""
+
+from app.parties.models.address import Address, RawAddress, DeliveryZone
+from app.parties.models.legal_entity import LegalEntity
+from app.parties.models.counterparty import Depositor, Keeper, Carrier
+from app.parties.models.client import Client
+from app.parties.models.contract import Contract
+from app.parties.models.tariff import TariffDocument, Tariff
+
+__all__ = [
+    "Address",
+    "RawAddress",
+    "DeliveryZone",
+    "LegalEntity",
+    "Depositor",
+    "Keeper",
+    "Carrier",
+    "Client",
+        "Contract",
+    "TariffDocument",
+    "Tariff",
+]
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/parties/models/legal_entity.py
+========================================
+"""Юридическое лицо."""
+
+from __future__ import annotations
+
+from sqlalchemy import ForeignKey, String
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.infrastructure.orm_base import Base
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from app.parties.models.address import Address
+
+
+class LegalEntity(Base):
+    """Юридическое лицо."""
+
+    __tablename__ = "parties_legal_entity"
+
+    name: Mapped[str] = mapped_column(
+        String(255), nullable=False, comment="Краткое наименование"
+    )
+    legal_name: Mapped[str] = mapped_column(
+        String(255), default="", comment="Полное наименование"
+    )
+    inn: Mapped[str] = mapped_column(String(12), default="", comment="ИНН")
+    kpp: Mapped[str] = mapped_column(String(9), default="", comment="КПП")
+    ogrn: Mapped[str] = mapped_column(String(15), default="", comment="ОГРН")
+    legal_address_id: Mapped[int | None] = mapped_column(
+        ForeignKey("parties_address.id"), nullable=True, comment="Юридический адрес"
+    )
+    actual_address_id: Mapped[int | None] = mapped_column(
+        ForeignKey("parties_address.id"), nullable=True, comment="Фактический адрес"
+    )
+    phone: Mapped[str] = mapped_column(String(20), default="", comment="Телефон")
+    email: Mapped[str] = mapped_column(String(255), default="", comment="Email")
+    edo_uuid: Mapped[str | None] = mapped_column(
+        String(36), nullable=True, comment="Идентификатор ЭДО"
+    )
+
+    # Добавляем back_populates для связи
+    legal_address: Mapped["Address | None"] = relationship(
+        foreign_keys=[legal_address_id], lazy="selectin"
+    )
+    actual_address: Mapped["Address | None"] = relationship(
+        foreign_keys=[actual_address_id], lazy="selectin"
+    )
+
+    def __repr__(self) -> str:
+        return f"<LegalEntity(id={self.id}, name={self.name})>"
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/parties/models/tariff.py
+========================================
+"""Тарифы."""
+
+from __future__ import annotations
+
+from datetime import date
+from decimal import Decimal
+
+from sqlalchemy import Date, ForeignKey, Numeric, String, Text
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.infrastructure.orm_base import Base
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from app.parties.models.contract import Contract
+
+
+class TariffDocument(Base):
+    """Тарифный документ (приложение к договору)."""
+
+    __tablename__ = "parties_tariff_document"
+
+    contract_id: Mapped[int] = mapped_column(
+        ForeignKey("parties_contract.id"), nullable=False, comment="Договор"
+    )
+    document_type: Mapped[str] = mapped_column(
+        String(20), nullable=False, comment="Тип документа"
+    )
+    number: Mapped[str] = mapped_column(String(50), nullable=False, comment="Номер")
+    date: Mapped[date] = mapped_column(Date, nullable=False, comment="Дата подписания")
+    valid_from: Mapped[date] = mapped_column(
+        Date, nullable=False, comment="Действует с"
+    )
+    valid_until: Mapped[date | None] = mapped_column(
+        Date, nullable=True, comment="Действует до"
+    )
+    currency: Mapped[str] = mapped_column(String(3), default="RUB", comment="Валюта")
+    vat_rate: Mapped[str] = mapped_column(
+        String(10), default="20", comment="Ставка НДС"
+    )
+    file_id: Mapped[int | None] = mapped_column(
+        ForeignKey("files.id"), nullable=True, comment="Скан документа"
+    )
+
+    contract: Mapped["Contract"] = relationship(back_populates="tariff_documents")
+    tariffs: Mapped[list["Tariff"]] = relationship(back_populates="document")
+
+    def __repr__(self) -> str:
+        return f"<TariffDocument(id={self.id}, number={self.number})>"
+
+
+class Tariff(Base):
+    """Тариф."""
+
+    __tablename__ = "parties_tariff"
+
+    document_id: Mapped[int] = mapped_column(
+        ForeignKey("parties_tariff_document.id"),
+        nullable=False,
+        comment="Тарифный документ",
+    )
+    service_group: Mapped[str] = mapped_column(
+        String(20), nullable=False, comment="Группа услуг"
+    )
+    name: Mapped[str] = mapped_column(String(255), nullable=False, comment="Название")
+    description: Mapped[str] = mapped_column(Text, default="", comment="Описание")
+    unit: Mapped[str] = mapped_column(
+        String(20), nullable=False, comment="Единица измерения"
+    )
+    price: Mapped[Decimal] = mapped_column(
+        Numeric(12, 2), nullable=False, comment="Цена"
+    )
+
+    document: Mapped["TariffDocument"] = relationship(back_populates="tariffs")
+
+    def __repr__(self) -> str:
+        return f"<Tariff(id={self.id}, name={self.name}, price={self.price})>"
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/parties/repository copy.py
+========================================
+# app/parties/repository.py
+
+"""Репозитории для модуля parties."""
+
+from __future__ import annotations
+
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
+
+from app.parties.models import (
+    Address,
+    Carrier,
+    Client,
+    Contract,
+    DeliveryZone,
+    Depositor,
+    Keeper,
+    LegalEntity,
+    RawAddress,
+    Tariff,
+    TariffDocument,
+)
+
+
+class AddressRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self._s = session
+
+    async def get_by_id(self, id: int) -> Address | None:
+        stmt = (
+            select(Address)
+            .where(Address.id == id)
+            .options(selectinload(Address.delivery_zone))
+        )
+        return await self._s.scalar(stmt)
+
+    async def list_all(self) -> list[Address]:
+        stmt = select(Address).options(selectinload(Address.delivery_zone))
+        return list(await self._s.scalars(stmt))
+
+    async def create(self, **kwargs) -> Address:
+        row = Address(**kwargs)
+        self._s.add(row)
+        await self._s.flush()
+        # Перезагружаем с delivery_zone
+        if row.delivery_zone_id:
+            await self._s.refresh(row, attribute_names=["delivery_zone"])
+        return row
+
+    async def update(self, id: int, **kwargs) -> Address | None:
+        row = await self.get_by_id(id)
+        if row is None:
+            return None
+        for field, value in kwargs.items():
+            setattr(row, field, value)
+        await self._s.flush()
+        # Перезагружаем с обновленной delivery_zone
+        if "delivery_zone_id" in kwargs:
+            await self._s.refresh(row, attribute_names=["delivery_zone"])
+        return row
+
+    async def soft_delete(self, id: int, user_id: int | None = None) -> bool:
+        row = await self.get_by_id(id)
+        if row is None:
+            return False
+        row.soft_delete(user_id)
+        await self._s.flush()
+        return True
+
+
+class RawAddressRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self._s = session
+
+    async def get_by_id(self, id: int) -> RawAddress | None:
+        stmt = (
+            select(RawAddress)
+            .where(RawAddress.id == id)
+            .options(selectinload(RawAddress.normalized_address))
+        )
+        return await self._s.scalar(stmt)
+
+    async def list_all(self) -> list[RawAddress]:
+        stmt = select(RawAddress).options(selectinload(RawAddress.normalized_address))
+        return list(await self._s.scalars(stmt))
+
+    async def create(self, **kwargs) -> RawAddress:
+        row = RawAddress(**kwargs)
+        self._s.add(row)
+        await self._s.flush()
+        return row
+
+    async def update(self, id: int, **kwargs) -> RawAddress | None:
+        row = await self.get_by_id(id)
+        if row is None:
+            return None
+        for field, value in kwargs.items():
+            setattr(row, field, value)
+        await self._s.flush()
+        return row
+
+    async def soft_delete(self, id: int, user_id: int | None = None) -> bool:
+        row = await self.get_by_id(id)
+        if row is None:
+            return False
+        row.soft_delete(user_id)
+        await self._s.flush()
+        return True
+
+
+class LegalEntityRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self._s = session
+
+    async def get_by_id(self, id: int) -> LegalEntity | None:
+        stmt = (
+            select(LegalEntity)
+            .where(LegalEntity.id == id)
+            .options(
+                selectinload(LegalEntity.legal_address),
+                selectinload(LegalEntity.actual_address),
+            )
+        )
+        return await self._s.scalar(stmt)
+
+    async def list_all(self) -> list[LegalEntity]:
+        stmt = select(LegalEntity).options(
+            selectinload(LegalEntity.legal_address),
+            selectinload(LegalEntity.actual_address),
+        )
+        return list(await self._s.scalars(stmt))
+
+    async def create(self, **kwargs) -> LegalEntity:
+        row = LegalEntity(**kwargs)
+        self._s.add(row)
+        await self._s.flush()
+        return row
+
+    async def update(self, id: int, **kwargs) -> LegalEntity | None:
+        row = await self.get_by_id(id)
+        if row is None:
+            return None
+        for field, value in kwargs.items():
+            setattr(row, field, value)
+        await self._s.flush()
+        return row
+
+    async def soft_delete(self, id: int, user_id: int | None = None) -> bool:
+        row = await self.get_by_id(id)
+        if row is None:
+            return False
+        row.soft_delete(user_id)
+        await self._s.flush()
+        return True
+
+
+class ClientRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self._s = session
+
+    async def get_by_id(self, id: int) -> Client | None:
+        stmt = (
+            select(Client)
+            .where(Client.id == id)
+            .options(
+                selectinload(Client.depositor),
+                selectinload(Client.legal_address),
+                selectinload(Client.delivery_address),
+            )
+        )
+        return await self._s.scalar(stmt)
+
+    async def list_all(self) -> list[Client]:
+        stmt = select(Client).options(
+            selectinload(Client.depositor),
+            selectinload(Client.legal_address),
+            selectinload(Client.delivery_address),
+        )
+        return list(await self._s.scalars(stmt))
+
+    async def create(self, **kwargs) -> Client:
+        row = Client(**kwargs)
+        self._s.add(row)
+        await self._s.flush()
+        return row
+
+    async def update(self, id: int, **kwargs) -> Client | None:
+        row = await self.get_by_id(id)
+        if row is None:
+            return None
+        for field, value in kwargs.items():
+            setattr(row, field, value)
+        await self._s.flush()
+        return row
+
+    async def soft_delete(self, id: int, user_id: int | None = None) -> bool:
+        row = await self.get_by_id(id)
+        if row is None:
+            return False
+        row.soft_delete(user_id)
+        await self._s.flush()
+        return True
+
+
+class DepositorRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self._s = session
+
+    async def get_by_id(self, id: int) -> Depositor | None:
+        stmt = (
+            select(Depositor)
+            .where(Depositor.id == id)
+            .options(selectinload(Depositor.legal_entity))
+        )
+        return await self._s.scalar(stmt)
+
+    async def list_all(self) -> list[Depositor]:
+        stmt = select(Depositor).options(selectinload(Depositor.legal_entity))
+        return list(await self._s.scalars(stmt))
+
+    async def create(self, **kwargs) -> Depositor:
+        row = Depositor(**kwargs)
+        self._s.add(row)
+        await self._s.flush()
+        return row
+
+    async def update(self, id: int, **kwargs) -> Depositor | None:
+        row = await self.get_by_id(id)
+        if row is None:
+            return None
+        for field, value in kwargs.items():
+            setattr(row, field, value)
+        await self._s.flush()
+        return row
+
+    async def soft_delete(self, id: int, user_id: int | None = None) -> bool:
+        row = await self.get_by_id(id)
+        if row is None:
+            return False
+        row.soft_delete(user_id)
+        await self._s.flush()
+        return True
+
+
+class ContractRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self._s = session
+
+    async def get_by_id(self, id: int) -> Contract | None:
+        stmt = (
+            select(Contract)
+            .where(Contract.id == id)
+            .options(
+                selectinload(Contract.customer),
+                selectinload(Contract.executor),
+                selectinload(Contract.tariff_documents),
+            )
+        )
+        return await self._s.scalar(stmt)
+
+    async def list_all(self) -> list[Contract]:
+        stmt = select(Contract).options(
+            selectinload(Contract.customer), selectinload(Contract.executor)
+        )
+        return list(await self._s.scalars(stmt))
+
+    async def create(self, **kwargs) -> Contract:
+        row = Contract(**kwargs)
+        self._s.add(row)
+        await self._s.flush()
+        return row
+
+    async def update(self, id: int, **kwargs) -> Contract | None:
+        row = await self.get_by_id(id)
+        if row is None:
+            return None
+        for field, value in kwargs.items():
+            setattr(row, field, value)
+        await self._s.flush()
+        return row
+
+    async def soft_delete(self, id: int, user_id: int | None = None) -> bool:
+        row = await self.get_by_id(id)
+        if row is None:
+            return False
+        row.soft_delete(user_id)
+        await self._s.flush()
+        return True
+
+
+class TariffDocumentRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self._s = session
+
+    async def get_by_id(self, id: int) -> TariffDocument | None:
+        stmt = (
+            select(TariffDocument)
+            .where(TariffDocument.id == id)
+            .options(
+                selectinload(TariffDocument.contract),
+                selectinload(TariffDocument.tariffs),
+            )
+        )
+        return await self._s.scalar(stmt)
+
+    async def list_all(self) -> list[TariffDocument]:
+        stmt = select(TariffDocument).options(selectinload(TariffDocument.contract))
+        return list(await self._s.scalars(stmt))
+
+    async def create(self, **kwargs) -> TariffDocument:
+        row = TariffDocument(**kwargs)
+        self._s.add(row)
+        await self._s.flush()
+        return row
+
+    async def update(self, id: int, **kwargs) -> TariffDocument | None:
+        row = await self.get_by_id(id)
+        if row is None:
+            return None
+        for field, value in kwargs.items():
+            setattr(row, field, value)
+        await self._s.flush()
+        return row
+
+    async def soft_delete(self, id: int, user_id: int | None = None) -> bool:
+        row = await self.get_by_id(id)
+        if row is None:
+            return False
+        row.soft_delete(user_id)
+        await self._s.flush()
+        return True
+
+
+class TariffRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self._s = session
+
+    async def get_by_id(self, id: int) -> Tariff | None:
+        stmt = (
+            select(Tariff).where(Tariff.id == id).options(selectinload(Tariff.document))
+        )
+        return await self._s.scalar(stmt)
+
+    async def list_all(self) -> list[Tariff]:
+        stmt = select(Tariff).options(selectinload(Tariff.document))
+        return list(await self._s.scalars(stmt))
+
+    async def create(self, **kwargs) -> Tariff:
+        row = Tariff(**kwargs)
+        self._s.add(row)
+        await self._s.flush()
+        return row
+
+    async def update(self, id: int, **kwargs) -> Tariff | None:
+        row = await self.get_by_id(id)
+        if row is None:
+            return None
+        for field, value in kwargs.items():
+            setattr(row, field, value)
+        await self._s.flush()
+        return row
+
+    async def soft_delete(self, id: int, user_id: int | None = None) -> bool:
+        row = await self.get_by_id(id)
+        if row is None:
+            return False
+        row.soft_delete(user_id)
+        await self._s.flush()
+        return True
+
+
+class DeliveryZoneRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self._s = session
+
+    async def get_by_id(self, id: int) -> DeliveryZone | None:
+        return await self._s.get(DeliveryZone, id)
+
+    async def list_all(self) -> list[DeliveryZone]:
+        stmt = select(DeliveryZone)
+        return list(await self._s.scalars(stmt))
+
+    async def create(self, **kwargs) -> DeliveryZone:
+        row = DeliveryZone(**kwargs)
+        self._s.add(row)
+        await self._s.flush()
+        return row
+
+    async def update(self, id: int, **kwargs) -> DeliveryZone | None:
+        row = await self.get_by_id(id)
+        if row is None:
+            return None
+        for field, value in kwargs.items():
+            setattr(row, field, value)
+        await self._s.flush()
+        return row
+
+    async def soft_delete(self, id: int, user_id: int | None = None) -> bool:
+        row = await self.get_by_id(id)
+        if row is None:
+            return False
+        row.soft_delete(user_id)
+        await self._s.flush()
+        return True
+
+
+class CarrierRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self._s = session
+
+    async def get_by_id(self, id: int) -> Carrier | None:
+        stmt = (
+            select(Carrier)
+            .where(Carrier.id == id)
+            .options(selectinload(Carrier.legal_entity))
+        )
+        return await self._s.scalar(stmt)
+
+    async def list_all(self) -> list[Carrier]:
+        stmt = select(Carrier).options(selectinload(Carrier.legal_entity))
+        return list(await self._s.scalars(stmt))
+
+    async def create(self, **kwargs) -> Carrier:
+        row = Carrier(**kwargs)
+        self._s.add(row)
+        await self._s.flush()
+        return row
+
+    async def update(self, id: int, **kwargs) -> Carrier | None:
+        row = await self.get_by_id(id)
+        if row is None:
+            return None
+        for field, value in kwargs.items():
+            setattr(row, field, value)
+        await self._s.flush()
+        return row
+
+    async def soft_delete(self, id: int, user_id: int | None = None) -> bool:
+        row = await self.get_by_id(id)
+        if row is None:
+            return False
+        row.soft_delete(user_id)
+        await self._s.flush()
+        return True
+
+
+class KeeperRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self._s = session
+
+    async def get_by_id(self, id: int) -> Keeper | None:
+        stmt = (
+            select(Keeper)
+            .where(Keeper.id == id)
+            .options(selectinload(Keeper.legal_entity))
+        )
+        return await self._s.scalar(stmt)
+
+    async def list_all(self) -> list[Keeper]:
+        stmt = select(Keeper).options(selectinload(Keeper.legal_entity))
+        return list(await self._s.scalars(stmt))
+
+    async def create(self, **kwargs) -> Keeper:
+        row = Keeper(**kwargs)
+        self._s.add(row)
+        await self._s.flush()
+        return row
+
+    async def update(self, id: int, **kwargs) -> Keeper | None:
+        row = await self.get_by_id(id)
+        if row is None:
+            return None
+        for field, value in kwargs.items():
+            setattr(row, field, value)
+        await self._s.flush()
+        return row
+
+    async def soft_delete(self, id: int, user_id: int | None = None) -> bool:
+        row = await self.get_by_id(id)
+        if row is None:
+            return False
+        row.soft_delete(user_id)
+        await self._s.flush()
+        return True
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/parties/repository.py
+========================================
+# app/parties/repository.py
+
+"""Репозитории для модуля parties."""
+
+from __future__ import annotations
+
+
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.infrastructure.repo_base import BaseRepository
+from app.parties.models import (
+    Address,
+    Carrier,
+    Client,
+    Contract,
+    DeliveryZone,
+    Depositor,
+    Keeper,
+    LegalEntity,
+    RawAddress,
+    Tariff,
+    TariffDocument,
+)
+
+
+class AddressRepository(BaseRepository[Address]):
+    def __init__(self, session: AsyncSession) -> None:
+        super().__init__(session, Address)
+
+
+class RawAddressRepository(BaseRepository[RawAddress]):
+    def __init__(self, session: AsyncSession) -> None:
+        super().__init__(session, RawAddress)
+
+
+class LegalEntityRepository(BaseRepository[LegalEntity]):
+    def __init__(self, session: AsyncSession) -> None:
+        super().__init__(session, LegalEntity)
+
+
+class ClientRepository(BaseRepository[Client]):
+    def __init__(self, session: AsyncSession) -> None:
+        super().__init__(session, Client)
+
+
+class DepositorRepository(BaseRepository[Depositor]):
+    def __init__(self, session: AsyncSession) -> None:
+        super().__init__(session, Depositor)
+
+
+class ContractRepository(BaseRepository[Contract]):
+    def __init__(self, session: AsyncSession) -> None:
+        super().__init__(session, Contract)
+
+
+class TariffDocumentRepository(BaseRepository[TariffDocument]):
+    def __init__(self, session: AsyncSession) -> None:
+        super().__init__(session, TariffDocument)
+
+
+class TariffRepository(BaseRepository[Tariff]):
+    def __init__(self, session: AsyncSession) -> None:
+        super().__init__(session, Tariff)
+
+
+class DeliveryZoneRepository(BaseRepository[DeliveryZone]):
+    def __init__(self, session: AsyncSession) -> None:
+        super().__init__(session, DeliveryZone)
+
+
+class CarrierRepository(BaseRepository[Carrier]):
+    def __init__(self, session: AsyncSession) -> None:
+        super().__init__(session, Carrier)
+
+
+class KeeperRepository(BaseRepository[Keeper]):
+    def __init__(self, session: AsyncSession) -> None:
+        super().__init__(session, Keeper)
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/parties/services/address_service.py
+========================================
+# app/parties/services/address_service.py
+
+"""Сервис адресов."""
+
+from __future__ import annotations
+
+from app.parties.models import Address
+from app.parties.repository import AddressRepository
+
+
+class AddressService:
+    def __init__(self, repo: AddressRepository) -> None:
+        self._repo = repo
+
+    async def get_by_id(self, id: int) -> Address | None:
+        return await self._repo.get_by_id(id)
+
+    async def list_all(self) -> list[Address]:
+        return await self._repo.list_all()
+
+    async def create(self, **kwargs) -> Address:
+        return await self._repo.create(**kwargs)
+
+    async def update(self, id: int, **kwargs) -> Address | None:
+        return await self._repo.update(id, **kwargs)
+
+    async def soft_delete(self, id: int, user_id: int | None = None) -> bool:
+        return await self._repo.soft_delete(id, user_id)
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/parties/services/carrier_service.py
+========================================
+# app/parties/services/carrier_service.py
+
+"""Сервис перевозчиков."""
+
+from __future__ import annotations
+
+from app.parties.models import Carrier
+from app.parties.repository import CarrierRepository
+
+
+class CarrierService:
+    def __init__(self, repo: CarrierRepository) -> None:
+        self._repo = repo
+
+    async def get_by_id(self, id: int) -> Carrier | None:
+        return await self._repo.get_by_id(id)
+
+    async def list_all(self) -> list[Carrier]:
+        return await self._repo.list_all()
+
+    async def create(self, **kwargs) -> Carrier:
+        return await self._repo.create(**kwargs)
+
+    async def update(self, id: int, **kwargs) -> Carrier | None:
+        return await self._repo.update(id, **kwargs)
+
+    async def soft_delete(self, id: int, user_id: int | None = None) -> bool:
+        return await self._repo.soft_delete(id, user_id)
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/parties/services/client_service.py
+========================================
+# app/parties/services/client_service.py
+
+"""Сервис клиентов."""
+
+from __future__ import annotations
+
+from app.parties.models import Client
+from app.parties.repository import ClientRepository
+
+
+class ClientService:
+    def __init__(self, repo: ClientRepository) -> None:
+        self._repo = repo
+
+    async def get_by_id(self, id: int) -> Client | None:
+        return await self._repo.get_by_id(id)
+
+    async def list_all(self) -> list[Client]:
+        return await self._repo.list_all()
+
+    async def create(self, **kwargs) -> Client:
+        return await self._repo.create(**kwargs)
+
+    async def update(self, id: int, **kwargs) -> Client | None:
+        return await self._repo.update(id, **kwargs)
+
+    async def soft_delete(self, id: int, user_id: int | None = None) -> bool:
+        return await self._repo.soft_delete(id, user_id)
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/parties/services/contract_service.py
+========================================
+# app/parties/services/contract_service.py
+
+"""Сервис договоров."""
+
+from __future__ import annotations
+
+from app.parties.models import Contract
+from app.parties.repository import ContractRepository
+
+
+class ContractService:
+    def __init__(self, repo: ContractRepository) -> None:
+        self._repo = repo
+
+    async def get_by_id(self, id: int) -> Contract | None:
+        return await self._repo.get_by_id(id)
+
+    async def list_all(self) -> list[Contract]:
+        return await self._repo.list_all()
+
+    async def create(self, **kwargs) -> Contract:
+        return await self._repo.create(**kwargs)
+
+    async def update(self, id: int, **kwargs) -> Contract | None:
+        return await self._repo.update(id, **kwargs)
+
+    async def soft_delete(self, id: int, user_id: int | None = None) -> bool:
+        return await self._repo.soft_delete(id, user_id)
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/parties/services/delivery_zone_service.py
+========================================
+# app/parties/services/delivery_zone_service.py
+
+"""Сервис зон доставки."""
+
+from __future__ import annotations
+
+from app.parties.models import DeliveryZone
+from app.parties.repository import DeliveryZoneRepository
+
+
+class DeliveryZoneService:
+    def __init__(self, repo: DeliveryZoneRepository) -> None:
+        self._repo = repo
+
+    async def get_by_id(self, id: int) -> DeliveryZone | None:
+        return await self._repo.get_by_id(id)
+
+    async def list_all(self) -> list[DeliveryZone]:
+        return await self._repo.list_all()
+
+    async def create(self, **kwargs) -> DeliveryZone:
+        return await self._repo.create(**kwargs)
+
+    async def update(self, id: int, **kwargs) -> DeliveryZone | None:
+        return await self._repo.update(id, **kwargs)
+
+    async def soft_delete(self, id: int, user_id: int | None = None) -> bool:
+        return await self._repo.soft_delete(id, user_id)
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/parties/services/depositor_service.py
+========================================
+# app/parties/services/depositor_service.py
+
+"""Сервис поклажедателей."""
+
+from __future__ import annotations
+
+from app.parties.models import Depositor
+from app.parties.repository import DepositorRepository
+
+
+class DepositorService:
+    def __init__(self, repo: DepositorRepository) -> None:
+        self._repo = repo
+
+    async def get_by_id(self, id: int) -> Depositor | None:
+        return await self._repo.get_by_id(id)
+
+    async def list_all(self) -> list[Depositor]:
+        return await self._repo.list_all()
+
+    async def create(self, **kwargs) -> Depositor:
+        return await self._repo.create(**kwargs)
+
+    async def update(self, id: int, **kwargs) -> Depositor | None:
+        return await self._repo.update(id, **kwargs)
+
+    async def soft_delete(self, id: int, user_id: int | None = None) -> bool:
+        return await self._repo.soft_delete(id, user_id)
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/parties/services/__init__.py
+========================================
+"""Сервисы модуля parties."""
+
+from app.parties.services.address_service import AddressService
+from app.parties.services.legal_entity_service import LegalEntityService
+from app.parties.services.client_service import ClientService
+from app.parties.services.contract_service import ContractService
+from app.parties.services.tariff_service import TariffService
+from app.parties.services.depositor_service import DepositorService
+
+__all__ = [
+    "AddressService",
+    "LegalEntityService",
+    "ClientService",
+    "ContractService",
+    "TariffService",
+    "DepositorService",
+]
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/parties/services/keeper_service.py
+========================================
+# app/parties/services/keeper_service.py
+
+"""Сервис хранителей."""
+
+from __future__ import annotations
+
+from app.parties.models import Keeper
+from app.parties.repository import KeeperRepository
+
+
+class KeeperService:
+    def __init__(self, repo: KeeperRepository) -> None:
+        self._repo = repo
+
+    async def get_by_id(self, id: int) -> Keeper | None:
+        return await self._repo.get_by_id(id)
+
+    async def list_all(self) -> list[Keeper]:
+        return await self._repo.list_all()
+
+    async def create(self, **kwargs) -> Keeper:
+        return await self._repo.create(**kwargs)
+
+    async def update(self, id: int, **kwargs) -> Keeper | None:
+        return await self._repo.update(id, **kwargs)
+
+    async def soft_delete(self, id: int, user_id: int | None = None) -> bool:
+        return await self._repo.soft_delete(id, user_id)
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/parties/services/legal_entity_service.py
+========================================
+# app/parties/services/legal_entity_service.py
+
+"""Сервис юрлиц."""
+
+from __future__ import annotations
+
+from app.parties.models import LegalEntity
+from app.parties.repository import LegalEntityRepository
+
+
+class LegalEntityService:
+    def __init__(self, repo: LegalEntityRepository) -> None:
+        self._repo = repo
+
+    async def get_by_id(self, id: int) -> LegalEntity | None:
+        return await self._repo.get_by_id(id)
+
+    async def list_all(self) -> list[LegalEntity]:
+        return await self._repo.list_all()
+
+    async def create(self, **kwargs) -> LegalEntity:
+        return await self._repo.create(**kwargs)
+
+    async def update(self, id: int, **kwargs) -> LegalEntity | None:
+        return await self._repo.update(id, **kwargs)
+
+    async def soft_delete(self, id: int, user_id: int | None = None) -> bool:
+        return await self._repo.soft_delete(id, user_id)
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/parties/services/raw_address_service.py
+========================================
+# app/parties/services/raw_address_service.py
+
+"""Сервис сырых адресов (алиасов)."""
+
+from __future__ import annotations
+
+from app.parties.models import RawAddress
+from app.parties.repository import RawAddressRepository
+
+
+class RawAddressService:
+    def __init__(self, repo: RawAddressRepository) -> None:
+        self._repo = repo
+
+    async def get_by_id(self, id: int) -> RawAddress | None:
+        return await self._repo.get_by_id(id)
+
+    async def list_all(self) -> list[RawAddress]:
+        return await self._repo.list_all()
+
+    async def create(self, **kwargs) -> RawAddress:
+        return await self._repo.create(**kwargs)
+
+    async def update(self, id: int, **kwargs) -> RawAddress | None:
+        return await self._repo.update(id, **kwargs)
+
+    async def soft_delete(self, id: int, user_id: int | None = None) -> bool:
+        return await self._repo.soft_delete(id, user_id)
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/parties/services/tariff_document_service.py
+========================================
+# app/parties/services/tariff_document_service.py
+
+"""Сервис тарифных документов."""
+
+from __future__ import annotations
+
+from app.parties.models import TariffDocument
+from app.parties.repository import TariffDocumentRepository
+
+
+class TariffDocumentService:
+    def __init__(self, repo: TariffDocumentRepository) -> None:
+        self._repo = repo
+
+    async def get_by_id(self, id: int) -> TariffDocument | None:
+        return await self._repo.get_by_id(id)
+
+    async def list_all(self) -> list[TariffDocument]:
+        return await self._repo.list_all()
+
+    async def create(self, **kwargs) -> TariffDocument:
+        return await self._repo.create(**kwargs)
+
+    async def update(self, id: int, **kwargs) -> TariffDocument | None:
+        return await self._repo.update(id, **kwargs)
+
+    async def soft_delete(self, id: int, user_id: int | None = None) -> bool:
+        return await self._repo.soft_delete(id, user_id)
+
+
+
+========================================
+FILE: /home/rustam/Data/test/lms_fastapi/app/parties/services/tariff_service.py
+========================================
+# app/parties/services/tariff_service.py
+
+"""Сервис тарифов."""
+
+from __future__ import annotations
+
+from app.parties.models import Tariff
+from app.parties.repository import TariffRepository
+
+
+class TariffService:
+    def __init__(self, repo: TariffRepository) -> None:
+        self._repo = repo
+
+    async def get_by_id(self, id: int) -> Tariff | None:
+        return await self._repo.get_by_id(id)
+
+    async def list_all(self) -> list[Tariff]:
+        return await self._repo.list_all()
+
+    async def create(self, **kwargs) -> Tariff:
+        return await self._repo.create(**kwargs)
+
+    async def update(self, id: int, **kwargs) -> Tariff | None:
+        return await self._repo.update(id, **kwargs)

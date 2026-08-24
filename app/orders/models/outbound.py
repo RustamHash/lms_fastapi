@@ -104,9 +104,9 @@ class OutboundOrder(Base):
     )
 
     lines: Mapped[list["OutboundOrderLine"]] = relationship(back_populates="order")
-    depositor: Mapped["Depositor"] = relationship()
-    client: Mapped["Client | None"] = relationship()
-    warehouse: Mapped["Warehouse | None"] = relationship()
+    depositor: Mapped["Depositor"] = relationship(lazy="selectin")
+    client: Mapped["Client | None"] = relationship(lazy="selectin")
+    warehouse: Mapped["Warehouse | None"] = relationship(lazy="selectin")
 
 
 class OutboundOrderLine(Base):

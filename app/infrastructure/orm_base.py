@@ -13,12 +13,17 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 class Base(DeclarativeBase):
     """Базовый класс с audit-полями и soft delete."""
 
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True, comment="ID записи")
+    id: Mapped[int] = mapped_column(
+        primary_key=True, autoincrement=True, comment="ID записи"
+    )
     is_active: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default="true", comment="Активна"
     )
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False, comment="Создана"
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+        comment="Создана",
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

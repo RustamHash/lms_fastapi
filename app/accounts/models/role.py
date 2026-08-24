@@ -29,8 +29,18 @@ class Role(Base):
     permissions: Mapped[dict[str, Any]] = mapped_column(
         JSONB, default=dict, comment="Права"
     )
+    parent_role_id: Mapped[int | None] = mapped_column(
+        ForeignKey("accounts_role.id"), nullable=True, comment="Родительская роль"
+    )
 
     users: Mapped[list["User"]] = relationship(
         secondary=user_roles,
         back_populates="roles",
+    )
+    parent_role: Mapped["Role | None"] = relationship(
+        remote_side="Role.id",
+        back_populates="child_roles",
+    )
+    child_roles: Mapped[list["Role"]] = relationship(
+        back_populates="parent_role",
     )

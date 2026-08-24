@@ -11,6 +11,11 @@ ENV/
 *.egg-info/
 dist/
 build/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
 
 # Node.js
 node_modules/
@@ -23,23 +28,42 @@ frontend/.vite/
 .idea/
 *.swp
 *.swo
+*.sublime-*
 
 # OS
 .DS_Store
 Thumbs.db
+desktop.ini
 
 # Логи
 *.log
 logs/
+*.log.*
 
-# Временные файлы
-tmp/
-temp/
-*.tmp
+# Данные (локальные)
+data/postgres/
+data/postgres_dev/
+data/redis/
+uploads/
+!uploads/.gitkeep
 
 # Окружение
 .env
 .env.local
 .env.*.local
-data/
-logs/*.log
+!.env.example
+
+# Временные файлы
+tmp/
+temp/
+*.tmp
+*.bak
+*.swp
+
+# Docker
+docker-compose.override.yml
+
+# Проектные артефакты
+project_structure.txt
+celerybeat-schedule
+celerybeat.pid

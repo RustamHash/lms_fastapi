@@ -49,8 +49,6 @@ async def start_import(
     body: ImportRequest | None = None,
 ) -> dict:
     """Запустить импорт. Возвращает task_id."""
-    global import_in_progress
-
     # Извлечь document_type из body или query
     document_type = None
     if body:
@@ -58,41 +56,31 @@ async def start_import(
 
     logger.info("ПОЛУЧЕН ЗАПРОС: document_type=%s, user_id=%s", document_type, user_id)
 
-    # Получить реальный IP клиента
-    client_ip = request.client.host if request.client else "unknown"
-    forwarded_ip = request.headers.get("x-forwarded-for")
-    real_ip = forwarded_ip.split(",")[0].strip() if forwarded_ip else client_ip
-
     # Общий task_id для всей задачи
     task_id = str(uuid4())
 
     # Создаём запись в логе СРАЗУ, чтобы фронтенд мог получить статус
-    log = IntegrationLog(
+    from app.integration.repository import IntegrationLogRepository
+
+    await IntegrationLogRepository(session).create(
         task_id=task_id,
         status="starting",
         document_type=document_type,
         created_by_id=user_id,
     )
-    session.add(log)
-    await session.commit()
 
     # Отправляем задачу в Celery
-    from app.tasks import run_import_task
+    from app.tasks import celery_app
 
-    celery_task = run_import_task.delay(task_id, user_id or 1, document_type)
-
+    celery_task = celery_app.send_task(
+        "app.tasks.run_import",
+        args=[task_id, user_id or 1, document_type],
+    )
     return {
         "task_id": task_id,
         "celery_task_id": celery_task.id,
         "status": "queued",
     }
-
-
-async def _run_import_with_flag(
-    task_id: str, user_id: int, document_type: str | None, ip: str = "unknown"
-) -> None:
-    """Запустить импорт."""
-    await _run_import_background(task_id, user_id, document_type)
 
 
 async def _log_message(
@@ -125,9 +113,7 @@ async def _run_import_background(
 
     try:
         # Найти или создать лог
-        log = await session.scalar(
-            select(IntegrationLog).where(IntegrationLog.task_id == task_id)
-        )
+        log = await IntegrationLogRepository(session).get_by_task_id(task_id)
 
         if log is None:
             log = IntegrationLog(
@@ -236,7 +222,13 @@ async def _run_import_background(
                                 log.errors = (log.errors or []) + [err]
                             await session.commit()
                             continue
-
+                        if universal_doc is None:
+                            log.error_rows += 1
+                            log.errors = (log.errors or []) + [
+                                "Ошибка парсинга: пустой документ"
+                            ]
+                            await session.commit()
+                            continue
                         doc_number = universal_doc.get("document_number")
 
                         result, imp_errors = await integration.process_document(
@@ -301,12 +293,11 @@ async def _run_import_background(
 )
 async def get_import_status(task_id: str, session: SessionDep) -> dict:
     """Получить статус импорта."""
-    log = await session.scalar(
-        select(IntegrationLog).where(IntegrationLog.task_id == task_id)
-    )
+    from app.integration.repository import IntegrationLogRepository
+
+    log = await IntegrationLogRepository(session).get_by_task_id(task_id)
     if log is None:
         raise NotFoundError("Задача импорта не найдена")
-
     return _format_log(log)
 
 
@@ -316,13 +307,13 @@ async def get_import_status(task_id: str, session: SessionDep) -> dict:
 )
 async def get_import_status_long(task_id: str, session: SessionDep) -> dict:
     """Long Polling — держит до 25 сек, отвечает при изменениях."""
+    from app.integration.repository import IntegrationLogRepository
+
     start = time.time()
     last_messages_count = -1
 
     while time.time() - start < 25:
-        log = await session.scalar(
-            select(IntegrationLog).where(IntegrationLog.task_id == task_id)
-        )
+        log = await IntegrationLogRepository(session).get_by_task_id(task_id)
         if log is None:
             raise NotFoundError("Задача импорта не найдена")
 
@@ -337,12 +328,11 @@ async def get_import_status_long(task_id: str, session: SessionDep) -> dict:
 
         await asyncio.sleep(1)
 
-    log = await session.scalar(
-        select(IntegrationLog).where(IntegrationLog.task_id == task_id)
-    )
+    from app.integration.repository import IntegrationLogRepository
+
+    log = await IntegrationLogRepository(session).get_by_task_id(task_id)
     if log is None:
         raise NotFoundError("Задача импорта не найдена")
-
     return _format_log(log)
 
 
@@ -352,11 +342,9 @@ async def get_import_status_long(task_id: str, session: SessionDep) -> dict:
 )
 async def get_import_history(session: SessionDep) -> list[dict]:
     """История импортов."""
-    logs = list(
-        await session.scalars(
-            select(IntegrationLog).order_by(IntegrationLog.created_at.desc()).limit(50)
-        )
-    )
+    from app.integration.repository import IntegrationLogRepository
+
+    logs = await IntegrationLogRepository(session).list_all()
     return [
         {
             "id": log.id,
@@ -380,18 +368,22 @@ async def get_import_history(session: SessionDep) -> list[dict]:
 async def download_import_errors_excel(task_id: str, session: SessionDep):
     """Скачать Excel файл с ошибками импорта."""
     from openpyxl import Workbook
+    from openpyxl.worksheet.worksheet import Worksheet
 
-    logs = list(
-        await session.scalars(
-            select(IntegrationLog).where(IntegrationLog.task_id == task_id)
-        )
-    )
+    from app.integration.repository import IntegrationLogRepository
 
-    if not logs:
+    log = await IntegrationLogRepository(session).get_by_task_id(task_id)
+    if log is None:
         raise NotFoundError("Задача импорта не найдена")
 
+    logs = [log]
+
     wb = Workbook()
-    ws = wb.active
+    ws: Worksheet | None = wb.active
+
+    if ws is None:
+        raise RuntimeError("Не удалось создать лист Excel")
+
     ws.title = "Ошибки импорта"
 
     headers = ["Файл", "Ошибка", "Профиль", "Дата"]

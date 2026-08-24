@@ -58,9 +58,9 @@ class InboundOrder(Base):
     )
 
     lines: Mapped[list["InboundOrderLine"]] = relationship(back_populates="order")
-    depositor: Mapped["Depositor"] = relationship()
-    warehouse: Mapped["Warehouse | None"] = relationship()
-    supplier: Mapped["Client | None"] = relationship(foreign_keys=[supplier_id])
+    depositor: Mapped["Depositor"] = relationship(lazy="selectin")
+    warehouse: Mapped["Warehouse | None"] = relationship(lazy="selectin")
+    supplier: Mapped["Client | None"] = relationship(foreign_keys=[supplier_id], lazy="selectin")
 
 
 class InboundOrderLine(Base):

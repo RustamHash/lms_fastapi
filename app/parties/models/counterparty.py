@@ -6,6 +6,10 @@ from sqlalchemy import ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.infrastructure.orm_base import Base
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from app.parties.models.legal_entity import LegalEntity
 
 
 class Depositor(Base):
@@ -20,7 +24,7 @@ class Depositor(Base):
         comment="Юрлицо",
     )
 
-    legal_entity: Mapped["LegalEntity"] = relationship()
+    legal_entity: Mapped["LegalEntity"] = relationship(lazy="selectin")
     code: Mapped[str] = mapped_column(
         String(50), default="", comment="Код поклажедателя"
     )
@@ -41,7 +45,7 @@ class Keeper(Base):
         comment="Юрлицо",
     )
 
-    legal_entity: Mapped["LegalEntity"] = relationship()
+    legal_entity: Mapped["LegalEntity"] = relationship(lazy="selectin")
 
     def __repr__(self) -> str:
         return f"<Keeper(id={self.id})>"
@@ -59,7 +63,7 @@ class Carrier(Base):
         comment="Юрлицо",
     )
 
-    legal_entity: Mapped["LegalEntity"] = relationship()
+    legal_entity: Mapped["LegalEntity"] = relationship(lazy="selectin")
 
     def __repr__(self) -> str:
         return f"<Carrier(id={self.id})>"

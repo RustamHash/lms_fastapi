@@ -9,6 +9,10 @@ from sqlalchemy import Date, ForeignKey, Numeric, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.infrastructure.orm_base import Base
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from app.parties.models.contract import Contract
 
 
 class TariffDocument(Base):
@@ -38,8 +42,12 @@ class TariffDocument(Base):
         ForeignKey("files.id"), nullable=True, comment="Скан документа"
     )
 
-    contract: Mapped["Contract"] = relationship(back_populates="tariff_documents")
-    tariffs: Mapped[list["Tariff"]] = relationship(back_populates="document")
+    contract: Mapped["Contract"] = relationship(
+        back_populates="tariff_documents", lazy="selectin"
+    )
+    tariffs: Mapped[list["Tariff"]] = relationship(
+        back_populates="document", lazy="selectin"
+    )
 
     def __repr__(self) -> str:
         return f"<TariffDocument(id={self.id}, number={self.number})>"
@@ -67,7 +75,9 @@ class Tariff(Base):
         Numeric(12, 2), nullable=False, comment="Цена"
     )
 
-    document: Mapped["TariffDocument"] = relationship(back_populates="tariffs")
+    document: Mapped["TariffDocument"] = relationship(
+        back_populates="tariffs", lazy="selectin"
+    )
 
     def __repr__(self) -> str:
         return f"<Tariff(id={self.id}, name={self.name}, price={self.price})>"

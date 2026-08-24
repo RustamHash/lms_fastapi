@@ -19,7 +19,9 @@ class DeliveryZone(Base):
         String(255), unique=True, nullable=False, comment="Название"
     )
 
-    addresses: Mapped[list["Address"]] = relationship(back_populates="delivery_zone")
+    addresses: Mapped[list["Address"]] = relationship(
+        back_populates="delivery_zone", lazy="selectin"
+    )
 
     def __repr__(self) -> str:
         return f"<DeliveryZone(id={self.id}, name={self.name})>"
@@ -30,7 +32,9 @@ class Address(Base):
 
     __tablename__ = "parties_address"
 
-    full_address: Mapped[str] = mapped_column(Text, nullable=False, comment="Полный адрес")
+    full_address: Mapped[str] = mapped_column(
+        Text, nullable=False, comment="Полный адрес"
+    )
     region: Mapped[str] = mapped_column(String(255), default="", comment="Регион")
     city: Mapped[str] = mapped_column(String(255), default="", comment="Город")
     street: Mapped[str] = mapped_column(String(255), default="", comment="Улица")
@@ -39,24 +43,26 @@ class Address(Base):
     structure: Mapped[str] = mapped_column(String(32), default="", comment="Строение")
     flat: Mapped[str] = mapped_column(String(32), default="", comment="Квартира")
     fias_id: Mapped[str] = mapped_column(String(36), default="", comment="FIAS ID")
-    latitude: Mapped[Decimal | None] = mapped_column(Numeric(9, 6), nullable=True, comment="Широта")
-    longitude: Mapped[Decimal | None] = mapped_column(Numeric(9, 6), nullable=True, comment="Долгота")
+    latitude: Mapped[Decimal | None] = mapped_column(
+        Numeric(9, 6), nullable=True, comment="Широта"
+    )
+    longitude: Mapped[Decimal | None] = mapped_column(
+        Numeric(9, 6), nullable=True, comment="Долгота"
+    )
     postal_code: Mapped[str] = mapped_column(String(10), default="", comment="Индекс")
     delivery_zone_id: Mapped[int | None] = mapped_column(
         ForeignKey("parties_delivery_zone.id"), nullable=True, comment="Зона доставки"
     )
 
-    delivery_zone: Mapped[DeliveryZone | None] = relationship(back_populates="addresses")
-    raw_addresses: Mapped[list["RawAddress"]] = relationship(back_populates="normalized_address")
-    legal_entities_registered: Mapped[list["LegalEntity"]] = relationship(
-        foreign_keys="LegalEntity.legal_address_id", 
+    delivery_zone: Mapped[DeliveryZone | None] = relationship(
+        back_populates="addresses", lazy="selectin"
     )
-    legal_entities_actual: Mapped[list["LegalEntity"]] = relationship(
-        foreign_keys="LegalEntity.actual_address_id", 
+    raw_addresses: Mapped[list["RawAddress"]] = relationship(
+        back_populates="normalized_address", lazy="selectin"
     )
 
     def __repr__(self) -> str:
-        return f"<Address(id={self.id}, full_address={self.full_address[:50]})>"
+        return f"id={self.id}"
 
 
 class RawAddress(Base):
@@ -65,13 +71,19 @@ class RawAddress(Base):
     __tablename__ = "parties_raw_address"
 
     raw_text: Mapped[str] = mapped_column(Text, nullable=False, comment="Сырой адрес")
-    hash: Mapped[str] = mapped_column(String(64), unique=True, comment="SHA256 от нормализованного")
+    hash: Mapped[str] = mapped_column(
+        String(64), unique=True, comment="SHA256 от нормализованного"
+    )
     normalized_address_id: Mapped[int] = mapped_column(
-        ForeignKey("parties_address.id"), nullable=False, comment="Нормализованный адрес"
+        ForeignKey("parties_address.id"),
+        nullable=False,
+        comment="Нормализованный адрес",
     )
     source: Mapped[str] = mapped_column(String(50), default="", comment="Источник")
 
-    normalized_address: Mapped[Address] = relationship(back_populates="raw_addresses")
+    normalized_address: Mapped[Address] = relationship(
+        back_populates="raw_addresses", lazy="selectin"
+    )
 
     def __repr__(self) -> str:
-        return f"<RawAddress(id={self.id}, raw_text={self.raw_text[:50]})>"
+        return f"id={self.id}"

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from app.accounts.models import UserListPreset, UserTableSettings
-from app.accounts.repository_list import ListPresetRepository, TableSettingsRepository
+from app.accounts.repository import ListPresetRepository, UserTableSettingsRepository as TableSettingsRepository
 from app.core.list_defaults import get_default_prefs, merge_with_defaults
 
 
@@ -77,7 +77,9 @@ class ListSettingsService:
             raise ValueError("Пресет не найден")
         return await self.save_settings(user_id, entity_key, preset.config)
 
-    async def set_default(self, user_id: int, entity_key: str, preset_id: int) -> UserListPreset | None:
+    async def set_default(
+        self, user_id: int, entity_key: str, preset_id: int
+    ) -> UserListPreset | None:
         """Установить пресет по умолчанию."""
         preset = await self._presets.get_by_id(preset_id)
         if preset is None:

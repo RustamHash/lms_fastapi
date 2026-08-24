@@ -7,6 +7,11 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.infrastructure.orm_base import Base
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from app.parties.models.address import Address
+
 
 class LegalEntity(Base):
     """Юридическое лицо."""
@@ -32,6 +37,13 @@ class LegalEntity(Base):
     email: Mapped[str] = mapped_column(String(255), default="", comment="Email")
     edo_uuid: Mapped[str | None] = mapped_column(
         String(36), nullable=True, comment="Идентификатор ЭДО"
+    )
+
+    legal_address: Mapped["Address | None"] = relationship(
+        foreign_keys=[legal_address_id], lazy="selectin"
+    )
+    actual_address: Mapped["Address | None"] = relationship(
+        foreign_keys=[actual_address_id], lazy="selectin"
     )
 
     def __repr__(self) -> str:

@@ -1,0 +1,468 @@
+{
+    "entity": "depositors",
+    "fields": {
+        "id": {
+            "title": "ID",
+            "type": "integer",
+            "required": true,
+            "default": null
+        },
+        "is_active": {
+            "title": "\u0410\u043a\u0442\u0438\u0432\u043d\u0430",
+            "type": "boolean",
+            "required": false,
+            "default": true
+        },
+        "is_deleted": {
+            "title": "\u0423\u0434\u0430\u043b\u0435\u043d\u0430",
+            "type": "boolean",
+            "required": false,
+            "default": false
+        },
+        "created_at": {
+            "title": "\u0421\u043e\u0437\u0434\u0430\u043d\u0430",
+            "type": "datetime",
+            "required": true,
+            "default": null,
+            "format": "date-time"
+        },
+        "updated_at": {
+            "title": "\u041e\u0431\u043d\u043e\u0432\u043b\u0435\u043d\u0430",
+            "type": "datetime",
+            "required": true,
+            "default": null,
+            "format": "date-time"
+        },
+        "created_by_id": {
+            "title": "\u0421\u043e\u0437\u0434\u0430\u043b",
+            "type": "integer",
+            "required": false,
+            "default": null
+        },
+        "updated_by_id": {
+            "title": "\u0418\u0437\u043c\u0435\u043d\u0438\u043b",
+            "type": "integer",
+            "required": false,
+            "default": null
+        },
+        "deleted_at": {
+            "title": "\u0423\u0434\u0430\u043b\u0435\u043d\u0430 (\u043a\u043e\u0433\u0434\u0430)",
+            "type": "datetime",
+            "required": false,
+            "default": null,
+            "format": "date-time"
+        },
+        "deleted_by_id": {
+            "title": "\u0423\u0434\u0430\u043b\u0438\u043b",
+            "type": "integer",
+            "required": false,
+            "default": null
+        },
+        "legal_entity_id": {
+            "title": "\u042e\u0440\u043b\u0438\u0446\u043e",
+            "type": "select",
+            "required": true,
+            "default": null,
+            "endpoint": "/api/v1/legal-entities",
+            "label_field": "name",
+            "value_field": "id"
+        },
+        "code": {
+            "title": "\u041a\u043e\u0434 \u043f\u043e\u043a\u043b\u0430\u0436\u0435\u0434\u0430\u0442\u0435\u043b\u044f",
+            "type": "string",
+            "required": false,
+            "default": ""
+        },
+        "legal_entity": {
+            "title": "\u042e\u0440\u043b\u0438\u0446\u043e",
+            "type": "object",
+            "required": true,
+            "default": null,
+            "nested": {
+                "id": {
+                    "title": "ID",
+                    "type": "integer"
+                },
+                "is_active": {
+                    "title": "\u0410\u043a\u0442\u0438\u0432\u043d\u0430",
+                    "type": "boolean"
+                },
+                "is_deleted": {
+                    "title": "\u0423\u0434\u0430\u043b\u0435\u043d\u0430",
+                    "type": "boolean"
+                },
+                "created_at": {
+                    "title": "\u0421\u043e\u0437\u0434\u0430\u043d\u0430",
+                    "type": "string",
+                    "format": "date-time"
+                },
+                "updated_at": {
+                    "title": "\u041e\u0431\u043d\u043e\u0432\u043b\u0435\u043d\u0430",
+                    "type": "string",
+                    "format": "date-time"
+                },
+                "created_by_id": {
+                    "title": "\u0421\u043e\u0437\u0434\u0430\u043b",
+                    "type": "integer"
+                },
+                "updated_by_id": {
+                    "title": "\u0418\u0437\u043c\u0435\u043d\u0438\u043b",
+                    "type": "integer"
+                },
+                "deleted_at": {
+                    "title": "\u0423\u0434\u0430\u043b\u0435\u043d\u0430 (\u043a\u043e\u0433\u0434\u0430)",
+                    "type": "string",
+                    "format": "date-time"
+                },
+                "deleted_by_id": {
+                    "title": "\u0423\u0434\u0430\u043b\u0438\u043b",
+                    "type": "integer"
+                },
+                "name": {
+                    "title": "\u041a\u0440\u0430\u0442\u043a\u043e\u0435 \u043d\u0430\u0438\u043c\u0435\u043d\u043e\u0432\u0430\u043d\u0438\u0435",
+                    "type": "string"
+                },
+                "legal_name": {
+                    "title": "\u041f\u043e\u043b\u043d\u043e\u0435 \u043d\u0430\u0438\u043c\u0435\u043d\u043e\u0432\u0430\u043d\u0438\u0435",
+                    "type": "string"
+                },
+                "inn": {
+                    "title": "\u0418\u041d\u041d",
+                    "type": "string"
+                },
+                "kpp": {
+                    "title": "\u041a\u041f\u041f",
+                    "type": "string"
+                },
+                "ogrn": {
+                    "title": "\u041e\u0413\u0420\u041d",
+                    "type": "string"
+                },
+                "legal_address_id": {
+                    "title": "\u042e\u0440\u0438\u0434\u0438\u0447\u0435\u0441\u043a\u0438\u0439 \u0430\u0434\u0440\u0435\u0441",
+                    "type": "select",
+                    "endpoint": "/api/v1/addresses",
+                    "label_field": "name",
+                    "value_field": "id"
+                },
+                "actual_address_id": {
+                    "title": "\u0424\u0430\u043a\u0442\u0438\u0447\u0435\u0441\u043a\u0438\u0439 \u0430\u0434\u0440\u0435\u0441",
+                    "type": "select",
+                    "endpoint": "/api/v1/addresses",
+                    "label_field": "name",
+                    "value_field": "id"
+                },
+                "phone": {
+                    "title": "\u0422\u0435\u043b\u0435\u0444\u043e\u043d",
+                    "type": "string"
+                },
+                "email": {
+                    "title": "Email",
+                    "type": "string"
+                },
+                "edo_uuid": {
+                    "title": "\u0418\u0434\u0435\u043d\u0442\u0438\u0444\u0438\u043a\u0430\u0442\u043e\u0440 \u042d\u0414\u041e",
+                    "type": "string"
+                },
+                "legal_address": {
+                    "title": "\u042e\u0440\u0438\u0434\u0438\u0447\u0435\u0441\u043a\u0438\u0439 \u0430\u0434\u0440\u0435\u0441",
+                    "type": "object",
+                    "nested": {
+                        "id": {
+                            "title": "ID",
+                            "type": "integer"
+                        },
+                        "is_active": {
+                            "title": "\u0410\u043a\u0442\u0438\u0432\u043d\u0430",
+                            "type": "boolean"
+                        },
+                        "is_deleted": {
+                            "title": "\u0423\u0434\u0430\u043b\u0435\u043d\u0430",
+                            "type": "boolean"
+                        },
+                        "created_at": {
+                            "title": "\u0421\u043e\u0437\u0434\u0430\u043d\u0430",
+                            "type": "string",
+                            "format": "date-time"
+                        },
+                        "updated_at": {
+                            "title": "\u041e\u0431\u043d\u043e\u0432\u043b\u0435\u043d\u0430",
+                            "type": "string",
+                            "format": "date-time"
+                        },
+                        "created_by_id": {
+                            "title": "\u0421\u043e\u0437\u0434\u0430\u043b",
+                            "type": "integer"
+                        },
+                        "updated_by_id": {
+                            "title": "\u0418\u0437\u043c\u0435\u043d\u0438\u043b",
+                            "type": "integer"
+                        },
+                        "deleted_at": {
+                            "title": "\u0423\u0434\u0430\u043b\u0435\u043d\u0430 (\u043a\u043e\u0433\u0434\u0430)",
+                            "type": "string",
+                            "format": "date-time"
+                        },
+                        "deleted_by_id": {
+                            "title": "\u0423\u0434\u0430\u043b\u0438\u043b",
+                            "type": "integer"
+                        },
+                        "full_address": {
+                            "title": "\u041f\u043e\u043b\u043d\u044b\u0439 \u0430\u0434\u0440\u0435\u0441",
+                            "type": "string"
+                        },
+                        "region": {
+                            "title": "\u0420\u0435\u0433\u0438\u043e\u043d",
+                            "type": "string"
+                        },
+                        "city": {
+                            "title": "\u0413\u043e\u0440\u043e\u0434",
+                            "type": "string"
+                        },
+                        "street": {
+                            "title": "\u0423\u043b\u0438\u0446\u0430",
+                            "type": "string"
+                        },
+                        "house": {
+                            "title": "\u0414\u043e\u043c",
+                            "type": "string"
+                        },
+                        "building": {
+                            "title": "\u041a\u043e\u0440\u043f\u0443\u0441",
+                            "type": "string"
+                        },
+                        "structure": {
+                            "title": "\u0421\u0442\u0440\u043e\u0435\u043d\u0438\u0435",
+                            "type": "string"
+                        },
+                        "flat": {
+                            "title": "\u041a\u0432\u0430\u0440\u0442\u0438\u0440\u0430",
+                            "type": "string"
+                        },
+                        "fias_id": {
+                            "title": "FIAS ID",
+                            "type": "string"
+                        },
+                        "latitude": {
+                            "title": "\u0428\u0438\u0440\u043e\u0442\u0430",
+                            "type": "number"
+                        },
+                        "longitude": {
+                            "title": "\u0414\u043e\u043b\u0433\u043e\u0442\u0430",
+                            "type": "number"
+                        },
+                        "postal_code": {
+                            "title": "\u0418\u043d\u0434\u0435\u043a\u0441",
+                            "type": "string"
+                        },
+                        "delivery_zone_id": {
+                            "title": "\u0417\u043e\u043d\u0430 \u0434\u043e\u0441\u0442\u0430\u0432\u043a\u0438",
+                            "type": "select",
+                            "endpoint": "/api/v1/delivery-zones",
+                            "label_field": "name",
+                            "value_field": "id"
+                        },
+                        "delivery_zone": {
+                            "title": "\u0417\u043e\u043d\u0430 \u0434\u043e\u0441\u0442\u0430\u0432\u043a\u0438",
+                            "type": "object",
+                            "nested": {
+                                "id": {
+                                    "title": "ID",
+                                    "type": "integer"
+                                },
+                                "is_active": {
+                                    "title": "\u0410\u043a\u0442\u0438\u0432\u043d\u0430",
+                                    "type": "boolean"
+                                },
+                                "is_deleted": {
+                                    "title": "\u0423\u0434\u0430\u043b\u0435\u043d\u0430",
+                                    "type": "boolean"
+                                },
+                                "created_at": {
+                                    "title": "\u0421\u043e\u0437\u0434\u0430\u043d\u0430",
+                                    "type": "string",
+                                    "format": "date-time"
+                                },
+                                "updated_at": {
+                                    "title": "\u041e\u0431\u043d\u043e\u0432\u043b\u0435\u043d\u0430",
+                                    "type": "string",
+                                    "format": "date-time"
+                                },
+                                "created_by_id": {
+                                    "title": "\u0421\u043e\u0437\u0434\u0430\u043b",
+                                    "type": "integer"
+                                },
+                                "updated_by_id": {
+                                    "title": "\u0418\u0437\u043c\u0435\u043d\u0438\u043b",
+                                    "type": "integer"
+                                },
+                                "deleted_at": {
+                                    "title": "\u0423\u0434\u0430\u043b\u0435\u043d\u0430 (\u043a\u043e\u0433\u0434\u0430)",
+                                    "type": "string",
+                                    "format": "date-time"
+                                },
+                                "deleted_by_id": {
+                                    "title": "\u0423\u0434\u0430\u043b\u0438\u043b",
+                                    "type": "integer"
+                                },
+                                "name": {
+                                    "title": "\u041d\u0430\u0437\u0432\u0430\u043d\u0438\u0435",
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    }
+                },
+                "actual_address": {
+                    "title": "\u0424\u0430\u043a\u0442\u0438\u0447\u0435\u0441\u043a\u0438\u0439 \u0430\u0434\u0440\u0435\u0441",
+                    "type": "object",
+                    "nested": {
+                        "id": {
+                            "title": "ID",
+                            "type": "integer"
+                        },
+                        "is_active": {
+                            "title": "\u0410\u043a\u0442\u0438\u0432\u043d\u0430",
+                            "type": "boolean"
+                        },
+                        "is_deleted": {
+                            "title": "\u0423\u0434\u0430\u043b\u0435\u043d\u0430",
+                            "type": "boolean"
+                        },
+                        "created_at": {
+                            "title": "\u0421\u043e\u0437\u0434\u0430\u043d\u0430",
+                            "type": "string",
+                            "format": "date-time"
+                        },
+                        "updated_at": {
+                            "title": "\u041e\u0431\u043d\u043e\u0432\u043b\u0435\u043d\u0430",
+                            "type": "string",
+                            "format": "date-time"
+                        },
+                        "created_by_id": {
+                            "title": "\u0421\u043e\u0437\u0434\u0430\u043b",
+                            "type": "integer"
+                        },
+                        "updated_by_id": {
+                            "title": "\u0418\u0437\u043c\u0435\u043d\u0438\u043b",
+                            "type": "integer"
+                        },
+                        "deleted_at": {
+                            "title": "\u0423\u0434\u0430\u043b\u0435\u043d\u0430 (\u043a\u043e\u0433\u0434\u0430)",
+                            "type": "string",
+                            "format": "date-time"
+                        },
+                        "deleted_by_id": {
+                            "title": "\u0423\u0434\u0430\u043b\u0438\u043b",
+                            "type": "integer"
+                        },
+                        "full_address": {
+                            "title": "\u041f\u043e\u043b\u043d\u044b\u0439 \u0430\u0434\u0440\u0435\u0441",
+                            "type": "string"
+                        },
+                        "region": {
+                            "title": "\u0420\u0435\u0433\u0438\u043e\u043d",
+                            "type": "string"
+                        },
+                        "city": {
+                            "title": "\u0413\u043e\u0440\u043e\u0434",
+                            "type": "string"
+                        },
+                        "street": {
+                            "title": "\u0423\u043b\u0438\u0446\u0430",
+                            "type": "string"
+                        },
+                        "house": {
+                            "title": "\u0414\u043e\u043c",
+                            "type": "string"
+                        },
+                        "building": {
+                            "title": "\u041a\u043e\u0440\u043f\u0443\u0441",
+                            "type": "string"
+                        },
+                        "structure": {
+                            "title": "\u0421\u0442\u0440\u043e\u0435\u043d\u0438\u0435",
+                            "type": "string"
+                        },
+                        "flat": {
+                            "title": "\u041a\u0432\u0430\u0440\u0442\u0438\u0440\u0430",
+                            "type": "string"
+                        },
+                        "fias_id": {
+                            "title": "FIAS ID",
+                            "type": "string"
+                        },
+                        "latitude": {
+                            "title": "\u0428\u0438\u0440\u043e\u0442\u0430",
+                            "type": "number"
+                        },
+                        "longitude": {
+                            "title": "\u0414\u043e\u043b\u0433\u043e\u0442\u0430",
+                            "type": "number"
+                        },
+                        "postal_code": {
+                            "title": "\u0418\u043d\u0434\u0435\u043a\u0441",
+                            "type": "string"
+                        },
+                        "delivery_zone_id": {
+                            "title": "\u0417\u043e\u043d\u0430 \u0434\u043e\u0441\u0442\u0430\u0432\u043a\u0438",
+                            "type": "select",
+                            "endpoint": "/api/v1/delivery-zones",
+                            "label_field": "name",
+                            "value_field": "id"
+                        },
+                        "delivery_zone": {
+                            "title": "\u0417\u043e\u043d\u0430 \u0434\u043e\u0441\u0442\u0430\u0432\u043a\u0438",
+                            "type": "object",
+                            "nested": {
+                                "id": {
+                                    "title": "ID",
+                                    "type": "integer"
+                                },
+                                "is_active": {
+                                    "title": "\u0410\u043a\u0442\u0438\u0432\u043d\u0430",
+                                    "type": "boolean"
+                                },
+                                "is_deleted": {
+                                    "title": "\u0423\u0434\u0430\u043b\u0435\u043d\u0430",
+                                    "type": "boolean"
+                                },
+                                "created_at": {
+                                    "title": "\u0421\u043e\u0437\u0434\u0430\u043d\u0430",
+                                    "type": "string",
+                                    "format": "date-time"
+                                },
+                                "updated_at": {
+                                    "title": "\u041e\u0431\u043d\u043e\u0432\u043b\u0435\u043d\u0430",
+                                    "type": "string",
+                                    "format": "date-time"
+                                },
+                                "created_by_id": {
+                                    "title": "\u0421\u043e\u0437\u0434\u0430\u043b",
+                                    "type": "integer"
+                                },
+                                "updated_by_id": {
+                                    "title": "\u0418\u0437\u043c\u0435\u043d\u0438\u043b",
+                                    "type": "integer"
+                                },
+                                "deleted_at": {
+                                    "title": "\u0423\u0434\u0430\u043b\u0435\u043d\u0430 (\u043a\u043e\u0433\u0434\u0430)",
+                                    "type": "string",
+                                    "format": "date-time"
+                                },
+                                "deleted_by_id": {
+                                    "title": "\u0423\u0434\u0430\u043b\u0438\u043b",
+                                    "type": "integer"
+                                },
+                                "name": {
+                                    "title": "\u041d\u0430\u0437\u0432\u0430\u043d\u0438\u0435",
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

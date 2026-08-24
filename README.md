@@ -34,3 +34,23 @@ logs/app.log
 logs/error.log
 logs/sql.log
 logs/emails/
+
+
+# FastAPI
+docker compose -f docker-compose.dev.yml logs fastapi -f
+
+# Celery
+docker compose -f docker-compose.dev.yml logs celery_worker -f
+
+# Фронтенд
+docker compose -f docker-compose.dev.yml logs frontend -f
+
+# PostgreSQL
+docker compose -f docker-compose.dev.yml logs postgres -f
+
+# Redis
+docker compose -f docker-compose.dev.yml logs redis -f
+
+
+
+docker compose -f docker-compose.dev.yml logs -f
