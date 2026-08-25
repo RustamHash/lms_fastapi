@@ -31,6 +31,7 @@
 `event_types.py`:
 
 - `import.completed` / `import.failed`
+- `inbound_order.accepted_from_exchange` / `outbound_order.accepted_from_exchange`
 - `document.created` / `document.status_changed`
 - `delivery_order.*`, `route.assigned`
 - `task.created` / `task.completed`

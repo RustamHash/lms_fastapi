@@ -1,8 +1,8 @@
 # integration — обмен с поклажедателем
 
-Транспорт и перевод: откуда взять файл и как разобрать. **Не** создаёт заказы и документы — это `orders.InboundExchangeService.accept`.
+Транспорт и перевод: откуда взять файл и как разобрать. **Не** создаёт заказы и документы — это `orders.InboundExchangeService.accept` / `OutboundExchangeService.accept`.
 
-Почта, ЭДО, другая система — те же слоты позже (другой транспорт / адаптер). Сейчас живой канал: FTP + XML Зиландии (PORDER).
+Почта, ЭДО, другая система — те же слоты позже (другой транспорт / адаптер). Сейчас живой канал: FTP + XML Зиландии (PORDER, ORDER).
 
 Код: `app/integration/`. HTTP: `app/api/v1/integration/`. Фоновая задача: `app.tasks.run_import` → `ImportRunService` (Celery, очередь `imports`).
 
@@ -52,7 +52,14 @@
 5. Успех или пропуск дубликата: файл `porder_*` снимается с FTP. Ошибка — файл остаётся.
 6. На файл — свой `UnitOfWork`. Сервис заказов не коммитит.
 
-ORDER с обмена адаптер отклоняет («не принимается»). Ответный XML — подписка на событие заказа, этап 4 (`ExportService` ещё нет).
+## Поток импорта (ORDER)
+
+1–2. Как у PORDER; фильтр файлов `order_*`.
+3. `ZLNAdapter` → `OutboundExchangeMessage`. Обязательны `DOC_NO`, `LOC`, `CUSTOMER` (ID+NAME), `DELIV_ADDR`, `LN`. `ITEMS` / `SUM` / `COLLECT` игнорируются. `DELIV=1` → доставка, иначе самовывоз. Без `DELIV_ADDR` сообщение не собирается.
+4. `OutboundExchangeService.accept`: товары только из справочника (не создаём); адрес `get_or_create`; клиент `(code, delivery_address_id)`; без товара/адреса/клиента/LOC→VW — заказ не создаём, файл остаётся. Успех → событие `outbound_order.accepted_from_exchange` (`needs_delivery` в payload) для будущих delivery + ordrsp.
+5. Успех или дубликат: `order_*` снимается с FTP.
+
+Ответный XML (ordrsp/desadv) — подписчик на событие, этап 4 (`ExportService` ещё нет).
 
 ---
 

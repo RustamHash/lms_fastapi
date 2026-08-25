@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiClient } from '../../../lib/apiClient'
@@ -7,6 +7,7 @@ import { useTableSettings, type TablePrefs } from '../../../hooks/useTableSettin
 import { useListPresets } from '../../../hooks/useListPresets'
 import { useEntityFields } from '../../entity-fields/useEntityFields'
 import { getNestedValue } from '../../flattenFields'
+import { matchDateTimeColumnFilter } from '../../lists/dateTimeFilterCodec'
 import type { ListPageConfig, ColumnConfig } from '../types'
 
 type SortState = {
@@ -81,6 +82,65 @@ export function useEntityList<Row extends { id: number }>(config: ListPageConfig
     tableSettings.prefs?.quick_filters ?? []
   )
   const [selected, setSelected] = useState<Set<number>>(() => new Set())
+  const hydratedPrefsRef = useRef(false)
+
+  const applyFilterState = useCallback((next: Partial<TablePrefs>) => {
+    if (next.filters !== undefined) setFilters(next.filters)
+    if (next.exclude_filters !== undefined) setExcludeFilters(next.exclude_filters)
+    if (next.quick_filters !== undefined) setQuickFilters(next.quick_filters)
+    if (next.sort !== undefined) {
+      setSort(
+        next.sort?.column
+          ? { col: next.sort.column, dir: next.sort.direction }
+          : { col: null, dir: 'asc' },
+      )
+    }
+  }, [])
+
+  useEffect(() => {
+    if (hydratedPrefsRef.current || tableSettings.loading || !tableSettings.prefs) return
+    hydratedPrefsRef.current = true
+    applyFilterState(tableSettings.prefs)
+  }, [tableSettings.loading, tableSettings.prefs, applyFilterState])
+
+  const setFilter = useCallback((cid: string, value: string) => {
+    setFilters((prev) => {
+      if (value === '') {
+        const { [cid]: _removed, ...rest } = prev
+        void _removed
+        return rest
+      }
+      return { ...prev, [cid]: value }
+    })
+  }, [])
+
+  const setExcludeFilter = useCallback((cid: string, value: string) => {
+    setExcludeFilters((prev) => {
+      const cur = prev[cid] ?? []
+      if (cur.includes(value)) return prev
+      return { ...prev, [cid]: [...cur, value] }
+    })
+  }, [])
+
+  const removeExcludeFilter = useCallback((cid: string, value: string) => {
+    setExcludeFilters((prev) => {
+      const cur = prev[cid] ?? []
+      return { ...prev, [cid]: cur.filter((v) => v !== value) }
+    })
+  }, [])
+
+  const resetColumnFilter = useCallback((cid: string) => {
+    setFilters((prev) => {
+      const { [cid]: _removed, ...rest } = prev
+      void _removed
+      return rest
+    })
+    setExcludeFilters((prev) => {
+      const { [cid]: _removed, ...rest } = prev
+      void _removed
+      return rest
+    })
+  }, [])
   
   // Автосохранение настроек при изменении
   const currentPrefs: TablePrefs = useMemo(() => ({
@@ -147,7 +207,7 @@ export function useEntityList<Row extends { id: number }>(config: ListPageConfig
     }
     
     return result
-  }, [rows, filters, excludeFilters, sort, config.columns])
+  }, [rows, filters, excludeFilters, sort, effectiveColumns])
   
   const selectedCount = selected.size
   const allSelected = filtered.length > 0 && filtered.every((row) => selected.has(row.id))
@@ -243,9 +303,14 @@ export function useEntityList<Row extends { id: number }>(config: ListPageConfig
     onSortHeaderClick,
     filters,
     setFilters,
+    setFilter,
     excludeFilters,
     setExcludeFilters,
+    setExcludeFilter,
+    removeExcludeFilter,
+    resetColumnFilter,
     resetFilters,
+    applyFilterState,
     hasActiveFilters,
     selected,
     selectedCount,
@@ -309,15 +374,26 @@ function compareValues(a: unknown, b: unknown, type: string): number {
   }
 }
 
+function cellRawValue(row: Record<string, unknown>, column: ColumnConfig): unknown {
+  return column.id.includes('.') ? getNestedValue(row, column.id) : row[column.id]
+}
+
 function filterValue(row: Record<string, unknown>, column: ColumnConfig, raw: string): boolean {
-  const value = formatCellValue(row, column)
-  
   if (raw === '') return true
+
+  if (column.type === 'date' || column.type === 'datetime') {
+    const rawValue = cellRawValue(row, column)
+    const iso = rawValue == null || rawValue === '' ? null : String(rawValue)
+    return matchDateTimeColumnFilter(iso, raw, (isoVal) => formatDt(isoVal ?? ''))
+  }
+
   if (column.type === 'bool' || column.type === 'select') {
-    const actual = column.type === 'bool' ? String(Boolean(row[column.id])) : String(row[column.id] ?? '')
+    const cell = cellRawValue(row, column)
+    const actual = column.type === 'bool' ? String(Boolean(cell)) : String(cell ?? '')
     return actual === raw
   }
-  
+
+  const value = formatCellValue(row, column)
   return value.toLowerCase().includes(raw.toLowerCase())
 }
 

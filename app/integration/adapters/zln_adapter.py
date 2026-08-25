@@ -9,10 +9,12 @@ from decimal import Decimal
 
 from app.integration.adapters.base import BaseAdapter
 from app.orders.exchange_messages import (
+    ExchangeCustomer,
     ExchangeLine,
     ExchangeProduct,
     ExchangeVendor,
     InboundExchangeMessage,
+    OutboundExchangeMessage,
 )
 
 
@@ -173,9 +175,56 @@ class ZLNAdapter(BaseAdapter):
             lines=tuple(lines),
         ), []
 
+    def _parse_customer(
+        self, root, errors: list[str], doc_no: str
+    ) -> ExchangeCustomer | None:
+        where = f"{doc_no or 'ORDER'}: CUSTOMER"
+        customer_el = root.find("CUSTOMER")
+        if customer_el is None:
+            errors.append(f"{where}: нет блока CUSTOMER")
+            return None
+        code = self._require_text(customer_el, "ID", errors, where)
+        name = self._require_text(customer_el, "NAME", errors, where)
+        if not code or not name:
+            return None
+        use_edo = self._optional_text(customer_el, "USE_EDO")
+        return ExchangeCustomer(
+            code=code,
+            name=name,
+            legal_name=self._optional_text(customer_el, "LEGAL_NAME"),
+            inn=self._optional_text(customer_el, "INN"),
+            kpp=self._optional_text(customer_el, "KPP"),
+            is_edo=use_edo == "1",
+        )
+
     def _parse_order(self, root):
-        """Исходящий ORDER — не этот контур."""
-        doc_no = self._optional_text(root, "DOC_NO") or "ORDER"
-        return None, [
-            f"{doc_no}: исходящий ORDER пока не принимается с обмена"
-        ]
+        """Парсинг исходящего заказа (ORDER). ITEMS/SUM/COLLECT игнорируются."""
+        errors: list[str] = []
+
+        doc_no = self._require_text(root, "DOC_NO", errors, "ORDER")
+        loc = self._require_text(root, "LOC", errors, "ORDER")
+        doc_date = self._parse_date(self._optional_text(root, "DOC_DATE"))
+        delivery_date = self._parse_date(self._optional_text(root, "DELIV_DATE"))
+        delivery_address = self._require_text(root, "DELIV_ADDR", errors, "ORDER")
+
+        customer = self._parse_customer(root, errors, doc_no)
+        lines = self._parse_lines(root, errors, doc_no or "ORDER")
+
+        if errors or customer is None:
+            return None, errors
+
+        needs_delivery = self._optional_text(root, "DELIV") == "1"
+
+        return OutboundExchangeMessage(
+            number=doc_no,
+            document_date=doc_date,
+            delivery_date=delivery_date,
+            loc_code=loc,
+            customer=customer,
+            delivery_address_raw=delivery_address,
+            needs_delivery=needs_delivery,
+            lines=tuple(lines),
+            consignee_name=self._optional_text(root, "CONSIG"),
+            delivery_contact=self._optional_text(root, "CONSIG_CONT"),
+            address_comment=self._optional_text(root, "ADDR_COM"),
+        ), []

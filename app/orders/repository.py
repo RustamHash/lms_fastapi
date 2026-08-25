@@ -130,6 +130,15 @@ class OutboundOrderRepository:
             )
         return list(await self._s.scalars(stmt))
 
+    async def get_by_depositor_number(
+        self, depositor_id: int, number: str
+    ) -> OutboundOrder | None:
+        stmt = select(OutboundOrder).where(
+            OutboundOrder.depositor_id == depositor_id,
+            OutboundOrder.number == number,
+        )
+        return await self._s.scalar(stmt)
+
     async def create(self, **kwargs) -> OutboundOrder:
         row = OutboundOrder(**kwargs)
         self._s.add(row)

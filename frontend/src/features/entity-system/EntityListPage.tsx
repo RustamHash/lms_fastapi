@@ -9,10 +9,11 @@ import { QuickFiltersBar } from '../../components/QuickFiltersBar'
 import { ListSettingsDialog } from '../../components/ListSettingsDialog'
 import { SavePresetDialog } from '../../components/SavePresetDialog'
 import { useEntityList } from './hooks/useEntityList'
-import { useEntityFilters } from './hooks/useEntityFilters'
 import { useEntityContextMenu } from './hooks/useEntityContextMenu'
 import { exportRowsToCsv } from './exportCsv'
 import { listCreatePath, listDetailPath } from './createForms'
+import { encodeDateTimeFilterFromCellValue } from '../lists/dateTimeFilterCodec'
+import { getNestedValue } from '../flattenFields'
 import type { ListPageConfig } from './types'
 import type { ColumnFilterDef } from '../../components/ListTableShell'
 
@@ -40,7 +41,6 @@ export function EntityListPage<Row extends { id: number }>({
   const location = useLocation()
   const { notify } = useAppNotice()
   const entity = useEntityList(config)
-  const filtersHook = useEntityFilters()
   const ctxMenuHook = useEntityContextMenu<Row>()
   
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -100,11 +100,18 @@ export function EntityListPage<Row extends { id: number }>({
   }, [config.columns, entity.entityFields.allFields])
 
   function filterValueFromRow(row: Row, colId: string): string {
+    const rec = row as unknown as Record<string, unknown>
     const column = config.columns?.find((c) => c.id === colId)
     if (!column) return entity.cellText(row, colId)
-    
+
     if (column.type === 'bool') {
-      return (row as unknown as Record<string, unknown>)[colId] ? 'true' : 'false'
+      const raw = colId.includes('.') ? getNestedValue(rec, colId) : rec[colId]
+      return raw ? 'true' : 'false'
+    }
+    if (column.type === 'date' || column.type === 'datetime') {
+      const raw = colId.includes('.') ? getNestedValue(rec, colId) : rec[colId]
+      const iso = raw == null || raw === '' ? null : String(raw)
+      return encodeDateTimeFilterFromCellValue(iso, (v) => (v ? entity.cellText(row, colId) : '—'))
     }
     return entity.cellText(row, colId)
   }
@@ -172,11 +179,11 @@ export function EntityListPage<Row extends { id: number }>({
       ) : null}
       
       <QuickFiltersBar
-        quickFilters={filtersHook.quickFilters}
-        filters={filtersHook.filters}
+        quickFilters={entity.quickFilters}
+        filters={entity.filters}
         columnFilters={columnFilters as Record<string, ColumnFilterDef>}
         columnLabel={(cid) => columnLabels[cid] ?? cid}
-        onFilterChange={filtersHook.setFilter}
+        onFilterChange={entity.setFilter}
       />
 
       <ListTableShell<Row>
@@ -186,14 +193,14 @@ export function EntityListPage<Row extends { id: number }>({
               order: entity.prefs.order,
               hidden: entity.prefs.hidden,
               widths: entity.prefs.widths,
-              filters: filtersHook.filters,
-              exclude_filters: filtersHook.excludeFilters,
+              filters: entity.filters,
+              exclude_filters: entity.excludeFilters,
               sort: entity.sortCol ? { column: entity.sortCol, direction: entity.sortDir } : null,
-              quick_filters: filtersHook.quickFilters,
+              quick_filters: entity.quickFilters,
             }}
             columnLabel={(cid) => columnLabels[cid] ?? cid}
-            onRemoveFilter={(cid) => filtersHook.setFilter(cid, '')}
-            onRemoveExclude={filtersHook.removeExcludeFilter}
+            onRemoveFilter={(cid) => entity.setFilter(cid, '')}
+            onRemoveExclude={entity.removeExcludeFilter}
           />
         }
         onRefresh={entity.reload}
@@ -201,9 +208,9 @@ export function EntityListPage<Row extends { id: number }>({
         canCreate={canCreate}
         onExportCsv={handleExportCsv}
         onOpenView={() => setSettingsOpen(true)}
-        onResetFilters={filtersHook.resetFilters}
+        onResetFilters={entity.resetFilters}
         canOpenView={!entity.prefs.loading}
-        hasActiveFilters={filtersHook.hasActiveFilters}
+        hasActiveFilters={entity.hasActiveFilters}
         onNotify={notify}
         viewDialogOpen={false}
         viewDialogTitle=""
@@ -224,9 +231,9 @@ export function EntityListPage<Row extends { id: number }>({
         sortDir={entity.sortDir}
         onSortHeaderClick={entity.onSortHeaderClick}
         columnFilters={columnFilters as Record<string, ColumnFilterDef>}
-        filters={filtersHook.filters}
-        excludeFilters={filtersHook.excludeFilters}
-        onFilterChange={filtersHook.setFilter}
+        filters={entity.filters}
+        excludeFilters={entity.excludeFilters}
+        onFilterChange={entity.setFilter}
         loading={entity.loading}
         rows={entity.rows}
         allSelected={entity.allSelected}
@@ -265,16 +272,15 @@ export function EntityListPage<Row extends { id: number }>({
             order: entity.prefs.order,
             hidden: entity.prefs.hidden,
             widths: entity.prefs.widths,
-            filters: filtersHook.filters,
-            exclude_filters: filtersHook.excludeFilters,
+            filters: entity.filters,
+            exclude_filters: entity.excludeFilters,
             sort: entity.sortCol ? { column: entity.sortCol, direction: entity.sortDir } : null,
-            quick_filters: filtersHook.quickFilters,
+            quick_filters: entity.quickFilters,
           }}
           presets={entity.listPresets.presets}
           columnLabels={columnLabels}
           availableFields={entity.entityFields.allFields}
           onApplyPrefs={(prefs) => {
-            // Сохранить новые настройки
             void entity.prefs.savePrefs({
               order: prefs.order,
               hidden: prefs.hidden,
@@ -284,13 +290,15 @@ export function EntityListPage<Row extends { id: number }>({
               sort: prefs.sort,
               quick_filters: prefs.quick_filters,
             })
-            
-            // Обновить локальное состояние немедленно
             entity.prefs.setOrder(prefs.order)
             entity.prefs.setHidden(prefs.hidden)
+            entity.applyFilterState(prefs)
           }}
           onApplyPreset={async (presetId) => {
-            await entity.listPresets.applyPreset(presetId)
+            const prefs = await entity.listPresets.applyPreset(presetId)
+            entity.prefs.setOrder(prefs.order)
+            entity.prefs.setHidden(prefs.hidden)
+            entity.applyFilterState(prefs)
           }}
           onUpdatePreset={entity.listPresets.updatePreset}
           onDeletePreset={entity.listPresets.deletePreset}
@@ -308,10 +316,10 @@ export function EntityListPage<Row extends { id: number }>({
             order: entity.prefs.order,
             hidden: entity.prefs.hidden,
             widths: entity.prefs.widths,
-            filters: filtersHook.filters,
-            exclude_filters: filtersHook.excludeFilters,
+            filters: entity.filters,
+            exclude_filters: entity.excludeFilters,
             sort: entity.sortCol ? { column: entity.sortCol, direction: entity.sortDir } : null,
-            quick_filters: filtersHook.quickFilters,
+            quick_filters: entity.quickFilters,
           }}
           onSave={async (name, config, isDefault) => {
             await entity.listPresets.createPreset(name, config, isDefault)
@@ -349,25 +357,25 @@ export function EntityListPage<Row extends { id: number }>({
           }}
           onFilterByValue={() => {
             const val = filterValueFromRow(ctx.row, ctx.colId)
-            filtersHook.setFilter(ctx.colId, val)
+            entity.setFilter(ctx.colId, val)
             ctxMenuHook.closeContextMenu()
           }}
           onExcludeValue={() => {
             const val = filterValueFromRow(ctx.row, ctx.colId)
-            filtersHook.setExcludeFilter(ctx.colId, val)
+            entity.setExcludeFilter(ctx.colId, val)
             ctxMenuHook.closeContextMenu()
           }}
           canResetColumn={
-            Boolean(filtersHook.filters[ctx.colId]) ||
-            (filtersHook.excludeFilters[ctx.colId]?.length ?? 0) > 0
+            Boolean(entity.filters[ctx.colId]) ||
+            (entity.excludeFilters[ctx.colId]?.length ?? 0) > 0
           }
           onResetColumnFilter={() => {
-            filtersHook.resetColumnFilter(ctx.colId)
+            entity.resetColumnFilter(ctx.colId)
             ctxMenuHook.closeContextMenu()
           }}
-          canResetAll={filtersHook.hasActiveFilters}
+          canResetAll={entity.hasActiveFilters}
           onResetAllFilters={() => {
-            filtersHook.resetFilters()
+            entity.resetFilters()
             ctxMenuHook.closeContextMenu()
           }}
           onClose={ctxMenuHook.closeContextMenu}

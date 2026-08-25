@@ -17,7 +17,7 @@ Dev: Vite `:5173` (HMR). FastAPI `:8080` в `docker-compose.dev.yml` тоже о
 | `lib/token.ts` | `sessionStorage` ключ `sslogistics_access_token` |
 | `hooks/usePermissions.ts` | `canView` / `canCreate` / … |
 | `features/{entity}/config.ts` | `ListPageConfig`: `apiUrl`, `listPath`, колонки |
-| `features/entity-system/` | `EntityListPage`, хуки списка/фильтров/пресетов; `createForms.ts` — поля POST |
+| `features/entity-system/` | `EntityListPage`; `useEntityList` держит строки, фильтры и сортировку; пресеты; `createForms.ts` — поля POST |
 | `features/entity-fields/` | `GET /api/v1/entities/{key}/fields` |
 | `components/GenericDetailPage.tsx` | простая карточка по id |
 | `components/GenericCreatePage.tsx` | форма создания из `listPath` + `createForms` |

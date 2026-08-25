@@ -15,7 +15,9 @@ from app.integration.adapters import ZLNAdapter
 from app.integration.models import IntegrationLog
 from app.integration.repository import IntegrationLogRepository, IntegrationProfileRepository
 from app.integration.services.ftp_service import FTPService
+from app.orders.exchange_messages import InboundExchangeMessage, OutboundExchangeMessage
 from app.orders.services.inbound_exchange_service import inbound_exchange_from_session
+from app.orders.services.outbound_exchange_service import outbound_exchange_from_session
 
 logger = logging.getLogger(__name__)
 
@@ -247,7 +249,7 @@ class ImportRunService:
         filename: str,
         local_path: str,
     ) -> bool:
-        """Вернуть True, если файл можно снять с FTP (успех или пропуск PORDER)."""
+        """Вернуть True, если файл можно снять с FTP (успех или пропуск)."""
         log = await self._require_log(session, task_id)
         message, parse_errors = await adapter.parse(local_path)
 
@@ -268,36 +270,44 @@ class ImportRunService:
             log.messages = (log.messages or []) + [empty]
             return False
 
-        exchange = inbound_exchange_from_session(session)
         try:
-            result = await exchange.accept(
-                depositor_id=profile.depositor_id,
-                message=message,
-                user_id=user_id,
-            )
+            if isinstance(message, OutboundExchangeMessage):
+                result = await outbound_exchange_from_session(session).accept(
+                    depositor_id=profile.depositor_id,
+                    message=message,
+                    user_id=user_id,
+                )
+            elif isinstance(message, InboundExchangeMessage):
+                result = await inbound_exchange_from_session(session).accept(
+                    depositor_id=profile.depositor_id,
+                    message=message,
+                    user_id=user_id,
+                )
+            else:
+                raise BadRequestError(f"Неизвестный тип сообщения: {type(message)}")
         except BadRequestError as e:
             await session.rollback()
             log = await self._require_log(session, task_id)
             log.processed_rows = (log.processed_rows or 0) + 1
             log.error_rows = (log.error_rows or 0) + 1
-            detail = str(e.detail)
+            detail = str(e.detail) if getattr(e, "detail", None) else str(e)
             log.errors = (log.errors or []) + [detail]
             log.messages = (log.messages or []) + [f"Файл {filename}: {detail}"]
             return False
 
         log.processed_rows = (log.processed_rows or 0) + 1
-        is_porder_file = filename.lower().startswith("porder_")
+        can_remove = filename.lower().startswith(("porder_", "order_"))
         if result.skipped:
             log.messages = (log.messages or []) + [
                 f"Файл {filename}: заявка {message.number} уже есть, пропуск"
             ]
-            return is_porder_file
+            return can_remove
 
         log.success_rows = (log.success_rows or 0) + 1
         log.messages = (log.messages or []) + [
             f"Файл {filename}: заявка {message.number} создана"
         ]
-        return is_porder_file
+        return can_remove
 
     async def _emit(
         self,

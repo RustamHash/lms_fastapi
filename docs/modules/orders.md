@@ -36,7 +36,9 @@ Unique: `(depositor_id, number)` на inbound и outbound.
 
 `InboundExchangeService.accept` — второй вход: заявка с обмена, без UI-скоупа (поклажедатель = профиль интеграции). Обязательны поставщик (`VENDOR` с `ID` и `NAME`) и код склада (`LOC` → `loc_code`, lookup виртуального склада). Без LOC сообщение не собирается; без VW — ошибка, заказ не создаётся. `order_number` с обмена пока пустой. Дубликат номера заявки — пропуск. Событие `inbound_order.accepted_from_exchange`. Всегда создаётся складской документ прихода (receipt).
 
-Кнопка импорта на списках заявок запускает обмен (см. [integration.md](integration.md)), не CRUD этого модуля. С исходящих XML ORDER пока не принимается — пошагово: [outbound-import.md](../flows/outbound-import.md).
+`OutboundExchangeService.accept` — ORDER с обмена: клиент+`DELIV_ADDR`, товары только существующие, `needs_delivery` из `DELIV`. Событие `outbound_order.accepted_from_exchange` (хук на delivery и ordrsp). Складской shipment-документ пока не создаётся (FK `outbound_order_id` на Document ещё нет).
+
+Кнопка импорта на списках заявок запускает обмен (см. [integration.md](integration.md)), не CRUD этого модуля. Пошагово ORDER: [outbound-import.md](../flows/outbound-import.md).
 
 Складской воркфлоу не в этом модуле: `ReceivingService.create_from_inbound` и `PickingService.create_from_outbound` (см. [warehouse.md](warehouse.md)). Заказ меняет статус (`task_created` → `in_progress` → `completed`); у inbound при недогрузе — `has_shortage`.
 
@@ -62,7 +64,7 @@ RBAC entity: `orders`.
 - **warehouse** — `loc_code` (LOC) и `warehouse_id`, товар в строках.
 - **documents** — `InboundExchangeService` при accept всегда создаёт receipt с `inbound_order_id` (LOC обязателен).
 - **delivery** — `DeliveryOrder.outbound_order_id`.
-- **integration** — только доставляет `InboundExchangeMessage`; не пишет таблицы заказов.
+- **integration** — доставляет `InboundExchangeMessage` / `OutboundExchangeMessage`; не пишет таблицы заказов.
 
 ---
 
