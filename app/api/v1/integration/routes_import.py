@@ -61,6 +61,8 @@ async def start_import(
         current_step="В очереди",
         messages=["Задача поставлена в очередь, ждём воркер"],
     )
+    # До send_task и ответа клиенту: иначе GET /status гоняется с commit UoW после yield.
+    await session.commit()
 
     # Отправляем задачу в Celery
     from app.tasks import celery_app

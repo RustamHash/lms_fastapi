@@ -45,7 +45,7 @@
 
 ## Поток импорта (PORDER)
 
-1. HTTP создаёт лог и ставит Celery (`POST /integrations/import`).
+1. HTTP создаёт лог, **сразу `commit`**, затем Celery (`POST /integrations/import`) — иначе ранний `GET /status` ловит 404 до commit UoW.
 2. `ImportRunService`: активные профили, FTP, файлы из `in_path`.
 3. `ZLNAdapter` → `InboundExchangeMessage` (контракт **orders**, без тегов XML). Нет `DOC_NO`, `LOC`, блока `VENDOR` / `VENDOR/ID` / `VENDOR/NAME`, `ITEMS` или `LN` — сообщение не собирается. Номера заказа в PORDER нет — `order_number` на заявке пустой.
 4. `InboundExchangeService.accept(depositor_id=профиль)` — поставщик, заявка, всегда receipt (LOC обязателен).
