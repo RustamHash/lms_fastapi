@@ -55,10 +55,18 @@ jobs:
           
           echo "Ожидание готовности..."
           sleep 10
-          
+          echo "Ждём Postgres..."
+          for i in $(seq 1 30); do
+            status=$(docker inspect --format='{{.State.Health.Status}}' lms_postgres 2>/dev/null || echo "missing")
+            if [ "$status" = "healthy" ]; then
+              break
+            fi
+            sleep 2
+          done
+          echo "Миграции..."
+          docker compose exec -T fastapi alembic upgrade head
           echo "Проверка контейнеров..."
           docker compose ps
-          
           echo "Проверка статусов..."
           for container in lms_postgres lms_redis lms_fastapi lms_celery_worker lms_flower; do
             status=$(docker inspect --format='{{.State.Status}}' $container 2>/dev/null || echo "not_found")
