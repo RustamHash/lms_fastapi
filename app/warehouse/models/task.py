@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from sqlalchemy import ForeignKey, Integer, String
+from decimal import Decimal
+
+from sqlalchemy import Boolean, ForeignKey, Numeric, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.infrastructure.orm_base import Base
@@ -17,6 +19,12 @@ class Task(Base):
     task_type: Mapped[str] = mapped_column(String(20), nullable=False, comment="Тип задания")
     document_id: Mapped[int | None] = mapped_column(
         ForeignKey("documents_document.id"), nullable=True, comment="Документ"
+    )
+    inbound_order_id: Mapped[int | None] = mapped_column(
+        ForeignKey("orders_inbound.id"), nullable=True, comment="Входящий заказ"
+    )
+    outbound_order_id: Mapped[int | None] = mapped_column(
+        ForeignKey("orders_outbound.id"), nullable=True, comment="Исходящий заказ"
     )
     assignee_id: Mapped[int | None] = mapped_column(
         ForeignKey("accounts_user.id"), nullable=True, comment="Исполнитель"
@@ -40,8 +48,18 @@ class TaskLine(Base):
     document_line_id: Mapped[int | None] = mapped_column(
         ForeignKey("documents_document_line.id"), nullable=True, comment="Строка документа"
     )
-    plan_qty: Mapped[int] = mapped_column(Integer, default=0, comment="План")
-    fact_qty: Mapped[int] = mapped_column(Integer, default=0, comment="Факт")
+    inbound_order_line_id: Mapped[int | None] = mapped_column(
+        ForeignKey("orders_inbound_line.id"), nullable=True, comment="Строка входящего заказа"
+    )
+    outbound_order_line_id: Mapped[int | None] = mapped_column(
+        ForeignKey("orders_outbound_line.id"), nullable=True, comment="Строка исходящего заказа"
+    )
+    plan_qty: Mapped[Decimal] = mapped_column(
+        Numeric(20, 3), default=Decimal("0"), comment="План"
+    )
+    fact_qty: Mapped[Decimal] = mapped_column(
+        Numeric(20, 3), default=Decimal("0"), comment="Факт"
+    )
     from_location_id: Mapped[int | None] = mapped_column(
         ForeignKey("warehouse_location.id"), nullable=True, comment="Откуда"
     )
@@ -53,6 +71,9 @@ class TaskLine(Base):
     )
     batch_id: Mapped[int | None] = mapped_column(
         ForeignKey("warehouse_batch.id"), nullable=True, comment="Партия"
+    )
+    reserved: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False, comment="Резерв на остатке"
     )
 
     task: Mapped["Task"] = relationship(back_populates="lines")

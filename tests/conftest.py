@@ -161,4 +161,6 @@ async def stock_ctx(session: AsyncSession) -> dict:
         "batch_id": batch.id,
         "lpn_id": lpn_a.id,
         "lpn_b_id": lpn_b.id,
+        "warehouse_id": warehouse.id,
+        "depositor_id": depositor.id,
     }

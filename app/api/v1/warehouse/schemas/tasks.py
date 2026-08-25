@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from decimal import Decimal
+
 from pydantic import BaseModel, Field
 
 from app.api.v1.base_schemas import BaseRead
@@ -15,6 +17,8 @@ class TaskRead(BaseRead):
         title="Документ",
         json_schema_extra={"ui_type": "select", "endpoint": "/api/v1/documents"},
     )
+    inbound_order_id: int | None = Field(None, title="Входящий заказ")
+    outbound_order_id: int | None = Field(None, title="Исходящий заказ")
     assignee_id: int | None = Field(None, title="Исполнитель")
     status: str = Field(TaskStatus.NEW.value, title="Статус")
 
@@ -36,7 +40,7 @@ class TaskLineAdd(BaseModel):
         title="Товар",
         json_schema_extra={"ui_type": "select", "endpoint": "/api/v1/warehouse/products"},
     )
-    plan_qty: int = Field(0, title="План")
+    plan_qty: Decimal = Field(Decimal("0"), title="План")
     from_location_id: int | None = Field(None, title="Откуда")
     to_location_id: int | None = Field(None, title="Куда")
     lpn_id: int | None = Field(None, title="LPN")
@@ -69,7 +73,7 @@ class TaskComplete(BaseModel):
 
 
 class TaskLineComplete(BaseModel):
-    fact_qty: int = Field(..., title="Факт")
+    fact_qty: Decimal = Field(..., title="Факт")
     location_id: int | None = Field(None, title="Ячейка")
     to_location_id: int | None = Field(None, title="Куда")
     batch_id: int | None = Field(None, title="Партия")

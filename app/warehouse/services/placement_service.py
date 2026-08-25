@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
-from decimal import Decimal
-
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.warehouse.models import Location, ProductLocation, StockBalance
+from app.warehouse.models import Location, ProductLocation, Row, StockBalance, Zone
 
 
 class PlacementService:
@@ -106,21 +104,27 @@ class PlacementService:
     async def _find_storage_location(self, warehouse_id: int) -> Location | None:
         stmt = (
             select(Location)
-            .join(Location.row)
-            .join(Location.row.zone)
+            .join(Row, Location.row_id == Row.id)
+            .join(Zone, Row.zone_id == Zone.id)
             .where(
-                Location.row.zone.warehouse_id == warehouse_id,
-                Location.row.zone.zone_type == "storage",
+                Zone.warehouse_id == warehouse_id,
+                Zone.zone_type == "storage",
             )
             .order_by(Location.id)
         )
         locations = await self._s.scalars(stmt)
 
         for location in locations:
-            balance_stmt = select(StockBalance).where(
-                StockBalance.location_id == location.id,
+            balance_stmt = (
+                select(StockBalance.id)
+                .where(
+                    StockBalance.location_id == location.id,
+                    StockBalance.quantity > 0,
+                    StockBalance.is_deleted.is_(False),
+                )
+                .limit(1)
             )
-            has_stock = await self._s.scalar(balance_stmt.limit(1))
+            has_stock = await self._s.scalar(balance_stmt)
             if not has_stock:
                 return location
 

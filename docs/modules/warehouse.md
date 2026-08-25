@@ -62,16 +62,31 @@ RBAC: `stock`.
 
 ---
 
-## Задания
+## Задания и воркфлоу
 
-`Task` + `TaskLine`: `task_type`, связь с `documents_document`, исполнитель, план/факт qty, from/to location, LPN, batch.
+`Task` + `TaskLine`: `task_type` (`receiving` / `picking`; movement и inventory — этап 6), связь с документом и/или заказом (`inbound_order_id` / `outbound_order_id`), исполнитель, `plan_qty`/`fact_qty` (`Numeric(20,3)`), from/to location, LPN, batch, флаг `reserved` на строке отбора.
 
-API: `/warehouse/tasks`, `/tasks/list`, `POST /tasks/from-document`, `start`, `complete`.  
-RBAC: `tasks` (`execute` / `complete` на переходы).
+Основной путь — не generic CRUD:
 
-Сейчас задания ещё близки к generic CRUD. Цель этапа 3: приёмка и FEFO-отбор как воркфлоу из inbound/outbound, не ручное создание Task с UI как основной путь. `plan_qty`/`fact_qty` сейчас `Integer`, остаток — `Numeric`.
+| Сервис | Откуда | Что делает |
+|--------|--------|------------|
+| `ReceivingService` | inbound | задание приёмки, факт (партия обязательна, LPN создаётся если не передан), расхождение план/факт (`ReceivingDiscrepancy`), закрытие (недогруз — с `confirm_shortage`), сторно движения через `remove_stock` |
+| `PickingService` | outbound | задание отбора, FEFO-план (`Batch.expiration_date`, nulls last, по складу ячейки), резерв, отбор = `unreserve` + `remove_stock`, закрытие |
 
-`PlacementService` — размещение; либо встроить в приёмку, либо убрать, если мёртвый.
+`PlacementService` — запасной поиск ячейки в `receive_line`, если у строки ещё нет `to_location_id`. Создание из inbound **требует** `receiving_location_id`.
+
+API воркфлоу (RBAC entity `tasks`):
+
+- `POST /warehouse/receiving/from-inbound` `{inbound_order_id, receiving_location_id}`
+- `POST /warehouse/receiving/lines/{id}/receive`
+- `POST /warehouse/receiving/{task_id}/complete` `{confirm_shortage}`
+- `POST /warehouse/receiving/movements/{id}/cancel`
+- `POST /warehouse/picking/from-outbound` `{outbound_order_id}`
+- `POST /warehouse/picking/{task_id}/plan`
+- `POST /warehouse/picking/lines/{id}/pick`
+- `POST /warehouse/picking/{task_id}/complete`
+
+Generic `/warehouse/tasks` (CRUD, `from-document`, `complete_line`) ещё есть; для приёмки и отбора это не основной путь. Новых экранов фронта нет.
 
 ---
 
@@ -79,10 +94,10 @@ RBAC: `tasks` (`execute` / `complete` на переходы).
 
 - **parties** — depositor на товаре и виртуальном складе.
 - **documents** — задание и движение могут ссылаться на документ.
-- **orders** — в целевом потоке заказ порождает задание; сейчас связь ещё слабая.
-- **accounts** — `assignee_id` на задании.
+- **orders** — inbound порождает задание приёмки, outbound — отбор (FEFO).
+- **accounts** — `assignee_id` на задании; `moved_by_id` на движении.
 
-Фича не импортирует чужой `repository`. Остаток менять только через `StockService`.
+Остаток менять только через `StockService`. Роуты склада берут сервисы из `warehouse/deps.py`.
 
 ---
 
@@ -90,6 +105,6 @@ RBAC: `tasks` (`execute` / `complete` на переходы).
 
 Этап 1 (DI склада) закрыт: роуты без `*Repository` и без `Services`.  
 Этап 2 закрыт: unique остатка, LPN обязателен, `moved_at` на движении, pytest гонки.  
-Этап 3 (приёмка, FEFO) — в очереди `plans/STATUS.md`.
+Этап 3 закрыт: inbound → приёмка → остаток+; outbound → FEFO → остаток−. Pytest в `tests/warehouse/test_receiving.py` и `test_picking.py`.
 
-Журнал `StockMovement` без отдельного REST. `PlacementService` (FEFO-размещение) в коде есть, к роутам не подключён. Список товаров фильтруется query `depositor_id`, не `DataScope`.
+Журнал `StockMovement` без отдельного REST. Список товаров фильтруется query `depositor_id`, не `DataScope`. Generic Task CRUD не удалён.

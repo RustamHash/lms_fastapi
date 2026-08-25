@@ -32,11 +32,11 @@ Unique: `(depositor_id, number)` на inbound и outbound.
 
 ## Сервисы
 
-`InboundOrderService`, `OutboundOrderService`, `ReturnOrderService`.
+`InboundOrderService`, `OutboundOrderService`, `ReturnOrderService` — CRUD с экрана. На create/update проверяют `DataScope`. Списки — `list_all(scope=...)`.
 
-CRUD заказа и строк. На create/update проверяют `DataScope` (`ForbiddenError`, если чужой depositor/client). Списки — `list_all(scope=...)`.
+`InboundExchangeService.accept` — второй вход: заявка с обмена, без UI-скоупа (поклажедатель = профиль FTP). Дубликат номера — пропуск. Событие `inbound_order.accepted_from_exchange`.
 
-Ещё нет: «создать задание приёмки из inbound» и FEFO-план отбора из outbound как основной сценарий (этап 3).
+Складской воркфлоу не в этом модуле: `ReceivingService.create_from_inbound` и `PickingService.create_from_outbound` (см. [warehouse.md](warehouse.md)). Заказ меняет статус (`task_created` → `in_progress` → `completed`); у inbound при недогрузе — `has_shortage`.
 
 ---
 
@@ -54,12 +54,12 @@ RBAC entity: `orders`.
 
 - **parties** — depositor, client/supplier, адрес.
 - **warehouse** — `warehouse_id`, товар в строках.
-- **documents** — целевой шаг после заявки (ещё не жёстко связан в сервисе заказа).
+- **documents** — `InboundExchangeService` создаёт receipt с `inbound_order_id`, если есть склад.
 - **delivery** — `DeliveryOrder.outbound_order_id`.
-- **integration** — создаёт inbound/outbound из XML; дубликат номера пропускает.
+- **integration** — только доставляет `InboundExchangeMessage`; не пишет таблицы заказов.
 
 ---
 
 ## Состояние
 
-Скоуп поклажедатель+клиент на заказах уже в коде. XML-ответ партнёру и маппинг LOC склада — этап 4. Не наращивать новые типы заказов до конца этапа 3.
+Скоуп поклажедатель+клиент на заказах уже в коде. Исполнение на складе — этап 3 (закрыт). XML-ответ партнёру и маппинг LOC склада — этап 4.

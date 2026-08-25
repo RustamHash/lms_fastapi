@@ -9,6 +9,7 @@ from app.warehouse.models.stock_balance import StockBalance
 from app.warehouse.models.stock_movement import StockMovement
 from app.warehouse.models.task import Task, TaskLine
 from app.warehouse.models.product_location import ProductLocation
+from app.warehouse.models.receiving_discrepancy import ReceivingDiscrepancy
 
 __all__ = [
     "Warehouse",
@@ -26,4 +27,5 @@ __all__ = [
     "Task",
     "TaskLine",
     "ProductLocation",
+    "ReceivingDiscrepancy",
 ]

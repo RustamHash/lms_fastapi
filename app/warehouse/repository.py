@@ -10,6 +10,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.infrastructure.repo_base import BaseRepository
+from app.core.statuses import TaskStatus
 from app.warehouse.models import (
     Batch,
     LPN,
@@ -18,6 +19,7 @@ from app.warehouse.models import (
     Product,
     ProductGroup,
     ProductLocation,
+    ReceivingDiscrepancy,
     Row,
     StockBalance,
     StockMovement,
@@ -58,7 +60,7 @@ class BatchRepository(BaseRepository[Batch]):
         stmt = select(Batch).where(
             Batch.product_id == product_id, Batch.batch_number == batch_number
         )
-        return await self._s.scalar(stmt)
+        return (await self._s.scalars(stmt)).first()
 
 
 class LPNRepository(BaseRepository[LPN]):
@@ -120,6 +122,26 @@ class StockRepository(BaseRepository[StockBalance]):
         await self._s.flush()
         return row
 
+    async def get_movement(self, movement_id: int) -> StockMovement | None:
+        return await self._s.get(StockMovement, movement_id)
+
+    async def list_available_fefo(self, product_id: int, warehouse_id: int) -> list[StockBalance]:
+        stmt = (
+            select(StockBalance)
+            .join(Batch, StockBalance.batch_id == Batch.id)
+            .join(Location, StockBalance.location_id == Location.id)
+            .join(Row, Location.row_id == Row.id)
+            .join(Zone, Row.zone_id == Zone.id)
+            .where(
+                StockBalance.product_id == product_id,
+                StockBalance.is_deleted.is_(False),
+                Zone.warehouse_id == warehouse_id,
+                (StockBalance.quantity - StockBalance.reserved_quantity) > 0,
+            )
+            .order_by(Batch.expiration_date.asc().nulls_last(), StockBalance.id.asc())
+        )
+        return list(await self._s.scalars(stmt))
+
     async def list_movements(
         self, product_id: int | None = None
     ) -> list[StockMovement]:
@@ -133,13 +155,34 @@ class TaskRepository(BaseRepository[Task]):
     def __init__(self, session: AsyncSession) -> None:
         super().__init__(session, Task)
 
+    async def get_active_for_inbound(self, inbound_order_id: int) -> Task | None:
+        stmt = select(Task).where(
+            Task.inbound_order_id == inbound_order_id,
+            Task.task_type == "receiving",
+            Task.is_deleted.is_(False),
+            Task.status.notin_([TaskStatus.CANCELLED.value]),
+        )
+        return (await self._s.scalars(stmt)).first()
+
+    async def get_active_for_outbound(self, outbound_order_id: int) -> Task | None:
+        stmt = select(Task).where(
+            Task.outbound_order_id == outbound_order_id,
+            Task.task_type == "picking",
+            Task.is_deleted.is_(False),
+            Task.status.notin_([TaskStatus.CANCELLED.value]),
+        )
+        return (await self._s.scalars(stmt)).first()
+
 
 class TaskLineRepository(BaseRepository[TaskLine]):
     def __init__(self, session: AsyncSession) -> None:
         super().__init__(session, TaskLine)
 
     async def list_by_task(self, task_id: int) -> list[TaskLine]:
-        stmt = select(TaskLine).where(TaskLine.task_id == task_id)
+        stmt = select(TaskLine).where(
+            TaskLine.task_id == task_id,
+            TaskLine.is_deleted.is_(False),
+        )
         return list(await self._s.scalars(stmt))
 
 
@@ -151,6 +194,15 @@ class WarehouseRepository(BaseRepository[Warehouse]):
 class VirtualWarehouseRepository(BaseRepository[VirtualWarehouse]):
     def __init__(self, session: AsyncSession) -> None:
         super().__init__(session, VirtualWarehouse)
+
+    async def get_by_depositor_code(
+        self, depositor_id: int, code: str
+    ) -> VirtualWarehouse | None:
+        stmt = select(VirtualWarehouse).where(
+            VirtualWarehouse.depositor_id == depositor_id,
+            VirtualWarehouse.code == code,
+        )
+        return await self._s.scalar(stmt)
 
 
 class ZoneRepository(BaseRepository[Zone]):
@@ -166,6 +218,26 @@ class RowRepository(BaseRepository[Row]):
 class LocationRepository(BaseRepository[Location]):
     def __init__(self, session: AsyncSession) -> None:
         super().__init__(session, Location)
+
+    async def belongs_to_warehouse(self, location_id: int, warehouse_id: int) -> bool:
+        stmt = (
+            select(Location.id)
+            .join(Row, Location.row_id == Row.id)
+            .join(Zone, Row.zone_id == Zone.id)
+            .where(Location.id == location_id, Zone.warehouse_id == warehouse_id)
+        )
+        return (await self._s.scalar(stmt)) is not None
+
+
+class ReceivingDiscrepancyRepository(BaseRepository[ReceivingDiscrepancy]):
+    def __init__(self, session: AsyncSession) -> None:
+        super().__init__(session, ReceivingDiscrepancy)
+
+    async def list_by_line(self, task_line_id: int) -> list[ReceivingDiscrepancy]:
+        stmt = select(ReceivingDiscrepancy).where(
+            ReceivingDiscrepancy.task_line_id == task_line_id
+        )
+        return list(await self._s.scalars(stmt))
 
 
 class ProductGroupRepository(BaseRepository[ProductGroup]):
