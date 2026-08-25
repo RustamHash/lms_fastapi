@@ -1,16 +1,3 @@
-"""Создать system_bot и суперпользователя (идемпотентно).
-
-Запуск после alembic upgrade head:
-
-  python scripts/bootstrap_users.py
-
-Переменные окружения (опционально):
-
-  LMS_ADMIN_USERNAME   (default: admin)
-  LMS_ADMIN_PASSWORD   (default: admin)
-  LMS_ADMIN_EMAIL      (default: admin@local)
-  LMS_SYSTEM_BOT_PASSWORD (default: system_bot_secret)
-"""
 
 from __future__ import annotations
 
@@ -26,6 +13,9 @@ from sqlalchemy import select
 from app.accounts.models import User
 from app.core.database import async_session_factory
 from app.core.security import hash_password
+
+import app.accounts.models  # noqa: F401
+import app.parties.models  # noqa: F401  # Depositor, Client для relationship
 
 
 async def _ensure_user(

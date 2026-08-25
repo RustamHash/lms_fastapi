@@ -12,6 +12,10 @@ from app.accounts.models import Role
 from app.accounts.permissions_catalog import ACTIONS, CRUD, all_module_permissions
 from app.core.database import async_session_factory
 
+
+import app.accounts.models  # noqa: F401
+import app.parties.models  # noqa: F401  # Depositor, Client для relationship
+
 DEFAULT_ROLES = {
     "admin": {
         "name": "Администратор",

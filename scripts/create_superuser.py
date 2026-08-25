@@ -12,6 +12,10 @@ from app.core.database import async_session_factory
 from app.core.security import hash_password
 
 
+import app.accounts.models  # noqa: F401
+import app.parties.models  # noqa: F401  # Depositor, Client для relationship
+
+
 async def create_superuser(username: str, password: str, email: str = ""):
     async with async_session_factory() as session:
         repo = UserRepository(session)
