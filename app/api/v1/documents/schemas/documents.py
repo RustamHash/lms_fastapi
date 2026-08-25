@@ -34,6 +34,7 @@ class DocumentRead(BaseRead):
     status: str = Field(DocumentStatus.DRAFT.value, title="Статус")
     is_delivery: bool = Field(False, title="Признак доставки")
     is_edo: bool = Field(False, title="Признак ЭДО")
+    inbound_order_id: int | None = Field(None, title="Входящий заказ")
 
 
 class DocumentCreate(BaseModel):

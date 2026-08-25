@@ -234,15 +234,31 @@ def run_import_task(self, task_id: str, user_id: int, document_type: str | None)
 
                                 doc_number = universal_doc.get("document_number")
 
-                                result, imp_errors = await integration.process_document(
-                                    universal_doc=universal_doc,
-                                    depositor_id=profile.depositor_id,
-                                    user_id=user_id,
+                                result, imp_errors, skipped = (
+                                    await integration.process_document(
+                                        universal_doc=universal_doc,
+                                        depositor_id=profile.depositor_id,
+                                        user_id=user_id,
+                                    )
                                 )
 
                                 log.processed_rows += 1
+                                is_porder = filename.lower().startswith("porder_")
 
-                                if imp_errors:
+                                if skipped:
+                                    log.messages = (log.messages or []) + [
+                                        f"Заказ {doc_number} уже есть, пропуск"
+                                    ]
+                                    if is_porder:
+                                        try:
+                                            ftp.delete(remote_path)
+                                        except Exception:
+                                            logger.warning(
+                                                "Не удалось удалить %s с FTP",
+                                                remote_path,
+                                                exc_info=True,
+                                            )
+                                elif imp_errors:
                                     log.error_rows += 1
                                     for err in imp_errors:
                                         log.errors = (log.errors or []) + [err]
@@ -251,6 +267,15 @@ def run_import_task(self, task_id: str, user_id: int, document_type: str | None)
                                     log.messages = (log.messages or []) + [
                                         f"Заказ {doc_number} создан"
                                     ]
+                                    if is_porder:
+                                        try:
+                                            ftp.delete(remote_path)
+                                        except Exception:
+                                            logger.warning(
+                                                "Не удалось удалить %s с FTP",
+                                                remote_path,
+                                                exc_info=True,
+                                            )
 
                                 await session.commit()
 

@@ -47,6 +47,11 @@ class Document(Base):
         Boolean, default=False, comment="Признак доставки"
     )
     is_edo: Mapped[bool] = mapped_column(Boolean, default=False, comment="Признак ЭДО")
+    inbound_order_id: Mapped[int | None] = mapped_column(
+        ForeignKey("orders_inbound.id"),
+        nullable=True,
+        comment="Входящий заказ",
+    )
 
     lines: Mapped[list["DocumentLine"]] = relationship(
         back_populates="document", cascade="all, delete-orphan"

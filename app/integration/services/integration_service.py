@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import logging
+from datetime import date
+from decimal import Decimal
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -18,12 +20,11 @@ from app.delivery.repository import DeliveryOrderRepository
 from app.delivery.services import DeliveryOrderService
 from app.documents.services.document_service import DocumentService
 from app.documents.repository import DocumentLineRepository, DocumentRepository
-from decimal import Decimal
 from app.integration.adapters import ZLNAdapter
 from app.parties.models import Client
 from app.warehouse.models import VirtualWarehouse
 from app.parties.services import AddressService, ClientService
-from app.parties.repository import AddressRepository, ClientRepository
+from app.parties.repository import AddressRepository, ClientRepository, RawAddressRepository
 from app.warehouse.repository import ProductRepository
 from app.warehouse.services import ProductService
 
@@ -41,22 +42,22 @@ class IntegrationService:
         universal_doc: dict,
         depositor_id: int,
         user_id: int,
-    ) -> tuple[object | None, list[str]]:
-        errors = []
+    ) -> tuple[object | None, list[str], bool]:
+        """Вернуть (заказ, ошибки, skipped). skipped=True — дубликат, не ошибка."""
+        errors: list[str] = []
+        savepoint = None
 
         logger.info("Начало импорта: %s", universal_doc.get("document_number"))
         doc_type = universal_doc.get("document_type")
         doc_number = universal_doc.get("document_number", "")
 
         try:
-            # Начало транзакции (savepoint) с обработкой ошибок
             try:
                 savepoint = await self._s.begin_nested()
             except Exception as e:
                 logger.error("Не удалось начать транзакцию: %s", e)
-                return None, [f"Ошибка транзакции: {e}"]
+                return None, [f"Ошибка транзакции: {e}"], False
 
-            # 0. Проверка дубликата
             if doc_type == "porder":
                 existing = await self._s.scalar(
                     select(InboundOrder).where(
@@ -76,9 +77,9 @@ class IntegrationService:
 
             if existing:
                 logger.info("Заказ %s уже существует, пропускаю", doc_number)
-                return None, [f"Заказ {doc_number} уже существует"]
+                await self._rollback_savepoint(savepoint)
+                return None, [], True
 
-            # 1. Товары — для всех типов
             product_service = ProductService(ProductRepository(self._s))
             for item in universal_doc.get("items", []):
                 try:
@@ -101,9 +102,9 @@ class IntegrationService:
                     errors.append(f"Товар {item['external_id']}: {e}")
 
             if errors:
-                return None, errors
+                await self._rollback_savepoint(savepoint)
+                return None, errors, False
 
-            # 2. Создаем заказ в зависимости от типа
             if doc_type == "porder":
                 order = await self._create_inbound_order(
                     universal_doc, depositor_id, user_id
@@ -113,20 +114,57 @@ class IntegrationService:
                     universal_doc, depositor_id, user_id
                 )
             else:
-                return None, [f"Неизвестный тип документа: {doc_type}"]
+                await self._rollback_savepoint(savepoint)
+                return None, [f"Неизвестный тип документа: {doc_type}"], False
 
+            await self._commit_savepoint(savepoint)
             logger.info("Импорт завершён: %s", universal_doc.get("document_number"))
-            return order, []
+            return order, [], False
 
         except Exception as e:
-            try:
-                await savepoint.rollback()
-            except Exception as rollback_error:
-                logger.error(
-                    "Ошибка отката транзакции: %s", rollback_error, exc_info=True
-                )
+            await self._rollback_savepoint(savepoint)
             logger.error("Ошибка импорта: %s", e, exc_info=True)
-            return None, [f"Ошибка: {e}"]
+            return None, [f"Ошибка: {e}"], False
+
+    async def _rollback_savepoint(self, savepoint) -> None:
+        if savepoint is None:
+            return
+        try:
+            await savepoint.rollback()
+        except Exception as rollback_error:
+            logger.error(
+                "Ошибка отката транзакции: %s", rollback_error, exc_info=True
+            )
+
+    async def _commit_savepoint(self, savepoint) -> None:
+        if savepoint is None:
+            return
+        try:
+            await savepoint.commit()
+        except Exception as commit_error:
+            logger.error("Ошибка фиксации savepoint: %s", commit_error, exc_info=True)
+            raise
+
+    async def _lookup_virtual_warehouse(
+        self, depositor_id: int, vw_code: str
+    ) -> tuple[int | None, int | None]:
+        """Найти существующий VW по коду LOC. Пустой код — (None, None). Нет VW — ошибка."""
+        code = (vw_code or "").strip()
+        if not code:
+            return None, None
+
+        vw = await self._s.scalar(
+            select(VirtualWarehouse).where(
+                VirtualWarehouse.depositor_id == depositor_id,
+                VirtualWarehouse.code == code,
+            )
+        )
+        if vw is None:
+            raise ValueError(
+                f'Для LOC="{code}" не найден виртуальный склад. '
+                "Создайте его в топологии для этого поклажедателя."
+            )
+        return vw.warehouse_id, vw.id
 
     async def _get_or_create_warehouse(
         self, depositor_id: int, vw_code: str, user_id: int | None = None
@@ -197,20 +235,23 @@ class IntegrationService:
         else:
             supplier = None
 
-        # 3. Найти склад
-        warehouse_id, vw_id = await self._get_or_create_warehouse(
-            depositor_id, doc.get("virtual_warehouse_code", ""), user_id
+        loc_code = (doc.get("virtual_warehouse_code") or "").strip()
+        warehouse_id, vw_id = await self._lookup_virtual_warehouse(
+            depositor_id, loc_code
         )
 
-        # 4. Создать заказ
+        order_date = doc.get("document_date") or doc.get("delivery_date") or date.today()
+        notes = f"LOC: {loc_code}" if loc_code else "LOC: "
+
         order = InboundOrder(
             depositor_id=depositor_id,
             warehouse_id=warehouse_id,
             number=doc["document_number"],
             supplier_code=vendor_code,
             supplier_id=supplier.id if supplier else None,
-            order_date=doc.get("document_date") or doc.get("delivery_date"),
+            order_date=order_date,
             planned_date=doc.get("delivery_date"),
+            notes=notes,
         )
         self._s.add(order)
         await self._s.flush()
@@ -237,7 +278,9 @@ class IntegrationService:
 
         await self._s.flush()
 
-        # 7. Создать складской документ (receipt)
+        if warehouse_id is None:
+            return order
+
         doc_service = DocumentService(
             DocumentRepository(self._s), DocumentLineRepository(self._s)
         )
@@ -245,13 +288,14 @@ class IntegrationService:
             user_id=user_id,
             document_type="receipt",
             warehouse_id=warehouse_id,
+            virtual_warehouse_id=vw_id,
+            inbound_order_id=order.id,
             document_number=doc["document_number"],
-            document_date=doc.get("document_date"),
+            document_date=doc.get("document_date") or order_date,
             delivery_date=doc.get("delivery_date"),
             status="draft",
         )
 
-        # Строки документа
         for line in doc.get("lines", []):
             from app.warehouse.models import Product
 
@@ -268,7 +312,6 @@ class IntegrationService:
                     quantity=line["quantity"],
                 )
 
-        # Обновить статус заказа
         order.status = "document_created"
         await self._s.flush()
 
@@ -295,7 +338,10 @@ class IntegrationService:
             raise ValueError(f"Заказ {doc['document_number']} уже существует")
 
         # 2. Найти/создать адрес доставки
-        address_service = AddressService(AddressRepository(self._s))
+        address_service = AddressService(
+            AddressRepository(self._s),
+            RawAddressRepository(self._s),
+        )
         address = await address_service.get_or_create(
             delivery_address, "import", user_id
         )

@@ -231,7 +231,7 @@ async def _run_import_background(
                             continue
                         doc_number = universal_doc.get("document_number")
 
-                        result, imp_errors = await integration.process_document(
+                        result, imp_errors, skipped = await integration.process_document(
                             universal_doc=universal_doc,
                             depositor_id=profile.depositor_id,
                             user_id=user_id,
@@ -239,7 +239,11 @@ async def _run_import_background(
 
                         log.processed_rows += 1
 
-                        if imp_errors:
+                        if skipped:
+                            log.messages = (log.messages or []) + [
+                                f"Заказ {doc_number} уже есть, пропуск"
+                            ]
+                        elif imp_errors:
                             log.error_rows += 1
                             for err in imp_errors:
                                 log.errors = (log.errors or []) + [err]
