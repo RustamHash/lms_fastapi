@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import logging
 
+from app.core.exceptions import BadRequestError, NotFoundError
+from app.infrastructure.events import event_bus
+from app.infrastructure.events.event_types import EventTypes
 from app.warehouse.models import Task, TaskLine
 from app.warehouse.repository import TaskLineRepository, TaskRepository
 from app.warehouse.services.stock_service import StockService
-from app.infrastructure.events import event_bus
-from app.infrastructure.events.event_types import EventTypes
 
 logger = logging.getLogger(__name__)
 
@@ -70,35 +71,51 @@ class TaskService:
         self, *, user_id: int, task_line_id: int, fact_qty: int, **kwargs
     ) -> TaskLine:
         if fact_qty <= 0:
-            raise ValueError("Количество должно быть больше 0")
+            raise BadRequestError("Количество должно быть больше 0")
 
         line = await self._lines.get_by_id(task_line_id)
         if line is None:
-            raise ValueError("Строка задания не найдена")
+            raise NotFoundError("Строка задания не найдена")
 
         task = await self._tasks.get_by_id(line.task_id)
+        if task is None:
+            raise NotFoundError("Задание не найдено")
+        if not line.lpn_id:
+            raise BadRequestError("Укажите LPN")
+        batch_id = kwargs.get("batch_id") or line.batch_id
+        if not batch_id:
+            raise BadRequestError("Укажите партию")
+
         if task.status == "new":
             await self._tasks.update(task.id, status="in_progress")
 
         if task.task_type in ["receiving", "putaway"]:
+            location_id = kwargs.get("location_id") or line.to_location_id
+            if not location_id:
+                raise BadRequestError("Укажите ячейку")
             await self._stock.add_stock(
                 user_id=user_id,
                 product_id=line.product_id,
-                location_id=kwargs.get("location_id") or line.to_location_id,
+                location_id=location_id,
                 quantity=fact_qty,
                 lpn_id=line.lpn_id,
-                batch_id=kwargs.get("batch_id") or line.batch_id,
+                batch_id=batch_id,
                 document_id=task.document_id,
+                task_line_id=line.id,
             )
         elif task.task_type in ["picking", "shipping"]:
+            location_id = kwargs.get("location_id") or line.from_location_id
+            if not location_id:
+                raise BadRequestError("Укажите ячейку")
             await self._stock.remove_stock(
                 user_id=user_id,
                 product_id=line.product_id,
-                location_id=kwargs.get("location_id") or line.from_location_id,
+                location_id=location_id,
                 quantity=fact_qty,
                 lpn_id=line.lpn_id,
-                batch_id=kwargs.get("batch_id") or line.batch_id,
+                batch_id=batch_id,
                 document_id=task.document_id,
+                task_line_id=line.id,
             )
 
         line.fact_qty += fact_qty

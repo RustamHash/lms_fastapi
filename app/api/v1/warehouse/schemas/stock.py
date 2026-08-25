@@ -20,8 +20,8 @@ class StockBalanceRead(BaseRead):
         title="Ячейка",
         json_schema_extra={"ui_type": "select", "endpoint": "/api/v1/warehouse/topology/locations"},
     )
-    lpn_id: int | None = Field(
-        None,
+    lpn_id: int = Field(
+        ...,
         title="LPN",
         json_schema_extra={"ui_type": "select", "endpoint": "/api/v1/warehouse/lpns"},
     )
@@ -46,13 +46,13 @@ class StockAdd(BaseModel):
         json_schema_extra={"ui_type": "select", "endpoint": "/api/v1/warehouse/topology/locations"},
     )
     quantity: Decimal = Field(..., title="Количество")
-    lpn_id: int | None = Field(
-        None,
+    lpn_id: int = Field(
+        ...,
         title="LPN",
         json_schema_extra={"ui_type": "select", "endpoint": "/api/v1/warehouse/lpns"},
     )
-    batch_id: int | None = Field(
-        None,
+    batch_id: int = Field(
+        ...,
         title="Партия",
         json_schema_extra={"ui_type": "select", "endpoint": "/api/v1/warehouse/batches"},
     )
@@ -75,13 +75,13 @@ class StockRemove(BaseModel):
         json_schema_extra={"ui_type": "select", "endpoint": "/api/v1/warehouse/topology/locations"},
     )
     quantity: Decimal = Field(..., title="Количество")
-    lpn_id: int | None = Field(
-        None,
+    lpn_id: int = Field(
+        ...,
         title="LPN",
         json_schema_extra={"ui_type": "select", "endpoint": "/api/v1/warehouse/lpns"},
     )
-    batch_id: int | None = Field(
-        None,
+    batch_id: int = Field(
+        ...,
         title="Партия",
         json_schema_extra={"ui_type": "select", "endpoint": "/api/v1/warehouse/batches"},
     )
@@ -109,13 +109,13 @@ class StockMove(BaseModel):
         json_schema_extra={"ui_type": "select", "endpoint": "/api/v1/warehouse/topology/locations"},
     )
     quantity: Decimal = Field(..., title="Количество")
-    lpn_id: int | None = Field(
-        None,
+    lpn_id: int = Field(
+        ...,
         title="LPN",
         json_schema_extra={"ui_type": "select", "endpoint": "/api/v1/warehouse/lpns"},
     )
-    batch_id: int | None = Field(
-        None,
+    batch_id: int = Field(
+        ...,
         title="Партия",
         json_schema_extra={"ui_type": "select", "endpoint": "/api/v1/warehouse/batches"},
     )

@@ -4,7 +4,9 @@
 
 from __future__ import annotations
 
-from sqlalchemy import select
+from decimal import Decimal
+
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.infrastructure.repo_base import BaseRepository
@@ -76,8 +78,8 @@ class StockRepository(BaseRepository[StockBalance]):
         self,
         product_id: int,
         location_id: int,
-        lpn_id: int | None = None,
-        batch_id: int | None = None,
+        lpn_id: int,
+        batch_id: int,
         for_update: bool = False,
     ) -> StockBalance | None:
         stmt = select(StockBalance).where(
@@ -88,7 +90,29 @@ class StockRepository(BaseRepository[StockBalance]):
         )
         if for_update:
             stmt = stmt.with_for_update()
-        return await self._s.scalar(stmt)
+        return (await self._s.scalars(stmt)).first()
+
+    async def sum_available(
+        self,
+        product_id: int,
+        location_id: int | None = None,
+        lpn_id: int | None = None,
+        batch_id: int | None = None,
+    ) -> Decimal:
+        stmt = select(
+            func.coalesce(
+                func.sum(StockBalance.quantity - StockBalance.reserved_quantity),
+                0,
+            )
+        ).where(StockBalance.product_id == product_id)
+        if location_id is not None:
+            stmt = stmt.where(StockBalance.location_id == location_id)
+        if lpn_id is not None:
+            stmt = stmt.where(StockBalance.lpn_id == lpn_id)
+        if batch_id is not None:
+            stmt = stmt.where(StockBalance.batch_id == batch_id)
+        value = await self._s.scalar(stmt)
+        return Decimal(value) if value is not None else Decimal("0")
 
     async def create_movement(self, **kwargs) -> StockMovement:
         row = StockMovement(**kwargs)
@@ -147,6 +171,10 @@ class LocationRepository(BaseRepository[Location]):
 class ProductGroupRepository(BaseRepository[ProductGroup]):
     def __init__(self, session: AsyncSession) -> None:
         super().__init__(session, ProductGroup)
+
+    async def get_by_name(self, name: str) -> ProductGroup | None:
+        stmt = select(self._model).where(self._model.name == name)
+        return (await self._s.scalars(stmt)).first()
 
 
 class PackageRepository(BaseRepository[Package]):

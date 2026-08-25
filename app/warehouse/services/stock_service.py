@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from decimal import Decimal
 
 import logging
 
+from sqlalchemy.exc import IntegrityError
+
+from app.core.exceptions import BadRequestError
 from app.warehouse.models import StockBalance
 from app.warehouse.repository import StockRepository
 
@@ -23,51 +27,55 @@ class StockService:
         return await self._repo.list_all()
 
     async def get_balance(
-        self, product_id: int, location_id: int, lpn_id: int | None = None, batch_id: int | None = None
+        self, product_id: int, location_id: int, lpn_id: int, batch_id: int
     ) -> StockBalance | None:
         return await self._repo.get_balance(product_id, location_id, lpn_id, batch_id)
 
     async def get_available_quantity(
-        self, product_id: int, location_id: int | None = None, lpn_id: int | None = None, batch_id: int | None = None
+        self,
+        product_id: int,
+        location_id: int | None = None,
+        lpn_id: int | None = None,
+        batch_id: int | None = None,
     ) -> Decimal:
-        balances = await self._repo.list_all()
-        total = Decimal("0")
-        for b in balances:
-            if b.product_id != product_id:
-                continue
-            if location_id and b.location_id != location_id:
-                continue
-            if lpn_id and b.lpn_id != lpn_id:
-                continue
-            if batch_id and b.batch_id != batch_id:
-                continue
-            total += b.quantity - b.reserved_quantity
-        return total
+        return await self._repo.sum_available(
+            product_id, location_id=location_id, lpn_id=lpn_id, batch_id=batch_id
+        )
 
     async def add_stock(
-        self, *, user_id: int, product_id: int, location_id: int, quantity: Decimal,
-        lpn_id: int | None = None, batch_id: int | None = None, document_id: int | None = None,
+        self,
+        *,
+        user_id: int | None,
+        product_id: int,
+        location_id: int,
+        quantity: Decimal,
+        lpn_id: int | None = None,
+        batch_id: int | None = None,
+        document_id: int | None = None,
+        task_line_id: int | None = None,
     ) -> StockBalance:
-        if quantity <= 0:
-            raise ValueError("Количество должно быть больше 0")
+        lpn_id, batch_id = self._require_key(lpn_id, batch_id)
+        quantity = self._require_positive(quantity)
 
-        balance = await self._repo.get_balance(product_id, location_id, lpn_id, batch_id, for_update=True)
-
-        if balance:
-            balance.quantity += quantity
-            balance.updated_by_id = user_id
-            await self._repo._s.flush()
-        else:
-            balance = await self._repo.create(
+        balance = await self._repo.get_balance(
+            product_id, location_id, lpn_id, batch_id, for_update=True
+        )
+        if balance is None:
+            balance = await self._insert_or_lock(
+                user_id=user_id,
                 product_id=product_id,
                 location_id=location_id,
                 lpn_id=lpn_id,
                 batch_id=batch_id,
                 quantity=quantity,
-                reserved_quantity=Decimal("0"),
             )
+        else:
+            balance.quantity += quantity
+            balance.updated_by_id = user_id
+            await self._repo._s.flush()
 
-        await self._repo.create_movement(
+        await self._write_movement(
+            user_id=user_id,
             product_id=product_id,
             document_id=document_id,
             location_id=location_id,
@@ -75,30 +83,39 @@ class StockService:
             batch_id=batch_id,
             direction="in",
             quantity=quantity,
+            task_line_id=task_line_id,
         )
-
         return balance
 
     async def remove_stock(
-        self, *, user_id: int, product_id: int, location_id: int, quantity: Decimal,
-        lpn_id: int | None = None, batch_id: int | None = None, document_id: int | None = None,
+        self,
+        *,
+        user_id: int | None,
+        product_id: int,
+        location_id: int,
+        quantity: Decimal,
+        lpn_id: int | None = None,
+        batch_id: int | None = None,
+        document_id: int | None = None,
+        task_line_id: int | None = None,
     ) -> StockBalance:
-        if quantity <= 0:
-            raise ValueError("Количество должно быть больше 0")
+        lpn_id, batch_id = self._require_key(lpn_id, batch_id)
+        quantity = self._require_positive(quantity)
 
-        balance = await self._repo.get_balance(product_id, location_id, lpn_id, batch_id, for_update=True)
-
-        if not balance:
-            raise ValueError("Нет остатка для списания")
-
+        balance = await self._repo.get_balance(
+            product_id, location_id, lpn_id, batch_id, for_update=True
+        )
+        if balance is None:
+            raise BadRequestError("Нет остатка для списания")
         if balance.quantity < quantity:
-            raise ValueError(f"Недостаточно остатка: {balance.quantity} < {quantity}")
+            raise BadRequestError(f"Недостаточно остатка: {balance.quantity} < {quantity}")
 
         balance.quantity -= quantity
         balance.updated_by_id = user_id
         await self._repo._s.flush()
 
-        await self._repo.create_movement(
+        await self._write_movement(
+            user_id=user_id,
             product_id=product_id,
             document_id=document_id,
             location_id=location_id,
@@ -106,13 +123,22 @@ class StockService:
             batch_id=batch_id,
             direction="out",
             quantity=quantity,
+            task_line_id=task_line_id,
         )
-
         return balance
 
     async def move_stock(
-        self, *, user_id: int, product_id: int, from_location_id: int, to_location_id: int,
-        quantity: Decimal, lpn_id: int | None = None, batch_id: int | None = None, document_id: int | None = None,
+        self,
+        *,
+        user_id: int | None,
+        product_id: int,
+        from_location_id: int,
+        to_location_id: int,
+        quantity: Decimal,
+        lpn_id: int | None = None,
+        batch_id: int | None = None,
+        document_id: int | None = None,
+        task_line_id: int | None = None,
     ) -> StockBalance:
         await self.remove_stock(
             user_id=user_id,
@@ -122,6 +148,7 @@ class StockService:
             lpn_id=lpn_id,
             batch_id=batch_id,
             document_id=document_id,
+            task_line_id=task_line_id,
         )
         return await self.add_stock(
             user_id=user_id,
@@ -131,19 +158,30 @@ class StockService:
             lpn_id=lpn_id,
             batch_id=batch_id,
             document_id=document_id,
+            task_line_id=task_line_id,
         )
 
     async def reserve(
-        self, *, user_id: int, product_id: int, location_id: int, quantity: Decimal,
-        lpn_id: int | None = None, batch_id: int | None = None,
+        self,
+        *,
+        user_id: int | None,
+        product_id: int,
+        location_id: int,
+        quantity: Decimal,
+        lpn_id: int | None = None,
+        batch_id: int | None = None,
     ) -> StockBalance:
-        balance = await self._repo.get_balance(product_id, location_id, lpn_id, batch_id, for_update=True)
-        if not balance:
-            raise ValueError("Нет остатка для резервирования")
+        lpn_id, batch_id = self._require_key(lpn_id, batch_id)
+        quantity = self._require_positive(quantity)
+        balance = await self._repo.get_balance(
+            product_id, location_id, lpn_id, batch_id, for_update=True
+        )
+        if balance is None:
+            raise BadRequestError("Нет остатка для резервирования")
 
         available = balance.quantity - balance.reserved_quantity
         if available < quantity:
-            raise ValueError(f"Недостаточно доступного остатка: {available} < {quantity}")
+            raise BadRequestError(f"Недостаточно доступного остатка: {available} < {quantity}")
 
         balance.reserved_quantity += quantity
         balance.updated_by_id = user_id
@@ -151,17 +189,101 @@ class StockService:
         return balance
 
     async def unreserve(
-        self, *, user_id: int, product_id: int, location_id: int, quantity: Decimal,
-        lpn_id: int | None = None, batch_id: int | None = None,
+        self,
+        *,
+        user_id: int | None,
+        product_id: int,
+        location_id: int,
+        quantity: Decimal,
+        lpn_id: int | None = None,
+        batch_id: int | None = None,
     ) -> StockBalance:
-        balance = await self._repo.get_balance(product_id, location_id, lpn_id, batch_id, for_update=True)
-        if not balance:
-            raise ValueError("Нет остатка для отмены резервирования")
-
+        lpn_id, batch_id = self._require_key(lpn_id, batch_id)
+        quantity = self._require_positive(quantity)
+        balance = await self._repo.get_balance(
+            product_id, location_id, lpn_id, batch_id, for_update=True
+        )
+        if balance is None:
+            raise BadRequestError("Нет остатка для отмены резервирования")
         if balance.reserved_quantity < quantity:
-            raise ValueError("Недостаточно зарезервированного")
+            raise BadRequestError("Недостаточно зарезервированного")
 
         balance.reserved_quantity -= quantity
         balance.updated_by_id = user_id
         await self._repo._s.flush()
         return balance
+
+    async def _insert_or_lock(
+        self,
+        *,
+        user_id: int | None,
+        product_id: int,
+        location_id: int,
+        lpn_id: int,
+        batch_id: int,
+        quantity: Decimal,
+    ) -> StockBalance:
+        try:
+            async with self._repo._s.begin_nested():
+                return await self._repo.create(
+                    product_id=product_id,
+                    location_id=location_id,
+                    lpn_id=lpn_id,
+                    batch_id=batch_id,
+                    quantity=quantity,
+                    reserved_quantity=Decimal("0"),
+                    created_by_id=user_id,
+                    updated_by_id=user_id,
+                )
+        except IntegrityError as exc:
+            if "uq_stock_balance_key" not in str(exc.orig):
+                raise
+            balance = await self._repo.get_balance(
+                product_id, location_id, lpn_id, batch_id, for_update=True
+            )
+            if balance is None:
+                raise BadRequestError("Не удалось записать остаток") from exc
+            balance.quantity += quantity
+            balance.updated_by_id = user_id
+            await self._repo._s.flush()
+            return balance
+
+    async def _write_movement(
+        self,
+        *,
+        user_id: int | None,
+        product_id: int,
+        document_id: int | None,
+        location_id: int,
+        lpn_id: int,
+        batch_id: int,
+        direction: str,
+        quantity: Decimal,
+        task_line_id: int | None,
+    ) -> None:
+        await self._repo.create_movement(
+            product_id=product_id,
+            document_id=document_id,
+            location_id=location_id,
+            lpn_id=lpn_id,
+            batch_id=batch_id,
+            direction=direction,
+            quantity=quantity,
+            moved_at=datetime.now(timezone.utc),
+            moved_by_id=user_id,
+            task_line_id=task_line_id,
+        )
+
+    @staticmethod
+    def _require_key(lpn_id: int | None, batch_id: int | None) -> tuple[int, int]:
+        if lpn_id is None:
+            raise BadRequestError("Укажите LPN")
+        if batch_id is None:
+            raise BadRequestError("Укажите партию")
+        return lpn_id, batch_id
+
+    @staticmethod
+    def _require_positive(quantity: Decimal) -> Decimal:
+        if quantity <= 0:
+            raise BadRequestError("Количество должно быть больше 0")
+        return quantity

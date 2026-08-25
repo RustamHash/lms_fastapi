@@ -4,7 +4,7 @@ type StockRow = {
   id: number
   product_id: number
   location_id: number
-  lpn_id: number | null
+  lpn_id: number
   batch_id: number
   quantity: string
   reserved_quantity: string
