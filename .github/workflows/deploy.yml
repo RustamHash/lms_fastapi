@@ -19,7 +19,7 @@ jobs:
           DEPLOY_DIR="/data/projects/lms_fastapi"
           echo "Создание директории для деплоя..."
           sudo mkdir -p "$DEPLOY_DIR" || true
-          sudo chown -R "$USER:$USER" "$DEPLOY_DIR" || true
+          sudo chown "$USER:$USER" "$DEPLOY_DIR" || true
           echo "Копирование файлов..."
           rsync -av --delete \
             --exclude='.git' \
