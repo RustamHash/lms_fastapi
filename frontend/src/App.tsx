@@ -9,6 +9,7 @@ const HomePage = lazy(() => import('./pages/HomePage').then(m => ({ default: m.H
 const ReferencesPage = lazy(() => import('./pages/ReferencesPage').then(m => ({ default: m.ReferencesPage })))
 const LoginPage = lazy(() => import('./pages/LoginPage').then(m => ({ default: m.LoginPage })))
 const AddressDetailPage = lazy(() => import('./pages/AddressDetailPage').then(m => ({ default: m.AddressDetailPage })))
+const AddressEditPage = lazy(() => import('./pages/AddressEditPage').then(m => ({ default: m.AddressEditPage })))
 const AddressInputAliasDetailPage = lazy(() => import('./pages/AddressInputAliasDetailPage').then(m => ({ default: m.AddressInputAliasDetailPage })))
 const AddressInputAliasesPage = lazy(() => import('./pages/AddressInputAliasesPage').then(m => ({ default: m.AddressInputAliasesPage })))
 const DeliveryZonesPage = lazy(() => import('./pages/DeliveryZonesPage').then(m => ({ default: m.DeliveryZonesPage })))
@@ -139,6 +140,7 @@ function App() {
                   
                   {/* Справочники */}
                   <Route path="/reference/addresses" element={<AddressesPage />} />
+                  <Route path="/reference/addresses/:addressId/edit" element={<AddressEditPage />} />
                   <Route path="/reference/address-input-aliases" element={<AddressInputAliasesPage />} />
                   <Route path="/reference/delivery-zones" element={<DeliveryZonesPage />} />
                   <Route path="/reference/legal-entities" element={<LegalEntitiesPage />} />

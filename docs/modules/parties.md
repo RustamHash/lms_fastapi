@@ -52,7 +52,7 @@
 | `/clients` | `clients` (список с `DataScope`) |
 | `/contracts` | `contracts` |
 | `/tariffs`, `/tariff-documents` | `tariffs` |
-| `/delivery-zones` | — |
+| `/delivery-zones` | `addresses` |
 | `/carriers` | `carriers` |
 | `/keepers` | `keepers` |
 

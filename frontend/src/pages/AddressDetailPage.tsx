@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
+import { useAuth, hasPermission } from '../auth/AuthContext'
 import { DetailPageShell } from '../components/DetailPageShell'
 import { apiClient } from '../lib/apiClient'
 import { formatDt } from '../lib/formatDt'
@@ -29,6 +30,8 @@ type AddressDetail = {
 }
 
 export function AddressDetailPage() {
+  const { user } = useAuth()
+  const canEdit = hasPermission(user, 'addresses', 'update')
   const { addressId } = useParams<{ addressId: string }>()
   const idNum = addressId ? Number(addressId) : NaN
   const validId = Number.isInteger(idNum) && idNum > 0
@@ -70,10 +73,17 @@ export function AddressDetailPage() {
   return (
     <DetailPageShell
       title={`Адрес${address ? ` #${address.id}` : ''}`}
+      breadcrumbs={[
+        { label: 'Справочники', to: '/references' },
+        { label: 'Адреса', to: '/reference/addresses' },
+        { label: address ? `#${address.id}` : '' },
+      ]}
       backHref="/reference/addresses"
       backLabel="← К списку адресов"
       loading={loading}
       error={error}
+      canEdit={canEdit}
+      editPath={address ? `/reference/addresses/${address.id}/edit` : undefined}
     >
       {!loading && !error && address ? (
         <dl className="entity-dl">
@@ -161,12 +171,12 @@ export function AddressDetailPage() {
               <dt className="entity-dl__dt">Зона доставки</dt>
               <dd className="entity-dl__dd">{address.zone_name}</dd>
             </div>
-          ) : address.delivery_zone_id != null ? (
+          ) : (
             <div className="entity-dl__row">
-              <dt className="entity-dl__dt">Зона доставки (ID)</dt>
-              <dd className="entity-dl__dd">{address.delivery_zone_id}</dd>
+              <dt className="entity-dl__dt">Зона доставки</dt>
+              <dd className="entity-dl__dd">—</dd>
             </div>
-          ) : null}
+          )}
           {address.source_raw ? (
             <div className="entity-dl__row">
               <dt className="entity-dl__dt">Исходная строка</dt>
