@@ -115,4 +115,4 @@ JWT: `app/core/security.py`. `tokenUrl` = `/api/v1/auth/token`.
 
 - Роуты accounts ещё на `ServiceContainer` (`Services`), не на доменном `deps.py` (этап 7).
 - `Role.permissions` — свободный JSONB, схема только через `validate_permissions_map`.
-- Регистрация закрыта; пользователей создаёт админ или `scripts/create_superuser.py`.
+- Регистрация закрыта. Первый `admin` и `system_bot`: `scripts/bootstrap_users.py` (после миграций; в CI deploy). Доп. суперюзер: `scripts/create_superuser.py`.

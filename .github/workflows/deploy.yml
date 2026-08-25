@@ -50,11 +50,12 @@ jobs:
         working-directory: /data/projects/lms_fastapi
         run: |
           set -e
-          echo "Запуск Docker Compose..."
-          docker compose up -d --build
-          
-          echo "Ожидание готовности..."
-          sleep 10
+          echo "Сборка образов..."
+          docker compose build
+
+          echo "Postgres + Redis..."
+          docker compose up -d postgres redis
+
           echo "Ждём Postgres..."
           for i in $(seq 1 30); do
             status=$(docker inspect --format='{{.State.Health.Status}}' lms_postgres 2>/dev/null || echo "missing")
@@ -63,11 +64,24 @@ jobs:
             fi
             sleep 2
           done
+          status=$(docker inspect --format='{{.State.Health.Status}}' lms_postgres 2>/dev/null || echo "missing")
+          if [ "$status" != "healthy" ]; then
+            echo "❌ Postgres не healthy (статус: $status)"
+            docker compose logs postgres --tail=50 || true
+            exit 1
+          fi
+
           echo "Миграции..."
-          docker compose exec -T fastapi alembic upgrade head
+          docker compose run --rm --no-deps fastapi alembic upgrade head
+
+          echo "Bootstrap пользователей (admin + system_bot)..."
+          docker compose run --rm --no-deps fastapi python scripts/bootstrap_users.py
+
+          echo "Запуск остальных сервисов..."
+          docker compose up -d
+
           echo "Проверка контейнеров..."
           docker compose ps
-          echo "Проверка статусов..."
           for container in lms_postgres lms_redis lms_fastapi lms_celery_worker lms_flower; do
             status=$(docker inspect --format='{{.State.Status}}' $container 2>/dev/null || echo "not_found")
             if [ "$status" != "running" ]; then

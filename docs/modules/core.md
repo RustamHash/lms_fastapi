@@ -17,7 +17,6 @@
 | `middleware.py` | CORS, текущий user id в ContextVar, аудит |
 | `context.py` | `get/set_current_user_id_context` для `created_by_id` |
 | `statuses.py` | `OrderStatus`, `DocumentStatus`, `TaskStatus`, `DeliveryStatus` + русские label |
-| `init_db.py` | старт: сиды при необходимости |
 | `list_defaults.py` | дефолты колонок списков |
 | `model_rebuilder.py` | `rebuild_all_models()` из-за циклов Pydantic |
 

@@ -1,0 +1,16 @@
+---
+description: Деплой только через CI; никаких ручных шагов на сервере
+alwaysApply: true
+---
+
+# Деплой и сервер
+
+Владелец **не** заходит на сервер и **не** выполняет ручные команды (`docker compose`, alembic, seed, chown, restart). Всё — через GitHub Actions (`.github/workflows/deploy.yml`) после push в `main`.
+
+При любых правках инфраструктуры / БД / bootstrap:
+
+1. Менять **workflow + compose + Dockerfile + скрипты** так, чтобы следующий деплой сам всё поднял.
+2. Не предлагать «сейчас на сервере выполни…» как основной путь — только автомат.
+3. Цепочка на проде: build → postgres/redis healthy → `alembic upgrade head` → `bootstrap_users` → `compose up -d` → healthcheck.
+4. Не делать recursive `chown` на `data/` (ломает Postgres UID).
+5. Не полагаться на сиды в `startup` FastAPI — только скрипт после миграций в деплое.

@@ -22,6 +22,7 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8080
 
 python scripts/import_from_ftp.py
 python scripts/clear_orders.py
+python scripts/bootstrap_users.py
 python scripts/create_superuser.py admin password
 python scripts/create_default_roles.py
 

@@ -57,6 +57,7 @@ Docker (dev): `docker compose -f docker-compose.dev.yml up` — Postgres, Redis,
 
 Скрипты:
 
+- `scripts/bootstrap_users.py` — `system_bot` + суперюзер (`LMS_ADMIN_*` / `LMS_SYSTEM_BOT_PASSWORD`)
 - `scripts/create_superuser.py admin password`
 - `scripts/create_default_roles.py`
 - `scripts/clear_orders.py`
