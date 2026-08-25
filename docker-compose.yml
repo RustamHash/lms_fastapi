@@ -8,7 +8,7 @@ services:
       POSTGRES_PASSWORD: lms_password
       POSTGRES_DB: lms_fastapi
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - ./data/postgres:/var/lib/postgresql/data
     healthcheck:
