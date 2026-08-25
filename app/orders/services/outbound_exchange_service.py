@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import BadRequestError
 from app.core.statuses import OrderStatus
-from app.infrastructure.events import event_bus
+from app.infrastructure.events import schedule_event
 from app.infrastructure.events.event_types import EventTypes
 from app.orders.exchange_messages import OutboundExchangeMessage
 from app.orders.models import OutboundOrder
@@ -145,10 +145,10 @@ class OutboundExchangeService:
                 quantity=quantity,
             )
 
-        await event_bus.emit(
+        schedule_event(
+            self._orders._s,
             EventTypes.OUTBOUND_ORDER_ACCEPTED_FROM_EXCHANGE,
             {
-                "_event_type": EventTypes.OUTBOUND_ORDER_ACCEPTED_FROM_EXCHANGE,
                 "order_id": order.id,
                 "order_number": order.number,
                 "depositor_id": depositor_id,

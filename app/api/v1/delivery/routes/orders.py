@@ -20,7 +20,7 @@ async def list_orders(services: Services, scope: ScopeDep) -> list[DeliveryOrder
 
 @router.post("", response_model=DeliveryOrderRead, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_permission("create", "delivery"))])
 async def create_order(body: DeliveryOrderCreate, services: Services, user_id: UserDep) -> DeliveryOrderRead:
-    order = await DeliveryOrderRepository(services.session).create(**body.model_dump())
+    order = await services.delivery_order.create(user_id=user_id, **body.model_dump())
     return DeliveryOrderRead.model_validate(order)
 
 

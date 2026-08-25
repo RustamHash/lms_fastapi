@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from app.delivery.models import DeliveryOrder
 from app.delivery.repository import DeliveryOrderRepository
-from app.infrastructure.events import event_bus
+from app.infrastructure.events import schedule_event
 from app.infrastructure.events.event_types import EventTypes
 
 
@@ -21,8 +21,7 @@ class DeliveryOrderService:
     async def create(self, *, user_id: int | None = None, **kwargs) -> DeliveryOrder:
         order = await self._repo.create(**kwargs)
 
-        await event_bus.emit(EventTypes.DELIVERY_ORDER_CREATED, {
-            "_event_type": EventTypes.DELIVERY_ORDER_CREATED,
+        schedule_event(self._repo._s, EventTypes.DELIVERY_ORDER_CREATED, {
             "order_id": order.id,
             "order_number": order.number,
         })

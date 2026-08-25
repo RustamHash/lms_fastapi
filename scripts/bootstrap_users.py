@@ -44,7 +44,7 @@ async def _ensure_user(
 
 async def bootstrap() -> None:
     admin_username = os.getenv("LMS_ADMIN_USERNAME", "admin")
-    admin_password = os.getenv("LMS_ADMIN_PASSWORD", "admin")
+    admin_password = os.getenv("LMS_ADMIN_PASSWORD", "admin123")
     admin_email = os.getenv("LMS_ADMIN_EMAIL", "admin@local") or None
     system_password = os.getenv("LMS_SYSTEM_BOT_PASSWORD", "system_bot_secret")
 

@@ -36,7 +36,7 @@ Unique: `(depositor_id, number)` на inbound и outbound.
 
 `InboundExchangeService.accept` — второй вход: заявка с обмена, без UI-скоупа (поклажедатель = профиль интеграции). Обязательны поставщик (`VENDOR` с `ID` и `NAME`) и код склада (`LOC` → `loc_code`, lookup виртуального склада). Без LOC сообщение не собирается; без VW — ошибка, заказ не создаётся. `order_number` с обмена пока пустой. Дубликат номера заявки — пропуск. Событие `inbound_order.accepted_from_exchange`. Всегда создаётся складской документ прихода (receipt).
 
-`OutboundExchangeService.accept` — ORDER с обмена: клиент+`DELIV_ADDR`, товары только существующие, `needs_delivery` из `DELIV`. Событие `outbound_order.accepted_from_exchange` (хук на delivery и ordrsp). Складской shipment-документ пока не создаётся (FK `outbound_order_id` на Document ещё нет).
+`OutboundExchangeService.accept` — ORDER с обмена: клиент+`DELIV_ADDR`, товары только существующие, `needs_delivery` из `DELIV`. Событие `outbound_order.accepted_from_exchange` (deferred emit) → подписчик delivery. Складской shipment-документ пока не создаётся (FK `outbound_order_id` на Document ещё нет).
 
 Кнопка импорта на списках заявок запускает обмен (см. [integration.md](integration.md)), не CRUD этого модуля. Пошагово ORDER: [outbound-import.md](../flows/outbound-import.md).
 

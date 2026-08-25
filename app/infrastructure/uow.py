@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.infrastructure.events.events import discard_pending_events, flush_pending_events
+
 
 class UnitOfWork:
     """Управляет транзакцией: открывает сессию, коммитит или откатывает."""
@@ -21,9 +23,11 @@ class UnitOfWork:
             return
 
         if exc_type is not None:
+            discard_pending_events(self._session)
             await self._session.rollback()
         else:
             await self._session.commit()
+            await flush_pending_events(self._session)
 
         await self._session.close()
         self._session = None

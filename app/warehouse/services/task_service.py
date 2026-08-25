@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 
 from app.core.exceptions import BadRequestError, NotFoundError
-from app.infrastructure.events import event_bus
+from app.infrastructure.events import schedule_event
 from app.infrastructure.events.event_types import EventTypes
 from app.warehouse.models import Task, TaskLine
 from app.warehouse.repository import TaskLineRepository, TaskRepository
@@ -140,8 +140,7 @@ class TaskService:
         status = "completed_with_deviations" if (has_deviation or has_unfinished) else "completed"
         task = await self._tasks.update(task_id, status=status)
 
-        await event_bus.emit(EventTypes.TASK_COMPLETED, {
-            "_event_type": EventTypes.TASK_COMPLETED,
+        schedule_event(self._tasks._s, EventTypes.TASK_COMPLETED, {
             "task_id": task.id,
             "task_type": task.task_type,
         })

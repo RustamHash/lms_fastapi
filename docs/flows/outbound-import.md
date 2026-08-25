@@ -38,10 +38,10 @@
 - Адрес через DaData `get_or_create`; клиент `get_or_create(code, delivery_address_id)`. Сбой → заказ нет.
 - Нет VW по LOC → заказ нет.
 - Дубликат `(depositor_id, number)` → skip, файл снимаем.
-- Успех → `OutboundOrder` + lines + событие `outbound_order.accepted_from_exchange` (`needs_delivery`, `client_id`, …). Подписчики (заявка на доставку, ordrsp) — позже.
+- Успех → `OutboundOrder` + lines + событие `outbound_order.accepted_from_exchange` (`needs_delivery`, `client_id`, …). Подписчик delivery создаёт `DeliveryOrder` **после commit** (deferred emit в UoW).
 
 ## 3. Итог
 
-С исходящих массовый прогон создаёт расходные заявки из XML ORDER. Ответный XML партнёру и автосоздание delivery — на событии accept, не в этом шаге.
+С исходящих массовый прогон создаёт расходные заявки из XML ORDER. При `needs_delivery` подписчик создаёт `DeliveryOrder` после commit. Ответный XML партнёру (ordrsp) — этап 4.
 
 Входящие (`porder`) — зеркальный контур с созданием номенклатуры и receipt.

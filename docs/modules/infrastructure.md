@@ -20,23 +20,23 @@
 
 ## Транзакции
 
-`uow.py` — `UnitOfWork`: commit при успехе, rollback при исключении. HTTP: `get_session` в `app/api/deps.py`. Celery (`app/tasks.py`) не берёт общий пул FastAPI: на задачу свой движок `create_worker_engine()` (`NullPool`) внутри `asyncio.run`.
+`uow.py` — `UnitOfWork`: commit при успехе, затем `flush_pending_events(session)`; при исключении — `discard_pending_events` и rollback. HTTP: `get_session` в `app/api/deps.py`. Celery (`app/tasks.py`) не берёт общий пул FastAPI: на задачу свой движок `create_worker_engine()` (`NullPool`) внутри `asyncio.run`.
 
 ---
 
 ## События
 
-`events/events.py` — in-process `EventBus` (`subscribe` / `emit`). Ошибка хендлера логируется, остальные продолжают.
+`events/events.py` — in-process `EventBus` (`subscribe` / `emit`). Сервисы вызывают `schedule_event(session, …)` — emit после `commit` в [`uow.py`](../infrastructure/uow.py). При rollback очередь событий сбрасывается. Ошибка хендлера логируется, остальные продолжают.
 
 `event_types.py`:
 
 - `import.completed` / `import.failed`
-- `inbound_order.accepted_from_exchange` / `outbound_order.accepted_from_exchange`
+- `inbound_order.accepted_from_exchange` / `outbound_order.accepted_from_exchange` / `outbound_order.created`
 - `document.created` / `document.status_changed`
 - `delivery_order.*`, `route.assigned`
 - `task.created` / `task.completed`
 
-Эмитить из **сервиса**, не из репозитория. Подписчику нужна БД — своя сессия.
+Эмитить через **`schedule_event(session, …)`** из сервиса, не `emit` напрямую и не из репозитория. Подписчику нужна БД — своя сессия + UoW (пример: `app/delivery/subscribers/outbound_handlers.py`, `app/notifications/services/dispatcher.py`).
 
 ---
 

@@ -41,6 +41,15 @@ class DeliveryOrderRepository:
             )
         return list(await self._s.scalars(stmt))
 
+    async def get_by_outbound_order_id(
+        self, outbound_order_id: int
+    ) -> DeliveryOrder | None:
+        stmt = select(DeliveryOrder).where(
+            DeliveryOrder.outbound_order_id == outbound_order_id,
+            DeliveryOrder.is_deleted.is_(False),
+        )
+        return await self._s.scalar(stmt)
+
     async def create(self, **kwargs) -> DeliveryOrder:
         row = DeliveryOrder(**kwargs)
         self._s.add(row)

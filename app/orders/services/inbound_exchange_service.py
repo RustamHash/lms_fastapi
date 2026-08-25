@@ -11,7 +11,7 @@ from app.core.exceptions import BadRequestError
 from app.core.statuses import OrderStatus
 from app.documents.repository import DocumentLineRepository, DocumentRepository
 from app.documents.services.document_service import DocumentService
-from app.infrastructure.events import event_bus
+from app.infrastructure.events import schedule_event
 from app.infrastructure.events.event_types import EventTypes
 from app.orders.exchange_messages import InboundExchangeMessage
 from app.orders.models import InboundOrder
@@ -155,10 +155,10 @@ class InboundExchangeService:
 
         await self._orders.update(order.id, status=OrderStatus.DOCUMENT_CREATED.value)
 
-        await event_bus.emit(
+        schedule_event(
+            self._orders._s,
             EventTypes.INBOUND_ORDER_ACCEPTED_FROM_EXCHANGE,
             {
-                "_event_type": EventTypes.INBOUND_ORDER_ACCEPTED_FROM_EXCHANGE,
                 "order_id": order.id,
                 "order_number": order.number,
                 "depositor_id": depositor_id,

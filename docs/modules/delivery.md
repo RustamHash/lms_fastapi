@@ -20,9 +20,29 @@
 
 Статусы: `DeliveryStatus` — `created`, `assigned`, `in_transit`, `delivered`, `failed`, …
 
-Сервисы: `DeliveryOrderService`, `DriverService`, `VehicleService`, `RouteService`, `RouteLineService`, `DeviationService`. List/get/patch/delete заявок — со `DataScope`. POST создания скоуп не проверяет.
+Сервисы: `DeliveryOrderService`, `DeliveryFromOutboundService`, `DriverService`, `VehicleService`, `RouteService`, `RouteLineService`, `DeviationService`. List/get/patch/delete заявок — со `DataScope`. POST создания скоуп не проверяет.
 
 События: `delivery_order.*`, `route.assigned`.
+
+---
+
+## Автосоздание из исходящего заказа
+
+`DeliveryFromOutboundService` (`services/from_outbound_service.py`) — идемпотентный `ensure_for_outbound(order_id)`:
+
+- Условие: `OutboundOrder.needs_delivery == True`.
+- Если `DeliveryOrder` с этим `outbound_order_id` уже есть — возвращает существующую.
+- Иначе создаёт заявку: `number` = номер outbound, `delivery_date` = `shipping_date` или `order_date`, контакт и комментарий из outbound, `status` = `created`; на outbound ставит `delivery_status` = `created`.
+- Эмитит `delivery_order.created` через `DeliveryOrderService` (`schedule_event` после commit).
+
+Подписчики (`subscribers/outbound_handlers.py`), регистрация в `main.py` → `setup_delivery_subscribers()`:
+
+| Событие | Когда |
+|---------|--------|
+| `outbound_order.accepted_from_exchange` | импорт ORDER (`OutboundExchangeService.accept`) |
+| `outbound_order.created` | ручной POST/PATCH outbound с `needs_delivery` |
+
+Обработчик открывает свой `UnitOfWork` (данные outbound уже закоммичены). Пошагово импорт: [outbound-import.md](../flows/outbound-import.md).
 
 ---
 
@@ -37,15 +57,15 @@
 | `/deviations` | `delivery` (ответ `dict`, не схема); есть GET `/{id}` |
 | `/route-lines` | `routes` (тоже `dict`); есть GET `/{id}` |
 
-Роуты заявок ещё ходят в `DeliveryOrderRepository` через `Services`, не через сервис (этап 7).
+Роуты list/get/patch/delete заявок ещё ходят в `DeliveryOrderRepository` через `Services` (этап 7). POST `/delivery/orders` — через `DeliveryOrderService.create`.
 
 ---
 
 ## Связи
 
-- **orders** — исходящий заказ с `needs_delivery`.
+- **orders** — исходящий заказ с `needs_delivery`; автосоздание delivery — см. выше.
 - **documents** — складской документ отгрузки.
 - **parties** — договор перевозки, адрес клиента.
-- **accounts** — скоуп поклажедателя/клиента на заявках.
+- **accounts** — скоуп поклажедателя/клиента на заявках (через join на `outbound_order_id`).
 
-Интеграция может создать `DeliveryOrder` вместе с outbound.
+---

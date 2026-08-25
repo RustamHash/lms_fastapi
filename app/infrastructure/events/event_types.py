@@ -11,6 +11,7 @@ class EventTypes:
 
     INBOUND_ORDER_ACCEPTED_FROM_EXCHANGE = "inbound_order.accepted_from_exchange"
     OUTBOUND_ORDER_ACCEPTED_FROM_EXCHANGE = "outbound_order.accepted_from_exchange"
+    OUTBOUND_ORDER_CREATED = "outbound_order.created"
 
     DOCUMENT_CREATED = "document.created"
     DOCUMENT_STATUS_CHANGED = "document.status_changed"

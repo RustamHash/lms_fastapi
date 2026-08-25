@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from app.accounts.scope import DataScope
 from app.core.exceptions import BadRequestError, ForbiddenError, NotFoundError
+from app.infrastructure.events import schedule_event
+from app.infrastructure.events.event_types import EventTypes
 from app.orders.models import OutboundOrder, OutboundOrderLine
 from app.orders.repository import OutboundOrderLineRepository, OutboundOrderRepository
 from app.parties.models import Client
@@ -37,13 +39,15 @@ class OutboundOrderService:
         client = await self._resolve_client(client_id, depositor_id, scope)
         kwargs.pop("customer_code", None)
         kwargs.pop("customer_name", None)
-        return await self._orders.create(
+        order = await self._orders.create(
             depositor_id=depositor_id,
             client_id=client.id,
             customer_code=client.code,
             customer_name=client.name,
             **kwargs,
         )
+        self._schedule_outbound_event(order)
+        return order
 
     async def update(
         self,
@@ -61,7 +65,10 @@ class OutboundOrderService:
             kwargs["client_id"] = client.id
             kwargs["customer_code"] = client.code
             kwargs["customer_name"] = client.name
-        return await self._orders.update(order_id, **kwargs)
+        updated = await self._orders.update(order_id, **kwargs)
+        if updated is not None:
+            self._schedule_outbound_event(updated)
+        return updated
 
     async def soft_delete(
         self, order_id: int, user_id: int | None = None, scope: DataScope | None = None
@@ -94,3 +101,18 @@ class OutboundOrderService:
         if not scope.allows_client(client.id, client.depositor_id):
             raise ForbiddenError("Нет доступа к этому клиенту")
         return client
+
+    def _schedule_outbound_event(self, order: OutboundOrder) -> None:
+        if not order.needs_delivery:
+            return
+        schedule_event(
+            self._orders._s,
+            EventTypes.OUTBOUND_ORDER_CREATED,
+            {
+                "order_id": order.id,
+                "order_number": order.number,
+                "depositor_id": order.depositor_id,
+                "client_id": order.client_id,
+                "needs_delivery": order.needs_delivery,
+            },
+        )

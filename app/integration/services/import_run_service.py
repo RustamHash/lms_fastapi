@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.orm.attributes import flag_modified
 
 from app.core.exceptions import BadRequestError
+from app.infrastructure.events import discard_pending_events
 from app.infrastructure.uow import UnitOfWork
 from app.integration.adapters import ZLNAdapter
 from app.integration.models import IntegrationLog
@@ -287,6 +288,7 @@ class ImportRunService:
                 raise BadRequestError(f"Неизвестный тип сообщения: {type(message)}")
         except BadRequestError as e:
             await session.rollback()
+            discard_pending_events(session)
             log = await self._require_log(session, task_id)
             log.processed_rows = (log.processed_rows or 0) + 1
             log.error_rows = (log.error_rows or 0) + 1
