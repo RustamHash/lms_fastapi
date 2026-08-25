@@ -23,6 +23,15 @@ class InboundOrderRepository:
         stmt = select(InboundOrder).options(selectinload(InboundOrder.depositor), selectinload(InboundOrder.supplier), selectinload(InboundOrder.warehouse))
         return list(await self._s.scalars(stmt))
 
+    async def get_by_depositor_number(
+        self, depositor_id: int, number: str
+    ) -> InboundOrder | None:
+        stmt = select(InboundOrder).where(
+            InboundOrder.depositor_id == depositor_id,
+            InboundOrder.number == number,
+        )
+        return await self._s.scalar(stmt)
+
     async def create(self, **kwargs) -> InboundOrder:
         row = InboundOrder(**kwargs)
         self._s.add(row)

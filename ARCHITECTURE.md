@@ -143,6 +143,13 @@ class ProductUpdate(BaseModel):
 
 ---
 
+## Транзакции и обмен
+
+- Фоновые задачи не ходят в `Depends`. Импорт: `ImportRunService` открывает `UnitOfWork` на файл (и на шаги журнала). Сервис заказов не коммитит.
+- Обмен: `integration` — FTP, адаптер, журнал. Принятие PORDER — `orders.InboundExchangeService`. Интеграция не делает `session.add` чужих сущностей. Оркестрация приёмки — orders, не integration.
+
+---
+
 ## Запрещённые паттерны
 
 1. SQL в роутах: select(), session.scalar(), session.execute()

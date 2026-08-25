@@ -39,7 +39,7 @@ RBAC: `documents`.
 
 - **warehouse** — склад, виртуальный склад, товар/партия в строках; `Task.document_id`, `StockMovement.document_id`.
 - **parties** — договор.
-- **orders** — импорт PORDER создаёт inbound и документ с `inbound_order_id`. Outbound/return FK — ещё нет.
+- **orders** — `InboundExchangeService` создаёт inbound и документ с `inbound_order_id`. Outbound/return FK — ещё нет.
 - **delivery** — `DeliveryOrder.document_id`.
 
 Печатные формы MX-1 / MX-3 / ТОРГ-2 — этап 8, не этот модуль как «генератор PDF в роуте».

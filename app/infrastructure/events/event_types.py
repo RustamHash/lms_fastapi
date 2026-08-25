@@ -9,6 +9,8 @@ class EventTypes:
     IMPORT_COMPLETED = "import.completed"
     IMPORT_FAILED = "import.failed"
 
+    INBOUND_ORDER_ACCEPTED_FROM_EXCHANGE = "inbound_order.accepted_from_exchange"
+
     DOCUMENT_CREATED = "document.created"
     DOCUMENT_STATUS_CHANGED = "document.status_changed"
 

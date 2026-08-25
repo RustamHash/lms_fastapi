@@ -1,6 +1,6 @@
 """Сервисы модуля integration."""
 
 from app.integration.services.ftp_service import FTPService
-from app.integration.services.integration_service import IntegrationService, AdapterService
+from app.integration.services.import_run_service import ImportRunService
 
-__all__ = ["FTPService", "IntegrationService", "AdapterService"]
+__all__ = ["FTPService", "ImportRunService"]

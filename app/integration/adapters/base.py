@@ -1,15 +1,16 @@
-"""Базовый адаптер."""
+"""Базовый адаптер: файл партнёра → сообщение домена заказов."""
 
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any
+
+from app.orders.exchange_messages import InboundExchangeMessage
 
 
 class BaseAdapter(ABC):
-    """Базовый класс адаптера для парсинга файлов."""
-
     @abstractmethod
-    def parse(self, file_path: str) -> tuple[Any | None, list[str]]:
-        """Парсинг файла. Возвращает (данные, ошибки)."""
+    async def parse(
+        self, file_path: str
+    ) -> tuple[InboundExchangeMessage | None, list[str]]:
+        """PORDER → InboundExchangeMessage. Иной тип — ошибка списка, сообщение None."""
         ...

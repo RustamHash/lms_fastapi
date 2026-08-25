@@ -8,6 +8,12 @@ from datetime import datetime
 from decimal import Decimal
 
 from app.integration.adapters.base import BaseAdapter
+from app.orders.exchange_messages import (
+    ExchangeLine,
+    ExchangeProduct,
+    ExchangeVendor,
+    InboundExchangeMessage,
+)
 
 
 class ZLNAdapter(BaseAdapter):
@@ -71,20 +77,23 @@ class ZLNAdapter(BaseAdapter):
                 shelf_life = self._get_text(item_el, "TOTALSHELFLIFE")
                 min_shelf_life = self._get_text(item_el, "MINSHELFLIFE")
 
-                items.append({
-                    "external_id": item_id,
-                    "ean": self._get_text(item_el, "EAN"),
-                    "name": self._get_text(item_el, "NAME"),
-                    "legal_name": self._get_text(item_el, "LEGAL_NAME"),
-                    "product_class": self._get_text(item_el, "CLASS"),
-                    "product_type": self._get_text(item_el, "TYPE"),
-                    "unit": self._get_text(item_el, "BUM"),
-                    "gross_mass": self._parse_decimal(self._get_text(item_el, "GROSS_MASS")),
-                    "net_mass": self._parse_decimal(self._get_text(item_el, "NET_MASS")),
-                    "price": self._parse_decimal(self._get_text(item_el, "PRICE")),
-                    "shelf_life_days": self._parse_int(shelf_life),
-                    "min_shelf_life_days": self._parse_int(min_shelf_life),
-                })
+                items.append(
+                    ExchangeProduct(
+                        external_id=item_id,
+                        name=self._get_text(item_el, "NAME"),
+                        legal_name=self._get_text(item_el, "LEGAL_NAME"),
+                        unit=self._get_text(item_el, "BUM"),
+                        barcode=self._get_text(item_el, "EAN"),
+                        gross_mass=self._parse_decimal(
+                            self._get_text(item_el, "GROSS_MASS")
+                        ),
+                        net_mass=self._parse_decimal(
+                            self._get_text(item_el, "NET_MASS")
+                        ),
+                        shelf_life_days=self._parse_int(shelf_life),
+                        min_shelf_life_days=self._parse_int(min_shelf_life),
+                    )
+                )
 
         return items
 
@@ -106,11 +115,13 @@ class ZLNAdapter(BaseAdapter):
             if qty <= 0:
                 continue
 
-            lines.append({
-                "external_id": item_id,
-                "quantity": qty,
-                "unit": self._get_text(ln_el, "UNIT"),
-            })
+            lines.append(
+                ExchangeLine(
+                    external_id=item_id,
+                    quantity=Decimal(qty),
+                    unit=self._get_text(ln_el, "UNIT"),
+                )
+            )
 
         return lines
 
@@ -144,75 +155,29 @@ class ZLNAdapter(BaseAdapter):
         if errors:
             return None, errors
 
-        return {
-            "document_type": "porder",
-            "document_number": doc_no,
-            "document_date": doc_date,
-            "delivery_date": delivery_date,
-            "partner_code": self._get_text(root, "PARTNER"),
-            "virtual_warehouse_code": loc,
-            "vendor_code": vendor_id,
-            "vendor_name": vendor_name,
-            "vendor_legal_name": vendor_legal_name,
-            "vendor_inn": vendor_inn,
-            "vendor_kpp": vendor_kpp,
-            "items": items,
-            "lines": lines,
-        }, []
+        vendor = None
+        if vendor_id:
+            vendor = ExchangeVendor(
+                code=vendor_id,
+                name=vendor_name,
+                legal_name=vendor_legal_name,
+                inn=vendor_inn,
+                kpp=vendor_kpp,
+            )
+
+        return InboundExchangeMessage(
+            number=doc_no,
+            document_date=doc_date,
+            delivery_date=delivery_date,
+            loc_code=loc,
+            vendor=vendor,
+            products=tuple(items),
+            lines=tuple(lines),
+        ), []
 
     def _parse_order(self, root):
-        """Парсинг исходящего заказа (ORDER)."""
-        errors = []
-
-        doc_no = self._get_text(root, "DOC_NO")
-        doc_date = self._parse_date(self._get_text(root, "DOC_DATE"))
-        delivery_date = self._parse_date(self._get_text(root, "DELIV_DATE"))
-        loc = self._get_text(root, "LOC")
-
-        # Клиент (CUSTOMER)
-        customer_id = self._get_text(root, "CUSTOMER/ID")
-        customer_name = self._get_text(root, "CUSTOMER/NAME")
-        customer_legal_name = self._get_text(root, "CUSTOMER/LEGAL_NAME")
-        customer_inn = self._get_text(root, "CUSTOMER/INN")
-        customer_kpp = self._get_text(root, "CUSTOMER/KPP")
-        use_edo = self._get_text(root, "CUSTOMER/USE_EDO")
-
-        # Адрес доставки
-        delivery_address = self._get_text(root, "DELIV_ADDR") or self._get_text(root, "CONSIG_ADDR")
-        address_comment = self._get_text(root, "ADDR_COM")
-        shipping_contact = self._get_text(root, "SHIPP_CONT")
-
-        if not doc_no:
-            errors.append("Номер документа не указан")
-
-        items = self._parse_items(root)
-        lines = self._parse_lines(root)
-
-        if not items:
-            errors.append(f"{doc_no}: Нет товаров в документе")
-        if not lines:
-            errors.append(f"{doc_no}: Нет строк в документе")
-
-        if errors:
-            return None, errors
-
-        return {
-            "document_type": "order",
-            "document_number": doc_no,
-            "document_date": doc_date,
-            "delivery_date": delivery_date,
-            "partner_code": self._get_text(root, "PARTNER"),
-            "virtual_warehouse_code": loc,
-            "customer_code": customer_id,
-            "customer_name": customer_name,
-            "customer_legal_name": customer_legal_name,
-            "customer_inn": customer_inn,
-            "customer_kpp": customer_kpp,
-            "use_edo": use_edo == "1",
-            "is_delivery": self._get_text(root, "DELIV") == "1",
-            "delivery_address": delivery_address,
-            "address_comment": address_comment,
-            "shipping_contact": shipping_contact,
-            "items": items,
-            "lines": lines,
-        }, []
+        """Исходящий ORDER — не этот контур."""
+        doc_no = self._get_text(root, "DOC_NO") or "ORDER"
+        return None, [
+            f"{doc_no}: исходящий ORDER пока не принимается с обмена"
+        ]

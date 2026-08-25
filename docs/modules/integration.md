@@ -1,8 +1,8 @@
 # integration — обмен с поклажедателем
 
-Профили подключения (FTP и др.), журнал прогонов, разбор входящих XML и создание заказов/документов/клиентов.
+Транспорт и перевод: FTP, профили, журнал, адаптер XML. **Не** создаёт заказы и документы.
 
-Код: `app/integration/`. HTTP: `app/api/v1/integration/`. Фоновая задача: `app.tasks.run_import` (Celery, очередь `imports`).
+Код: `app/integration/`. HTTP: `app/api/v1/integration/`. Фоновая задача: `app.tasks.run_import` → `ImportRunService` (Celery, очередь `imports`).
 
 ---
 
@@ -14,20 +14,27 @@
 
 ---
 
-## Поток импорта
+## Поток импорта (PORDER)
 
-1. API или Celery берёт профиль, качает файлы (`FTPService`).
-2. Адаптер (`ZLNAdapter`) → универсальный dict (`document_type`, номер, строки).
-3. `IntegrationService.process_document` возвращает `(заказ, ошибки, skipped)`:
-   - дубликат inbound/outbound по `(depositor_id, number)` — `skipped=True`, не ошибка;
-   - товары — `ProductService.get_or_create`;
-   - PORDER: поставщик `ClientService.get_or_create` (без адреса), lookup `VirtualWarehouse` по LOC, заказ + строки, при найденном складе — документ `receipt` с `inbound_order_id`.
+1. HTTP создаёт лог и ставит Celery.
+2. `ImportRunService`: активные профили, FTP, скачать файл.
+3. `ZLNAdapter` → `InboundExchangeMessage` (контракт модуля **orders**, без тегов XML).
+4. `InboundExchangeService.accept(depositor_id=профиль, message)` — создание заявки в orders.
+5. Успех или пропуск дубликата: файл `porder_*` снимается с FTP. Ошибка — файл остаётся.
+6. На файл — свой `UnitOfWork` (commit/rollback). Сервис заказов не коммитит.
 
-**PORDER (сделано).** Дата заказа: `DOC_DATE` / `DELIV_DATE` / сегодня. Пустой LOC — заказ без склада и без документа (`warehouse_id` документа обязателен). Неизвестный LOC — ошибка, виртуальный склад не создаётся. Успех или дубликат: файл `porder_*` снимается с FTP. Ответный XML нет.
+ORDER с обмена пока отклоняется адаптером («не принимается»). Ответный XML — подписка на событие заказа, этап 4 (`ExportService` ещё нет).
 
-**ORDER (отгрузка).** Парсер есть; адрес/DaData и автосоздание VW ещё ломают живой прогон — не этот фикс.
+---
 
-Генерация `pordrsp` / `ordrsp` / `desadv` / `recadv` и таблица маппинга LOC — этап 4.
+## Файлы
+
+| Файл | Роль |
+|------|------|
+| `services/ftp_service.py` | FTP |
+| `services/import_run_service.py` | Прогон: лог, FTP, адаптер, вызов `accept` |
+| `adapters/zln_adapter.py` | XML Зиландии → сообщение orders |
+| `tasks.py` | Celery: модели + `ImportRunService.run` |
 
 ---
 
@@ -44,10 +51,8 @@ RBAC: `integrations`. Профили: `/profiles`. Импорт — `app/api/v1/
 | GET | `/import/history` |
 | GET | `/import/{task_id}/errors/excel` |
 
-Задача `app.tasks.run_import` (очередь `imports`, Redis). Своя сессия, не `Depends`. Адаптер пока один: ZLN.
-
 ---
 
 ## Связи
 
-Тянет сервисы **parties**, **orders**, **documents**, **delivery**, **warehouse** (товары). Это оркестратор обмена, не место для SQL чужих таблиц на постоянку (сейчас часть запросов ещё прямо в сессии сервиса — техдолг этапа 7).
+Интеграция знает **orders** только как `InboundExchangeMessage` + `accept`. Не импортирует репозитории склада, parties, documents.

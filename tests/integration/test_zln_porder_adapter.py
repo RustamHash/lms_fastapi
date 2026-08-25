@@ -7,6 +7,7 @@ from decimal import Decimal
 from xml.etree.ElementTree import fromstring
 
 from app.integration.adapters.zln_adapter import ZLNAdapter
+from app.orders.exchange_messages import InboundExchangeMessage
 
 PORDER_XML = """
 <PORDER>
@@ -40,18 +41,17 @@ PORDER_XML = """
 def test_parse_porder_fields() -> None:
     doc, errors = ZLNAdapter()._parse_porder(fromstring(PORDER_XML))
     assert errors == []
-    assert doc is not None
-    assert doc["document_type"] == "porder"
-    assert doc["document_number"] == "P-100"
-    assert doc["document_date"] == date(2026, 8, 25)
-    assert doc["delivery_date"] == date(2026, 8, 26)
-    assert doc["virtual_warehouse_code"] == "0001"
-    assert doc["vendor_code"] == "V1"
-    assert doc["items"][0]["external_id"] == "SKU1"
-    assert doc["items"][0]["net_mass"] == Decimal("1.5")
-    assert doc["lines"] == [
-        {"external_id": "SKU1", "quantity": 10, "unit": ""},
-    ]
+    assert isinstance(doc, InboundExchangeMessage)
+    assert doc.number == "P-100"
+    assert doc.document_date == date(2026, 8, 25)
+    assert doc.delivery_date == date(2026, 8, 26)
+    assert doc.loc_code == "0001"
+    assert doc.vendor is not None
+    assert doc.vendor.code == "V1"
+    assert doc.products[0].external_id == "SKU1"
+    assert doc.products[0].net_mass == Decimal("1.5")
+    assert doc.lines[0].external_id == "SKU1"
+    assert doc.lines[0].quantity == Decimal("10")
 
 
 def test_parse_porder_without_lines_is_error() -> None:
