@@ -11,9 +11,11 @@ from app.api.v1.documents.schemas import (
     DocumentLineRead,
     DocumentRead,
 )
+from app.api.v1.warehouse.schemas.workflow import PlanFactRead
 from app.core.exceptions import BadRequestError, NotFoundError
 from app.documents.repository import DocumentLineRepository, DocumentRepository
 from app.documents.services import DocumentService
+from app.warehouse.repository import StockRepository
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
@@ -42,6 +44,22 @@ async def get_document(document_id: int, services: Services) -> DocumentRead:
     if doc is None:
         raise NotFoundError("Документ не найден")
     return DocumentRead.model_validate(doc)
+
+
+@router.get(
+    "/{document_id}/plan-fact",
+    response_model=PlanFactRead,
+    dependencies=[Depends(require_permission("view", "documents"))],
+)
+async def document_plan_fact(document_id: int, services: Services) -> PlanFactRead:
+    service = DocumentService(
+        DocumentRepository(services.session), DocumentLineRepository(services.session)
+    )
+    doc = await service.get_by_id(document_id)
+    if doc is None:
+        raise NotFoundError("Документ не найден")
+    data = await service.plan_fact(document_id, StockRepository(services.session))
+    return PlanFactRead.model_validate(data)
 
 
 @router.patch("/{document_id}", response_model=DocumentRead, dependencies=[Depends(require_permission("update", "documents"))])

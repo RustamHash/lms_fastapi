@@ -13,6 +13,7 @@ export const locationsConfig: ListPageConfig<LocationRow> = {
   entityKey: 'topology_locations',
   title: 'Ячейки',
   apiUrl: '/api/v1/warehouse/topology/locations',
+  listPath: '/topology/locations',
   columns: [
     { id: 'id', label: 'ID', type: 'number' },
     { id: 'row_id', label: 'Ряд ID', type: 'number' },
@@ -27,6 +28,6 @@ export const locationsConfig: ListPageConfig<LocationRow> = {
   ],
 
   columnOverrides: {
-    id: { href: (row) => `/reference/topology-locations/${row.id}` },
+    id: { href: (row) => `/topology/locations/${row.id}` },
   },
 }

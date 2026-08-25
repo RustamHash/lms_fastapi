@@ -10,6 +10,11 @@ from app.core.statuses import OrderStatus, TaskStatus
 from app.orders.repository import OutboundOrderLineRepository, OutboundOrderRepository
 from app.warehouse.models import Task, TaskLine
 from app.warehouse.repository import StockRepository, TaskLineRepository, TaskRepository
+from app.warehouse.services.plan_fact_view import (
+    discrepancy_kind,
+    movement_row,
+    product_label,
+)
 from app.warehouse.services.stock_service import StockService
 
 
@@ -211,3 +216,58 @@ class PickingService:
             batch_id=line.batch_id,
         )
         line.reserved = False
+
+    async def plan_fact_for_outbound(self, outbound_order_id: int) -> dict:
+        """План (строки заявки), факт (движения) и сверка для карточки заказа."""
+        order = await self._outbound.get_by_id(outbound_order_id)
+        if order is None:
+            raise NotFoundError("Исходящий заказ не найден")
+
+        plan_lines = await self._outbound_lines.list_by_order(order.id)
+        task_lines = await self._lines.list_for_outbound(order.id)
+        movements = await self._stock_repo.list_movements_for_outbound(order.id)
+
+        plan = [
+            {
+                "id": line.id,
+                "product_id": line.product_id,
+                **product_label(line.product),
+                "quantity": line.quantity,
+                "batch_number": line.batch_number,
+                "manufacture_date": line.manufacture_date,
+            }
+            for line in plan_lines
+        ]
+        fact = [movement_row(move) for move in movements]
+
+        planned_by_product: dict[int, Decimal] = defaultdict(lambda: Decimal("0"))
+        labels: dict[int, dict[str, str]] = {}
+        for line in plan_lines:
+            if not line.product_id:
+                continue
+            planned_by_product[line.product_id] += line.quantity
+            labels[line.product_id] = product_label(line.product)
+
+        fact_by_product: dict[int, Decimal] = defaultdict(lambda: Decimal("0"))
+        for tl in task_lines:
+            fact_by_product[tl.product_id] += tl.fact_qty
+            labels.setdefault(tl.product_id, product_label(tl.product))
+
+        product_ids = sorted(set(planned_by_product) | set(fact_by_product))
+        discrepancies = []
+        for product_id in product_ids:
+            planned = planned_by_product[product_id]
+            fact_qty = fact_by_product[product_id]
+            discrepancies.append(
+                {
+                    "inbound_order_line_id": None,
+                    "product_id": product_id,
+                    **labels.get(product_id, product_label(None)),
+                    "qty_planned": planned,
+                    "qty_fact": fact_qty,
+                    "qty_diff": fact_qty - planned,
+                    "kind": discrepancy_kind(planned, fact_qty),
+                }
+            )
+
+        return {"plan": plan, "fact": fact, "discrepancies": discrepancies}

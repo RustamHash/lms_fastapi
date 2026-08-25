@@ -50,7 +50,7 @@ class Contract(Base):
         foreign_keys=[executor_id], lazy="selectin"
     )
     tariff_documents: Mapped[list["TariffDocument"]] = relationship(
-        back_populates="contract", lazy="selectin"
+        back_populates="contract"
     )
 
     def __repr__(self) -> str:

@@ -4,19 +4,19 @@ type UserRow = {
   id: number
   username: string
   phone: string
-  email: string
+  email: string | null
   is_superuser: boolean
   is_active: boolean
   is_deleted: boolean
   created_at: string
   updated_at: string
-  extra_permissions: Record<string, unknown>
 }
 
 export const usersConfig: ListPageConfig<UserRow> = {
   entityKey: 'users',
   title: 'Пользователи',
   apiUrl: '/api/v1/users',
+  listPath: '/users',
   columns: [
     { id: 'id', label: 'ID', type: 'number' },
     { id: 'username', label: 'Имя пользователя', type: 'text' },
@@ -31,6 +31,6 @@ export const usersConfig: ListPageConfig<UserRow> = {
   ],
 
   columnOverrides: {
-    id: { href: (row) => `/reference/users/${row.id}` },
+    id: { href: (row) => `/users/${row.id}` },
   },
 }

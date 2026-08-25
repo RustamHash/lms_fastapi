@@ -6,47 +6,29 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from sqlalchemy import select
+
 from app.accounts.models import Role
+from app.accounts.permissions_catalog import ACTIONS, CRUD, all_module_permissions
 from app.core.database import async_session_factory
 
 DEFAULT_ROLES = {
     "admin": {
         "name": "Администратор",
-        "permissions": {
-            "users": ["view", "create", "update", "delete"],
-            "roles": ["view", "create", "update", "delete"],
-            "audit": ["view"],
-            "addresses": ["view", "create", "update", "delete"],
-            "legal_entities": ["view", "create", "update", "delete"],
-            "depositors": ["view", "create", "update", "delete"],
-            "clients": ["view", "create", "update", "delete"],
-            "trade_points": ["view", "create", "update", "delete"],
-            "contracts": ["view", "create", "update", "delete"],
-            "tariffs": ["view", "create", "update", "delete"],
-            "products": ["view", "create", "update", "delete"],
-            "batches": ["view", "create", "update", "delete"],
-            "lpns": ["view", "create", "update", "delete"],
-            "stock": ["view", "create", "update", "delete"],
-            "tasks": ["view", "create", "update", "delete", "execute", "complete"],
-            "documents": ["view", "create", "update", "delete", "approve"],
-            "delivery": ["view", "create", "update", "delete"],
-            "drivers": ["view", "create", "update", "delete"],
-            "vehicles": ["view", "create", "update", "delete"],
-            "routes": ["view", "create", "update", "delete"],
-            "notifications": ["view", "create", "update"],
-            "integrations": ["view", "create", "update", "delete"],
-            "files": ["view", "create", "update", "delete"],
-        },
+        "permissions": all_module_permissions(*ACTIONS),
     },
     "logist": {
         "name": "Логист",
         "permissions": {
-            "delivery": ["view", "create", "update", "delete"],
-            "routes": ["view", "create", "update", "delete"],
-            "drivers": ["view", "create", "update", "delete"],
-            "vehicles": ["view", "create", "update", "delete"],
+            "delivery": list(CRUD),
+            "routes": list(CRUD),
+            "drivers": list(CRUD),
+            "vehicles": list(CRUD),
             "addresses": ["view", "create", "update"],
-            "trade_points": ["view", "create", "update"],
+            "orders": ["view", "create", "update"],
+            "keepers": ["view"],
+            "carriers": ["view"],
+            "warehouse": ["view"],
             "notifications": ["view"],
             "files": ["view", "create"],
         },
@@ -60,6 +42,8 @@ DEFAULT_ROLES = {
             "stock": ["view", "create", "update"],
             "tasks": ["view", "execute", "complete"],
             "documents": ["view", "create", "update"],
+            "warehouse": ["view"],
+            "orders": ["view"],
             "notifications": ["view"],
             "files": ["view", "create"],
         },
@@ -68,9 +52,11 @@ DEFAULT_ROLES = {
         "name": "Менеджер",
         "permissions": {
             "clients": ["view", "create", "update"],
-            "trade_points": ["view", "create", "update"],
             "contracts": ["view", "create", "update"],
             "tariffs": ["view", "create", "update"],
+            "orders": ["view", "create", "update"],
+            "keepers": ["view"],
+            "carriers": ["view", "create", "update"],
             "documents": ["view", "create", "update", "approve"],
             "delivery": ["view", "create", "update"],
             "notifications": ["view", "create"],
@@ -84,7 +70,7 @@ async def create_roles():
     async with async_session_factory() as session:
         for code, data in DEFAULT_ROLES.items():
             existing = await session.scalar(
-                __import__("sqlalchemy").select(Role).where(Role.code == code)
+                select(Role).where(Role.code == code, Role.is_deleted.is_(False))
             )
             if existing:
                 print(f"Роль {code} уже существует, обновляю права")
@@ -92,13 +78,14 @@ async def create_roles():
                 existing.permissions = data["permissions"]
             else:
                 print(f"Создаю роль: {code}")
-                role = Role(
-                    name=data["name"],
-                    code=code,
-                    permissions=data["permissions"],
+                session.add(
+                    Role(
+                        name=data["name"],
+                        code=code,
+                        permissions=data["permissions"],
+                    )
                 )
-                session.add(role)
-        
+
         await session.commit()
         print("Готово!")
 

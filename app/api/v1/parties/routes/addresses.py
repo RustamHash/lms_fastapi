@@ -7,21 +7,26 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, status
 
 from app.api.deps import SessionDep, require_permission
-from app.api.v1.parties.schemas import AddressCreate, AddressRead, AddressUpdate
+from app.api.v1.parties.schemas import AddressCreate, AddressRead, AddressResolve, AddressUpdate
 from app.core.exceptions import NotFoundError
-from app.parties.repository import AddressRepository
+from app.parties.repository import AddressRepository, RawAddressRepository
 from app.parties.services.address_service import AddressService
 
 router = APIRouter(prefix="/addresses", tags=["addresses"])
 
 
 def get_service(session: SessionDep) -> AddressService:
-    return AddressService(AddressRepository(session))
+    return AddressService(AddressRepository(session), RawAddressRepository(session))
 
 
 @router.get("", response_model=list[AddressRead], dependencies=[Depends(require_permission("view", "addresses"))])
 async def list_addresses(service: AddressService = Depends(get_service)) -> list[AddressRead]:
     return await service.list_all()
+
+
+@router.post("/resolve", response_model=AddressRead, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_permission("create", "addresses"))])
+async def resolve_address(body: AddressResolve, service: AddressService = Depends(get_service)) -> AddressRead:
+    return await service.get_or_create(body.raw_text, source=body.source)
 
 
 @router.post("", response_model=AddressRead, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_permission("create", "addresses"))])

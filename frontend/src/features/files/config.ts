@@ -14,6 +14,7 @@ export const filesConfig: ListPageConfig<FileRow> = {
   entityKey: 'files',
   title: 'Файлы',
   apiUrl: '/api/v1/files',
+  listPath: '/files',
   columns: [
     { id: 'id', label: 'ID', type: 'number' },
     { id: 'original_name', label: 'Имя файла', type: 'text' },
@@ -27,6 +28,6 @@ export const filesConfig: ListPageConfig<FileRow> = {
   ],
 
   columnOverrides: {
-    id: { href: (row) => `/reference/files/${row.id}` },
+    id: { href: (row) => `/files/${row.id}` },
   },
 }

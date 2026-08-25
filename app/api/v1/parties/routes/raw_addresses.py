@@ -9,14 +9,16 @@ from fastapi import APIRouter, Depends, status
 from app.api.deps import SessionDep, require_permission
 from app.api.v1.parties.schemas import RawAddressCreate, RawAddressRead, RawAddressUpdate
 from app.core.exceptions import NotFoundError
-from app.parties.repository import RawAddressRepository
+from app.parties.repository import AddressRepository, RawAddressRepository
+from app.parties.services.address_service import AddressService
 from app.parties.services.raw_address_service import RawAddressService
 
 router = APIRouter(prefix="/aliases", tags=["aliases"])
 
 
 def get_service(session: SessionDep) -> RawAddressService:
-    return RawAddressService(RawAddressRepository(session))
+    addresses = AddressService(AddressRepository(session), RawAddressRepository(session))
+    return RawAddressService(RawAddressRepository(session), addresses)
 
 
 @router.get("", response_model=list[RawAddressRead], dependencies=[Depends(require_permission("view", "addresses"))])

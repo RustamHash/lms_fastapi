@@ -12,6 +12,7 @@ import { useEntityList } from './hooks/useEntityList'
 import { useEntityFilters } from './hooks/useEntityFilters'
 import { useEntityContextMenu } from './hooks/useEntityContextMenu'
 import { exportRowsToCsv } from './exportCsv'
+import { listCreatePath, listDetailPath } from './createForms'
 import type { ListPageConfig } from './types'
 import type { ColumnFilterDef } from '../../components/ListTableShell'
 
@@ -196,7 +197,7 @@ export function EntityListPage<Row extends { id: number }>({
           />
         }
         onRefresh={entity.reload}
-        createHref={config.toolbar?.createHref}
+        createHref={listCreatePath(config)}
         canCreate={canCreate}
         onExportCsv={handleExportCsv}
         onOpenView={() => setSettingsOpen(true)}
@@ -247,21 +248,11 @@ export function EntityListPage<Row extends { id: number }>({
         onImport={onImport}
         onInvertSelection={() => entity.toggleAll(!entity.allSelected)}
         onRowDoubleClick={(row) => {
-          // Приоритет 1: колонка с href на эту же запись (не вложенную)
-          const selfLink = entity.columnDefs.find(col => {
-            const override = config.columnOverrides?.[col.id]
-            return override?.href && !col.id.includes('.')
-          })
-          
-          if (selfLink) {
-            const href = config.columnOverrides?.[selfLink.id]?.href
-            if (href) {
-              navigate(href(row), { state: location.state })
-              return
-            }
+          const to = listDetailPath(config, row)
+          if (to) {
+            navigate(to, { state: location.state })
+            return
           }
-          
-          // Приоритет 2: стандартный путь для справочников
           const entityPath = config.entityKey.replace(/_/g, '-')
           navigate(`/reference/${entityPath}/${row.id}`, { state: location.state })
         }}
@@ -340,14 +331,20 @@ export function EntityListPage<Row extends { id: number }>({
           canOpen={Boolean(ctx.row.id)}
           onOpen={() => {
             const override = config.columnOverrides?.[ctx.colId]
-            if (override?.href) {
-              navigate(override.href(ctx.row), { state: location.state })
+            const to = override?.href
+              ? override.href(ctx.row)
+              : listDetailPath(config, ctx.row)
+            if (to) {
+              navigate(to, { state: location.state })
             }
           }}
           onOpenInNewTab={() => {
             const override = config.columnOverrides?.[ctx.colId]
-            if (override?.href) {
-              window.open(override.href(ctx.row), '_blank', 'noopener,noreferrer')
+            const to = override?.href
+              ? override.href(ctx.row)
+              : listDetailPath(config, ctx.row)
+            if (to) {
+              window.open(to, '_blank', 'noopener,noreferrer')
             }
           }}
           onFilterByValue={() => {

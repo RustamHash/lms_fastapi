@@ -7,6 +7,10 @@
   max-width: 24rem;
 }
 
+.wh-form--wide {
+  max-width: none;
+}
+
 .wh-form label {
   display: flex;
   flex-direction: column;
@@ -21,7 +25,13 @@
   font-weight: 400;
 }
 
-.wh-form input[type='text'] {
+.wh-form input[type='text'],
+.wh-form input[type='email'],
+.wh-form input[type='number'],
+.wh-form input[type='date'],
+.wh-form input[type='password'],
+.wh-form textarea,
+.wh-form input:not([type]) {
   padding: 6px 8px;
   font-size: 14px;
 }
@@ -30,6 +40,21 @@
   flex-direction: row;
   align-items: center;
   gap: 8px;
+}
+
+.wh-form__fieldset {
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 32rem;
+}
+
+.wh-form__fieldset legend {
+  font-size: 14px;
+  padding: 0 4px;
 }
 
 .wh-form__err {
@@ -52,4 +77,30 @@
 .wh-form__actions a {
   color: #2c7be5;
   text-decoration: none;
+}
+
+.perm-matrix-wrap {
+  overflow-x: auto;
+}
+
+.perm-matrix {
+  border-collapse: collapse;
+  font-size: 13px;
+  min-width: 40rem;
+}
+
+.perm-matrix th,
+.perm-matrix td {
+  padding: 4px 8px;
+  border: 1px solid #e2e8f0;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.perm-matrix th:first-child,
+.perm-matrix td:first-child {
+  text-align: left;
+  position: sticky;
+  left: 0;
+  background: #fff;
 }

@@ -63,6 +63,7 @@ export const apiClient = {
   async get<T>(url: string, signal?: AbortSignal): Promise<T> {
     const res = await fetch(url, {
       headers: getHeaders(),
+      cache: 'no-store',
       signal,
     })
     return handleResponse<T>(res)
@@ -73,6 +74,19 @@ export const apiClient = {
       method: 'POST',
       headers: getHeaders(),
       body: body ? JSON.stringify(body) : undefined,
+      signal,
+    })
+    return handleResponse<T>(res)
+  },
+
+  async postForm<T>(url: string, body: FormData, signal?: AbortSignal): Promise<T> {
+    const headers: Record<string, string> = {}
+    const token = getAccessToken()
+    if (token) headers['Authorization'] = `Bearer ${token}`
+    const res = await fetch(url, {
+      method: 'POST',
+      headers,
+      body,
       signal,
     })
     return handleResponse<T>(res)

@@ -13,6 +13,7 @@ export const routesConfig: ListPageConfig<RouteRow> = {
   entityKey: 'routes',
   title: 'Маршруты',
   apiUrl: '/api/v1/delivery/routes',
+  listPath: '/reference/routes',
   columns: [
     { id: 'id', label: 'ID', type: 'number' },
     { id: 'number', label: 'Номер', type: 'text' },

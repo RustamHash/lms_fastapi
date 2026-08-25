@@ -19,7 +19,7 @@ class Driver(Base):
         ForeignKey("parties_carrier.id"), nullable=True, comment="Перевозчик"
     )
 
-    carrier: Mapped["Carrier | None"] = relationship(lazy="selectin")
+    carrier: Mapped["Carrier | None"] = relationship()
     routes: Mapped[list["Route"]] = relationship(back_populates="driver")
 
 
@@ -35,5 +35,5 @@ class Vehicle(Base):
         ForeignKey("parties_carrier.id"), nullable=True, comment="Перевозчик"
     )
 
-    carrier: Mapped["Carrier | None"] = relationship(lazy="selectin")
+    carrier: Mapped["Carrier | None"] = relationship()
     routes: Mapped[list["Route"]] = relationship(back_populates="vehicle")

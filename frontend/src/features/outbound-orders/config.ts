@@ -1,4 +1,5 @@
 import type { ListPageConfig } from '../entity-system/types'
+import { getStatusLabel } from '../../lib/statusLabels'
 
 type OutboundOrderRow = {
   id: number
@@ -10,28 +11,17 @@ type OutboundOrderRow = {
   order_date: string
   shipping_date: string | null
   status: string
-  status_label: string
-  is_edo: boolean
-  warehouse_id: number
+  warehouse_id: number | null
   declared_weight: string | null
   needs_delivery: boolean
   notes: string
-  address_comment: string
-  shipping_contact: string
-  total_quantity: number
-  total_lines: number
-  depositor_name: string
-  zone_name: string | null
-  warehouse_name: string
-  route_number: string | null
-  driver_name: string | null
-  driver_phone: string | null
 }
 
 export const outboundOrdersConfig: ListPageConfig<OutboundOrderRow> = {
   entityKey: 'outbound_orders',
   title: 'Исходящие заказы',
-  apiUrl: '/api/v1/outbound-orders/list',
+  apiUrl: '/api/v1/outbound-orders',
+  listPath: '/orders/outbound',
   columns: [
     { id: 'id', label: 'ID', type: 'number' },
     { id: 'number', label: 'Номер', type: 'text' },
@@ -39,11 +29,7 @@ export const outboundOrdersConfig: ListPageConfig<OutboundOrderRow> = {
     { id: 'delivery_address_name', label: 'Адрес доставки', type: 'text' },
     { id: 'order_date', label: 'Дата заказа', type: 'date' },
     { id: 'shipping_date', label: 'Дата отгрузки', type: 'date' },
-    { id: 'status_label', label: 'Статус', type: 'text' },
-    { id: 'depositor_name', label: 'Поклажедатель', type: 'text' },
-    { id: 'warehouse_name', label: 'Склад', type: 'text' },
-    { id: 'total_lines', label: 'Строк', type: 'number' },
-    { id: 'total_quantity', label: 'Кол-во', type: 'number' },
+    { id: 'status', label: 'Статус', type: 'text' },
     { id: 'needs_delivery', label: 'Доставка', type: 'bool' },
     { id: 'document_number', label: 'Документ', type: 'text' },
   ],
@@ -56,6 +42,8 @@ export const outboundOrdersConfig: ListPageConfig<OutboundOrderRow> = {
   ],
 
   columnOverrides: {
-    id: { href: (row) => `/reference/outbound-orders/${row.id}` },
+    id: { href: (row) => `/orders/outbound/${row.id}` },
+    number: { href: (row) => `/orders/outbound/${row.id}` },
+    status: { render: (row) => getStatusLabel(row.status) },
   },
 }

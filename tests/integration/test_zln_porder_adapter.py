@@ -46,6 +46,7 @@ def test_parse_porder_fields() -> None:
     assert doc.document_date == date(2026, 8, 25)
     assert doc.delivery_date == date(2026, 8, 26)
     assert doc.loc_code == "0001"
+    assert doc.order_number == ""
     assert doc.vendor is not None
     assert doc.vendor.code == "V1"
     assert doc.products[0].external_id == "SKU1"
@@ -58,6 +59,11 @@ def test_parse_porder_without_lines_is_error() -> None:
     xml = """
     <PORDER>
       <DOC_NO>P-2</DOC_NO>
+      <LOC>0001</LOC>
+      <VENDOR>
+        <ID>V1</ID>
+        <NAME>Поставщик</NAME>
+      </VENDOR>
       <ITEMS>
         <ITEM><ID>SKU1</ID><NAME>Товар</NAME></ITEM>
       </ITEMS>
@@ -66,3 +72,68 @@ def test_parse_porder_without_lines_is_error() -> None:
     doc, errors = ZLNAdapter()._parse_porder(fromstring(xml))
     assert doc is None
     assert any("Нет строк" in e for e in errors)
+
+
+def test_parse_porder_without_vendor_is_error() -> None:
+    xml = """
+    <PORDER>
+      <DOC_NO>P-3</DOC_NO>
+      <LOC>0001</LOC>
+      <ITEMS>
+        <ITEM><ID>SKU1</ID><NAME>Товар</NAME></ITEM>
+      </ITEMS>
+      <LN>
+        <ITEM>SKU1</ITEM>
+        <QNT>1</QNT>
+      </LN>
+    </PORDER>
+    """
+    doc, errors = ZLNAdapter()._parse_porder(fromstring(xml))
+    assert doc is None
+    assert any("VENDOR" in e for e in errors)
+
+
+def test_parse_porder_vendor_without_id_is_error() -> None:
+    xml = """
+    <PORDER>
+      <DOC_NO>P-4</DOC_NO>
+      <LOC>0001</LOC>
+      <VENDOR>
+        <NAME>Поставщик</NAME>
+      </VENDOR>
+      <ITEMS>
+        <ITEM><ID>SKU1</ID><NAME>Товар</NAME></ITEM>
+      </ITEMS>
+      <LN>
+        <ITEM>SKU1</ITEM>
+        <QNT>1</QNT>
+      </LN>
+    </PORDER>
+    """
+    doc, errors = ZLNAdapter()._parse_porder(fromstring(xml))
+    assert doc is None
+    assert any("нет тега ID" in e for e in errors)
+
+
+def test_parse_porder_without_loc_is_error() -> None:
+    xml = """
+    <PORDER>
+      <DOC_NO>P-5</DOC_NO>
+      <VENDOR>
+        <ID>V1</ID>
+        <NAME>Поставщик</NAME>
+      </VENDOR>
+      <ITEMS>
+        <ITEM><ID>SKU1</ID><NAME>Товар</NAME></ITEM>
+      </ITEMS>
+      <LN>
+        <ITEM>SKU1</ITEM>
+        <QNT>1</QNT>
+      </LN>
+    </PORDER>
+    """
+    doc, errors = ZLNAdapter()._parse_porder(fromstring(xml))
+    assert doc is None
+    assert any("нет тега LOC" in e for e in errors)
+
+

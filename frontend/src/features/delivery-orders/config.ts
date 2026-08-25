@@ -20,6 +20,7 @@ export const deliveryOrdersConfig: ListPageConfig<DeliveryOrderRow> = {
   entityKey: 'delivery-orders',
   title: 'Заказы на доставку',
   apiUrl: '/api/v1/delivery/orders',
+  listPath: '/delivery/orders',
   columns: [
     { id: 'id', label: 'ID', type: 'number' },
     { id: 'number', label: 'Номер', type: 'text' },
@@ -35,6 +36,6 @@ export const deliveryOrdersConfig: ListPageConfig<DeliveryOrderRow> = {
   ],
 
   columnOverrides: {
-    id: { href: (row) => `/reference/delivery-orders/${row.id}` },
+    id: { href: (row) => `/delivery/orders/${row.id}` },
   },
 }

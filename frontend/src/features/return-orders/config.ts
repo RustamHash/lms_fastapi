@@ -18,6 +18,7 @@ export const returnOrdersConfig: ListPageConfig<ReturnOrderRow> = {
   entityKey: 'return_orders',
   title: 'Возвратные заказы',
   apiUrl: '/api/v1/return-orders',
+  listPath: '/orders/return',
   columns: [
     { id: 'id', label: 'ID', type: 'number' },
     { id: 'customer_name', label: 'Клиент', type: 'text' },
@@ -33,6 +34,6 @@ export const returnOrdersConfig: ListPageConfig<ReturnOrderRow> = {
   ],
 
   columnOverrides: {
-    id: { href: (row) => `/reference/return-orders/${row.id}` },
+    id: { href: (row) => `/orders/return/${row.id}` },
   },
 }

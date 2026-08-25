@@ -17,6 +17,7 @@ export const auditConfig: ListPageConfig<AuditRow> = {
   entityKey: 'audit',
   title: 'Аудит',
   apiUrl: '/api/v1/audit',
+  listPath: '/audit',
   columns: [
     { id: 'id', label: 'ID', type: 'number' },
     { id: 'user_id', label: 'Пользователь', type: 'number' },
@@ -33,6 +34,6 @@ export const auditConfig: ListPageConfig<AuditRow> = {
   ],
 
   columnOverrides: {
-    id: { href: (row) => `/reference/audit/${row.id}` },
+    id: { href: (row) => `/audit/${row.id}` },
   },
 }

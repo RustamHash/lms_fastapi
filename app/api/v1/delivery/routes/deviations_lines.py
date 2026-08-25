@@ -38,6 +38,20 @@ async def list_deviations(services: Services, delivery_order_id: int | None = No
     return [{"id": d.id, "delivery_order_id": d.delivery_order_id, "deviation_type": d.deviation_type, "quantity": d.quantity, "description": d.description} for d in rows]
 
 
+@router.get("/deviations/{deviation_id}", response_model=dict, dependencies=[Depends(require_permission("view", "delivery"))])
+async def get_deviation(deviation_id: int, services: Services) -> dict:
+    row = await DeviationRepository(services.session).get_by_id(deviation_id)
+    if row is None:
+        raise NotFoundError("Отклонение не найдено")
+    return {
+        "id": row.id,
+        "delivery_order_id": row.delivery_order_id,
+        "deviation_type": row.deviation_type,
+        "quantity": row.quantity,
+        "description": row.description,
+    }
+
+
 @router.post("/deviations", response_model=dict, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_permission("create", "delivery"))])
 async def create_deviation(body: DeviationCreate, services: Services, user_id: UserDep) -> dict:
     deviation = await DeviationRepository(services.session).create(**body.model_dump())
@@ -59,6 +73,20 @@ async def list_route_lines(services: Services, route_id: int | None = None) -> l
     else:
         rows = await repo.list_all()
     return [{"id": rl.id, "route_id": rl.route_id, "delivery_order_id": rl.delivery_order_id, "order": rl.order, "status": rl.status} for rl in rows]
+
+
+@router.get("/route-lines/{line_id}", response_model=dict, dependencies=[Depends(require_permission("view", "routes"))])
+async def get_route_line(line_id: int, services: Services) -> dict:
+    row = await RouteLineRepository(services.session).get_by_id(line_id)
+    if row is None:
+        raise NotFoundError("Строка маршрута не найдена")
+    return {
+        "id": row.id,
+        "route_id": row.route_id,
+        "delivery_order_id": row.delivery_order_id,
+        "order": row.order,
+        "status": row.status,
+    }
 
 
 @router.post("/route-lines", response_model=dict, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_permission("create", "routes"))])

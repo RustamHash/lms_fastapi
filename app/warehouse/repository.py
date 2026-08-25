@@ -7,6 +7,7 @@ from __future__ import annotations
 from decimal import Decimal
 
 from sqlalchemy import func, select
+from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.infrastructure.repo_base import BaseRepository
@@ -150,6 +151,66 @@ class StockRepository(BaseRepository[StockBalance]):
             stmt = stmt.where(StockMovement.product_id == product_id)
         return list(await self._s.scalars(stmt))
 
+    async def list_movements_for_inbound(
+        self, inbound_order_id: int
+    ) -> list[StockMovement]:
+        stmt = (
+            select(StockMovement)
+            .join(TaskLine, StockMovement.task_line_id == TaskLine.id)
+            .join(Task, TaskLine.task_id == Task.id)
+            .options(
+                selectinload(StockMovement.product),
+                selectinload(StockMovement.batch),
+                selectinload(StockMovement.lpn),
+                selectinload(StockMovement.location),
+            )
+            .where(
+                Task.inbound_order_id == inbound_order_id,
+                Task.task_type == "receiving",
+                Task.is_deleted.is_(False),
+            )
+            .order_by(StockMovement.moved_at.asc(), StockMovement.id.asc())
+        )
+        return list((await self._s.scalars(stmt)).unique().all())
+
+    async def list_movements_for_outbound(
+        self, outbound_order_id: int
+    ) -> list[StockMovement]:
+        stmt = (
+            select(StockMovement)
+            .join(TaskLine, StockMovement.task_line_id == TaskLine.id)
+            .join(Task, TaskLine.task_id == Task.id)
+            .options(
+                selectinload(StockMovement.product),
+                selectinload(StockMovement.batch),
+                selectinload(StockMovement.lpn),
+                selectinload(StockMovement.location),
+            )
+            .where(
+                Task.outbound_order_id == outbound_order_id,
+                Task.task_type == "picking",
+                Task.is_deleted.is_(False),
+            )
+            .order_by(StockMovement.moved_at.asc(), StockMovement.id.asc())
+        )
+        return list((await self._s.scalars(stmt)).unique().all())
+
+    async def list_movements_for_document(
+        self, document_id: int
+    ) -> list[StockMovement]:
+        stmt = (
+            select(StockMovement)
+            .options(
+                selectinload(StockMovement.product),
+                selectinload(StockMovement.batch),
+                selectinload(StockMovement.lpn),
+                selectinload(StockMovement.location),
+            )
+            .where(StockMovement.document_id == document_id)
+            .order_by(StockMovement.moved_at.asc(), StockMovement.id.asc())
+        )
+        return list(await self._s.scalars(stmt))
+
 
 class TaskRepository(BaseRepository[Task]):
     def __init__(self, session: AsyncSession) -> None:
@@ -184,6 +245,40 @@ class TaskLineRepository(BaseRepository[TaskLine]):
             TaskLine.is_deleted.is_(False),
         )
         return list(await self._s.scalars(stmt))
+
+    async def list_for_inbound(self, inbound_order_id: int) -> list[TaskLine]:
+        stmt = (
+            select(TaskLine)
+            .join(Task, TaskLine.task_id == Task.id)
+            .options(
+                selectinload(TaskLine.product),
+                selectinload(TaskLine.batch),
+            )
+            .where(
+                Task.inbound_order_id == inbound_order_id,
+                Task.task_type == "receiving",
+                Task.is_deleted.is_(False),
+                TaskLine.is_deleted.is_(False),
+            )
+        )
+        return list((await self._s.scalars(stmt)).unique().all())
+
+    async def list_for_outbound(self, outbound_order_id: int) -> list[TaskLine]:
+        stmt = (
+            select(TaskLine)
+            .join(Task, TaskLine.task_id == Task.id)
+            .options(
+                selectinload(TaskLine.product),
+                selectinload(TaskLine.batch),
+            )
+            .where(
+                Task.outbound_order_id == outbound_order_id,
+                Task.task_type == "picking",
+                Task.is_deleted.is_(False),
+                TaskLine.is_deleted.is_(False),
+            )
+        )
+        return list((await self._s.scalars(stmt)).unique().all())
 
 
 class WarehouseRepository(BaseRepository[Warehouse]):

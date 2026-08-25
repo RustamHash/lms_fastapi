@@ -30,7 +30,7 @@ class IntegrationProfile(Base):
         JSONB, default=dict, comment="Настройки"
     )
 
-    depositor: Mapped["Depositor"] = relationship(lazy="selectin")
+    depositor: Mapped["Depositor"] = relationship()
     logs: Mapped[list["IntegrationLog"]] = relationship(back_populates="profile")
 
 

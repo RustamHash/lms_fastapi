@@ -11,6 +11,7 @@ export const warehousesConfig: ListPageConfig<WarehouseRow> = {
   entityKey: 'warehouses',
   title: 'Склады',
   apiUrl: '/api/v1/warehouse/topology/warehouses',
+  listPath: '/topology/warehouses',
   columns: [
     { id: 'id', label: 'ID', type: 'number' },
     { id: 'name', label: 'Название', type: 'text' },
@@ -20,8 +21,10 @@ export const warehousesConfig: ListPageConfig<WarehouseRow> = {
   filters: [
     { id: 'name', type: 'text', label: 'Название' },
   ],
-
+  toolbar: {
+    createHref: '/topology/warehouses/new',
+  },
   columnOverrides: {
-    id: { href: (row) => `/reference/warehouses/${row.id}` },
+    id: { href: (row) => `/topology/warehouses/${row.id}` },
   },
 }

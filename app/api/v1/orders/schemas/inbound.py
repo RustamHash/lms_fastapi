@@ -22,10 +22,13 @@ class InboundOrderRead(BaseRead):
         title="Склад",
         json_schema_extra={"ui_type": "select", "endpoint": "/api/v1/warehouse/topology/warehouses"},
     )
+    warehouse_name: str = Field("", title="Название склада")
     number: str = Field(..., title="Номер заявки")
+    order_number: str = Field("", title="Номер заказа")
+    loc_code: str = Field(..., title="Код склада (LOC)")
     supplier_code: str = Field("", title="Код поставщика")
-    supplier_id: int | None = Field(
-        None,
+    supplier_id: int = Field(
+        ...,
         title="Поставщик",
         json_schema_extra={"ui_type": "select", "endpoint": "/api/v1/clients"},
     )
@@ -50,6 +53,13 @@ class InboundOrderCreate(BaseModel):
         json_schema_extra={"ui_type": "select", "endpoint": "/api/v1/warehouse/topology/warehouses"},
     )
     number: str = Field(..., title="Номер заявки", min_length=1, max_length=100)
+    order_number: str = Field("", title="Номер заказа", max_length=100)
+    loc_code: str = Field(..., title="Код склада (LOC)", min_length=1, max_length=50)
+    supplier_id: int = Field(
+        ...,
+        title="Поставщик",
+        json_schema_extra={"ui_type": "select", "endpoint": "/api/v1/clients"},
+    )
     supplier_code: str = Field("", title="Код поставщика")
     order_date: date = Field(..., title="Дата заявки")
     planned_date: date | None = Field(None, title="Планируемая дата приёмки")
@@ -58,6 +68,13 @@ class InboundOrderCreate(BaseModel):
 
 class InboundOrderUpdate(BaseModel):
     warehouse_id: int | None = Field(None, title="Склад")
+    order_number: str | None = Field(None, title="Номер заказа")
+    loc_code: str | None = Field(None, title="Код склада (LOC)", min_length=1, max_length=50)
+    supplier_id: int | None = Field(
+        None,
+        title="Поставщик",
+        json_schema_extra={"ui_type": "select", "endpoint": "/api/v1/clients"},
+    )
     supplier_code: str | None = Field(None, title="Код поставщика")
     planned_date: date | None = Field(None, title="Планируемая дата приёмки")
     notes: str | None = Field(None, title="Примечания")

@@ -11,7 +11,7 @@ export function TopologyBackBar({ always = false }: Props) {
   if (!show) return null
   return (
     <div className="topology-back-bar" role="navigation" aria-label="Назад к разделу «Топология»">
-      <Link to="/reference/topology" className="topology-back-bar__link">
+      <Link to="/topology" className="topology-back-bar__link">
         ← Топология
       </Link>
     </div>

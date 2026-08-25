@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 
 from celery import Celery
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
+logger = logging.getLogger(__name__)
 
 celery_app = Celery(
     "lms",
@@ -33,6 +37,7 @@ def run_import_task(self, task_id: str, user_id: int, document_type: str | None)
         UserTableSettings,
         UserListPreset,
         UserDepositor,
+        UserClient,
     )
     from app.parties.models import (  # noqa: F401
         Address,
@@ -89,13 +94,38 @@ def run_import_task(self, task_id: str, user_id: int, document_type: str | None)
         IntegrationError,
     )
     from app.core.context import set_current_user_id
-    from app.core.database import async_session_factory
+    from app.core.database import create_worker_engine
+    from app.infrastructure.uow import UnitOfWork
+    from app.integration.repository import IntegrationLogRepository
     from app.integration.services.import_run_service import ImportRunService
 
-    async def run_import():
-        set_current_user_id(user_id)
-        await ImportRunService(async_session_factory).run(
-            task_id, user_id, document_type
+    async def run_import() -> None:
+        engine = create_worker_engine()
+        factory = async_sessionmaker(
+            engine, class_=AsyncSession, expire_on_commit=False
         )
+        try:
+            set_current_user_id(user_id)
+            await ImportRunService(factory).run(task_id, user_id, document_type)
+        except Exception as exc:
+            logger.exception("Сбой импорта %s", task_id)
+            try:
+                async with UnitOfWork(factory) as session:
+                    log = await IntegrationLogRepository(session).get_by_task_id(task_id)
+                    if log is not None:
+                        from sqlalchemy.orm.attributes import flag_modified
+
+                        log.status = "failed"
+                        log.current_step = "Сбой воркера"
+                        log.errors = list(log.errors or []) + [str(exc)]
+                        log.messages = list(log.messages or []) + [
+                            f"Воркер остановился с ошибкой: {exc}"
+                        ]
+                        flag_modified(log, "errors")
+                        flag_modified(log, "messages")
+            except Exception:
+                logger.exception("Не удалось записать сбой импорта %s в журнал", task_id)
+        finally:
+            await engine.dispose()
 
     asyncio.run(run_import())

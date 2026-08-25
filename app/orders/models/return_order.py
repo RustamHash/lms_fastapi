@@ -7,8 +7,12 @@ from decimal import Decimal
 
 from sqlalchemy import Date, ForeignKey, Numeric, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+from typing import TYPE_CHECKING
 
 from app.infrastructure.orm_base import Base
+
+if TYPE_CHECKING:
+    from app.parties.models.client import Client
 
 
 class ReturnOrder(Base):
@@ -34,6 +38,9 @@ class ReturnOrder(Base):
     customer_name: Mapped[str] = mapped_column(
         String(255), default="", comment="Наименование клиента"
     )
+    client_id: Mapped[int] = mapped_column(
+        ForeignKey("parties_client.id"), nullable=False, comment="Клиент"
+    )
     return_date: Mapped[date] = mapped_column(Date, nullable=False, comment="Дата возврата")
     return_type: Mapped[str] = mapped_column(
         String(20), default="partial", comment="Тип возврата: full, partial"
@@ -44,6 +51,7 @@ class ReturnOrder(Base):
     notes: Mapped[str] = mapped_column(Text, default="", comment="Примечания")
 
     lines: Mapped[list["ReturnOrderLine"]] = relationship(back_populates="return_order")
+    client: Mapped["Client"] = relationship()
 
 
 class ReturnOrderLine(Base):

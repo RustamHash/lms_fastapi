@@ -20,6 +20,11 @@ from app.warehouse.repository import (
 from app.warehouse.services.batch_service import BatchService
 from app.warehouse.services.lpn_service import LPNService
 from app.warehouse.services.placement_service import PlacementService
+from app.warehouse.services.plan_fact_view import (
+    discrepancy_kind,
+    movement_row,
+    product_label,
+)
 from app.warehouse.services.stock_service import StockService
 
 
@@ -285,3 +290,70 @@ class ReceivingService:
             qty_fact=line.fact_qty,
             status="detected",
         )
+
+    async def plan_fact_for_inbound(self, inbound_order_id: int) -> dict:
+        """План (строки заявки), факт (движения) и сверка для карточки заказа."""
+        order = await self._inbound.get_by_id(inbound_order_id)
+        if order is None:
+            raise NotFoundError("Входящий заказ не найден")
+
+        plan_lines = await self._inbound_lines.list_by_order(order.id)
+        task_lines = await self._lines.list_for_inbound(order.id)
+        movements = await self._stock_repo.list_movements_for_inbound(order.id)
+
+        plan = [
+            {
+                "id": line.id,
+                "product_id": line.product_id,
+                **product_label(line.product),
+                "quantity": line.quantity,
+                "batch_number": line.batch_number,
+                "manufacture_date": line.manufacture_date,
+            }
+            for line in plan_lines
+        ]
+        fact = [movement_row(move) for move in movements]
+
+        by_order_line: dict[int, list] = {}
+        unmatched: list = []
+        for tl in task_lines:
+            if tl.inbound_order_line_id:
+                by_order_line.setdefault(tl.inbound_order_line_id, []).append(tl)
+            else:
+                unmatched.append(tl)
+
+        discrepancies: list[dict] = []
+        used_task_lines: set[int] = set()
+        for line in plan_lines:
+            related = by_order_line.get(line.id, [])
+            fact_qty = sum((tl.fact_qty for tl in related), Decimal("0"))
+            used_task_lines.update(tl.id for tl in related)
+            planned = line.quantity
+            discrepancies.append(
+                {
+                    "inbound_order_line_id": line.id,
+                    "product_id": line.product_id,
+                    **product_label(line.product),
+                    "qty_planned": planned,
+                    "qty_fact": fact_qty,
+                    "qty_diff": fact_qty - planned,
+                    "kind": discrepancy_kind(planned, fact_qty),
+                }
+            )
+
+        for tl in unmatched:
+            if tl.id in used_task_lines:
+                continue
+            discrepancies.append(
+                {
+                    "inbound_order_line_id": None,
+                    "product_id": tl.product_id,
+                    **product_label(tl.product),
+                    "qty_planned": Decimal("0"),
+                    "qty_fact": tl.fact_qty,
+                    "qty_diff": tl.fact_qty,
+                    "kind": "surplus" if tl.fact_qty else "match",
+                }
+            )
+
+        return {"plan": plan, "fact": fact, "discrepancies": discrepancies}

@@ -12,6 +12,7 @@ export const integrationProfilesConfig: ListPageConfig<IntegrationProfileRow> = 
   entityKey: 'integration_profiles',
   title: 'Профили интеграций',
   apiUrl: '/api/v1/integrations/profiles',
+  listPath: '/integrations/profiles',
   columns: [
     { id: 'id', label: 'ID', type: 'number' },
     { id: 'name', label: 'Название', type: 'text' },
@@ -27,6 +28,6 @@ export const integrationProfilesConfig: ListPageConfig<IntegrationProfileRow> = 
   ],
 
   columnOverrides: {
-    id: { href: (row) => `/reference/integration-profiles/${row.id}` },
+    id: { href: (row) => `/integrations/profiles/${row.id}` },
   },
 }

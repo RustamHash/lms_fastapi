@@ -12,6 +12,7 @@ export const batchesConfig: ListPageConfig<BatchRow> = {
   entityKey: 'batches',
   title: 'Партии',
   apiUrl: '/api/v1/warehouse/batches',
+  listPath: '/reference/batches',
   columns: [
     { id: 'id', label: 'ID', type: 'number' },
     { id: 'batch_number', label: 'Номер партии', type: 'text' },

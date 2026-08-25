@@ -5,8 +5,8 @@
 from __future__ import annotations
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.documents.models import Document, DocumentLine
 
@@ -16,12 +16,10 @@ class DocumentRepository:
         self._s = session
 
     async def get_by_id(self, id: int) -> Document | None:
-        stmt = select(Document).where(Document.id == id).options(selectinload(Document.warehouse), selectinload(Document.lines))
-        return await self._s.scalar(stmt)
+        return await self._s.get(Document, id)
 
     async def list_all(self) -> list[Document]:
-        stmt = select(Document).options(selectinload(Document.warehouse))
-        return list(await self._s.scalars(stmt))
+        return list(await self._s.scalars(select(Document)))
 
     async def list_by_type(self, document_type: str) -> list[Document]:
         stmt = select(Document).where(Document.document_type == document_type)
@@ -62,7 +60,17 @@ class DocumentLineRepository:
         return list(await self._s.scalars(select(DocumentLine)))
 
     async def list_by_document(self, document_id: int) -> list[DocumentLine]:
-        stmt = select(DocumentLine).where(DocumentLine.document_id == document_id)
+        stmt = (
+            select(DocumentLine)
+            .options(
+                selectinload(DocumentLine.product),
+                selectinload(DocumentLine.batch),
+            )
+            .where(
+                DocumentLine.document_id == document_id,
+                DocumentLine.is_deleted.is_(False),
+            )
+        )
         return list(await self._s.scalars(stmt))
 
     async def create(self, **kwargs) -> DocumentLine:

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, useLocation } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { DetailPageShell } from '../../components/DetailPageShell'
 import { useAppNotice } from '../../notifications/AppNoticeContext'
 import { useEntityDetail } from './hooks/useEntityDetail'
@@ -12,6 +12,7 @@ type Props<T extends { id: number }> = {
 
 export function EntityDetailPage<T extends { id: number }>({ config, id }: Props<T>) {
   const location = useLocation()
+  const navigate = useNavigate()
   const { notify } = useAppNotice()
   const { data, loading, error, editing, deleting, setEditing, save, remove } =
     useEntityDetail<T>({ entityKey: config.entityKey, apiUrl: config.apiUrl, id })
@@ -27,7 +28,7 @@ export function EntityDetailPage<T extends { id: number }>({ config, id }: Props
     try {
       await remove()
       notify('Запись удалена', 'success')
-      window.location.assign(config.backUrl)
+      navigate(config.backUrl)
     } catch (e) {
       notify(e instanceof Error ? e.message : 'Ошибка удаления', 'error')
     }

@@ -10,6 +10,7 @@ export const lpnsConfig: ListPageConfig<LpnRow> = {
   entityKey: 'lpns',
   title: 'LPN',
   apiUrl: '/api/v1/warehouse/lpns',
+  listPath: '/reference/lpns',
   columns: [
     { id: 'id', label: 'ID', type: 'number' },
     { id: 'number', label: 'Номер LPN', type: 'text' },

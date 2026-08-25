@@ -23,6 +23,7 @@ export const productsConfig: ListPageConfig<ProductRow> = {
   entityKey: 'products',
   title: 'Товары',
   apiUrl: '/api/v1/warehouse/products',
+  listPath: '/reference/products',
   columns: [
     { id: 'id', label: 'ID', type: 'number' },
     { id: 'name', label: 'Название', type: 'text' },

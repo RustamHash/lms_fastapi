@@ -12,6 +12,7 @@ export const tasksConfig: ListPageConfig<TaskRow> = {
   entityKey: 'tasks',
   title: 'Задания',
   apiUrl: '/api/v1/warehouse/tasks',
+  listPath: '/tasks',
   columns: [
     { id: 'id', label: 'ID', type: 'number' },
     { id: 'task_type', label: 'Тип задания', type: 'text' },
@@ -46,6 +47,6 @@ export const tasksConfig: ListPageConfig<TaskRow> = {
   ],
 
   columnOverrides: {
-    id: { href: (row) => `/reference/tasks/${row.id}` },
+    id: { href: (row) => `/tasks/${row.id}` },
   },
 }

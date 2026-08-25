@@ -33,11 +33,17 @@ class InboundOrder(Base):
     number: Mapped[str] = mapped_column(
         String(100), nullable=False, comment="Номер заявки"
     )
+    order_number: Mapped[str] = mapped_column(
+        String(100), default="", comment="Номер заказа"
+    )
+    loc_code: Mapped[str] = mapped_column(
+        String(50), nullable=False, comment="Код склада (LOC)"
+    )
     supplier_code: Mapped[str] = mapped_column(
         String(100), default="", comment="Код поставщика"
     )
-    supplier_id: Mapped[int | None] = mapped_column(
-        ForeignKey("parties_client.id"), nullable=True, comment="Поставщик"
+    supplier_id: Mapped[int] = mapped_column(
+        ForeignKey("parties_client.id"), nullable=False, comment="Поставщик"
     )
     order_date: Mapped[date] = mapped_column(Date, nullable=False, comment="Дата заявки")
     planned_date: Mapped[date | None] = mapped_column(
@@ -58,9 +64,13 @@ class InboundOrder(Base):
     )
 
     lines: Mapped[list["InboundOrderLine"]] = relationship(back_populates="order")
-    depositor: Mapped["Depositor"] = relationship(lazy="selectin")
-    warehouse: Mapped["Warehouse | None"] = relationship(lazy="selectin")
-    supplier: Mapped["Client | None"] = relationship(foreign_keys=[supplier_id], lazy="selectin")
+    depositor: Mapped["Depositor"] = relationship()
+    warehouse: Mapped["Warehouse | None"] = relationship()
+    supplier: Mapped["Client"] = relationship(foreign_keys=[supplier_id])
+
+    @property
+    def warehouse_name(self) -> str:
+        return self.warehouse.name if self.warehouse else ""
 
 
 class InboundOrderLine(Base):

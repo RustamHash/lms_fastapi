@@ -16,13 +16,13 @@
 
 Unique: `(depositor_id, number)` на inbound и outbound.
 
-Статусы: `OrderStatus` в `app/core/statuses.py` — `new` → `document_created` → `task_created` → `in_progress` → `completed` / `cancelled`. В колонке пока свободная строка.
+Статусы: `OrderStatus` в `app/core/statuses.py` — `new` → `document_created` → `task_created` → `in_progress` → `completed` / `cancelled`. На карточке и в списке входящих — русские подписи (`Документ создан` и т.д.).
 
 ---
 
 ## Поля (важное)
 
-**Inbound:** `depositor_id`, `warehouse_id`, `supplier_id` (клиент-поставщик), даты, `pordrsp_exported` / `recadv_exported` (ответный XML — генерация ещё в этапе 4), `has_shortage`. Складской документ прихода ссылается на заказ через `documents_document.inbound_order_id`.
+**Inbound:** `depositor_id`, `number` (номер заявки, `DOC_NO`), `order_number` (номер заказа, пока необязателен — в PORDER нет), `loc_code` (код склада = `LOC`, обязателен), `warehouse_id` (физический склад по маппингу виртуального), `supplier_id` (обязателен; `supplier_code` — снимок кода), даты, `pordrsp_exported` / `recadv_exported` (ответный XML — этап 4), `has_shortage`. Складской документ прихода ссылается на заказ через `documents_document.inbound_order_id`.
 
 **Outbound:** `depositor_id`, `client_id` (обязателен), адрес/контакт доставки, `needs_delivery`, `delivery_only` (без склада), вес/места, флаги экспорта `ordrsp` / `desadv`, статус доставки отдельно от статуса заказа.
 
@@ -34,7 +34,9 @@ Unique: `(depositor_id, number)` на inbound и outbound.
 
 `InboundOrderService`, `OutboundOrderService`, `ReturnOrderService` — CRUD с экрана. На create/update проверяют `DataScope`. Списки — `list_all(scope=...)`.
 
-`InboundExchangeService.accept` — второй вход: заявка с обмена, без UI-скоупа (поклажедатель = профиль FTP). Дубликат номера — пропуск. Событие `inbound_order.accepted_from_exchange`.
+`InboundExchangeService.accept` — второй вход: заявка с обмена, без UI-скоупа (поклажедатель = профиль интеграции). Обязательны поставщик (`VENDOR` с `ID` и `NAME`) и код склада (`LOC` → `loc_code`, lookup виртуального склада). Без LOC сообщение не собирается; без VW — ошибка, заказ не создаётся. `order_number` с обмена пока пустой. Дубликат номера заявки — пропуск. Событие `inbound_order.accepted_from_exchange`. Всегда создаётся складской документ прихода (receipt).
+
+Кнопка импорта на списках заявок запускает обмен (см. [integration.md](integration.md)), не CRUD этого модуля. С исходящих XML ORDER пока не принимается — пошагово: [outbound-import.md](../flows/outbound-import.md).
 
 Складской воркфлоу не в этом модуле: `ReceivingService.create_from_inbound` и `PickingService.create_from_outbound` (см. [warehouse.md](warehouse.md)). Заказ меняет статус (`task_created` → `in_progress` → `completed`); у inbound при недогрузе — `has_shortage`.
 
@@ -46,6 +48,10 @@ RBAC entity: `orders`.
 
 Типично: список, создание, get/patch/delete по id, линии `/{id}/lines` и `PATCH/DELETE /lines/{line_id}`. Все три ресурса с `ScopeDep`.
 
+Карточка входящего `/orders/inbound/:id`: шапка (в т.ч. физический склад `warehouse_name` по `warehouse_id`, LOC отдельно) и вкладки **План** / **Факт** / **Расхождения**. Данные: `GET /inbound-orders/{id}` + `GET /warehouse/receiving/inbound/{id}`.
+
+Карточка исходящего `/orders/outbound/:id`: та же шапка+вкладки. Данные: `GET /outbound-orders/{id}` + `GET /warehouse/picking/outbound/{id}`. Сверка по `product_id` (строки FEFO-задания не 1:1 со строкой заявки).
+
 Фильтр списков по скоупу уже есть. Пользователь поклажедателя не должен видеть чужие заказы.
 
 ---
@@ -53,8 +59,8 @@ RBAC entity: `orders`.
 ## Связи
 
 - **parties** — depositor, client/supplier, адрес.
-- **warehouse** — `warehouse_id`, товар в строках.
-- **documents** — `InboundExchangeService` создаёт receipt с `inbound_order_id`, если есть склад.
+- **warehouse** — `loc_code` (LOC) и `warehouse_id`, товар в строках.
+- **documents** — `InboundExchangeService` при accept всегда создаёт receipt с `inbound_order_id` (LOC обязателен).
 - **delivery** — `DeliveryOrder.outbound_order_id`.
 - **integration** — только доставляет `InboundExchangeMessage`; не пишет таблицы заказов.
 

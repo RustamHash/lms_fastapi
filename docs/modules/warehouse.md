@@ -25,7 +25,8 @@ Warehouse (физический)
 `Warehouse.address_id` → parties. `VirtualWarehouse` — `(depositor_id, warehouse_id, code)`.
 
 API: `/api/v1/warehouse/topology/{warehouses,virtual-warehouses,zones,rows,locations}`  
-RBAC entity: `warehouse`.
+RBAC entity: `warehouse`.  
+SPA: списки `/topology/warehouses` и `/topology/virtual-warehouses`, создание `/topology/warehouses/new` и `/topology/virtual-warehouses/new` (кнопка «+» без `createHref` неактивна).
 
 Сервисы: `WarehouseService`, `VirtualWarehouseService`, `ZoneService`, `RowService`, `LocationService`.
 
@@ -42,7 +43,7 @@ RBAC entity: `warehouse`.
 | `Batch` | партия (срок годности — для FEFO) |
 | `LPN` | паллета / грузоместо, уникальный `number` |
 
-API под `/api/v1/warehouse/`: `products`, `product-groups`, `packages`, `product-locations`, `batches`, `lpns`.  
+API под `/api/v1/warehouse/`: `products`, `product-groups`, `packages`, `product-locations` (включая GET по id), `batches`, `lpns`.  
 RBAC: `products`, `batches`, `lpns`.
 
 `ProductService.create` отвергает дубль `(depositor_id, external_id)`.
@@ -81,12 +82,14 @@ API воркфлоу (RBAC entity `tasks`):
 - `POST /warehouse/receiving/lines/{id}/receive`
 - `POST /warehouse/receiving/{task_id}/complete` `{confirm_shortage}`
 - `POST /warehouse/receiving/movements/{id}/cancel`
+- `GET /warehouse/receiving/inbound/{id}` — план/факт/сверка для карточки входящего заказа (право `view` на `orders`). На факте: партия, дата изготовления, срок годности, остаток срока в днях и % на сегодня (`expiration − today`; % = остаток / (`expiration − production`))
 - `POST /warehouse/picking/from-outbound` `{outbound_order_id}`
 - `POST /warehouse/picking/{task_id}/plan`
 - `POST /warehouse/picking/lines/{id}/pick`
 - `POST /warehouse/picking/{task_id}/complete`
+- `GET /warehouse/picking/outbound/{id}` — план/факт/сверка для карточки исходящего заказа (право `view` на `orders`)
 
-Generic `/warehouse/tasks` (CRUD, `from-document`, `complete_line`) ещё есть; для приёмки и отбора это не основной путь. Новых экранов фронта нет.
+Generic `/warehouse/tasks` (CRUD, `from-document`, `complete_line`) ещё есть; для приёмки и отбора это не основной путь. Карточки заказов и документов показывают план/факт (см. [orders.md](orders.md), [documents.md](documents.md), [frontend.md](frontend.md)). Факт собирается через `movement_row`: даты партии и остаток срока на сегодня.
 
 ---
 

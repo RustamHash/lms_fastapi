@@ -58,6 +58,8 @@ async def start_import(
         status="starting",
         document_type=document_type,
         created_by_id=user_id,
+        current_step="В очереди",
+        messages=["Задача поставлена в очередь, ждём воркер"],
     )
 
     # Отправляем задачу в Celery
@@ -93,31 +95,46 @@ async def get_import_status(task_id: str, session: SessionDep) -> dict:
     dependencies=[Depends(require_permission("view", "integrations"))],
 )
 async def get_import_status_long(task_id: str, session: SessionDep) -> dict:
-    """Long Polling — держит до 25 сек, отвечает при изменениях."""
+    """Держит до 25 с: ждёт смену статуса/сообщений, иначе отдаёт снимок."""
     from app.integration.repository import IntegrationLogRepository
 
+    logs = IntegrationLogRepository(session)
+    log = await logs.get_by_task_id(task_id)
+    if log is None:
+        raise NotFoundError("Задача импорта не найдена")
+    if log.status in ("completed", "failed"):
+        return _format_log(log)
+
+    last_messages = len(log.messages or [])
+    last_errors = len(log.errors or [])
+    last_processed = log.processed_rows or 0
+    last_status = log.status
+    last_step = log.current_step or ""
     start = time.time()
-    last_messages_count = -1
 
     while time.time() - start < 25:
-        log = await IntegrationLogRepository(session).get_by_task_id(task_id)
+        await asyncio.sleep(1)
+        session.expire_all()
+        log = await logs.get_by_task_id(task_id)
         if log is None:
             raise NotFoundError("Задача импорта не найдена")
-
-        current_count = len(log.messages or [])
-
         if log.status in ("completed", "failed"):
             return _format_log(log)
-
-        if current_count > last_messages_count:
-            last_messages_count = current_count
+        messages = len(log.messages or [])
+        errors = len(log.errors or [])
+        processed = log.processed_rows or 0
+        step = log.current_step or ""
+        if (
+            messages != last_messages
+            or errors != last_errors
+            or processed != last_processed
+            or log.status != last_status
+            or step != last_step
+        ):
             return _format_log(log)
 
-        await asyncio.sleep(1)
-
-    from app.integration.repository import IntegrationLogRepository
-
-    log = await IntegrationLogRepository(session).get_by_task_id(task_id)
+    session.expire_all()
+    log = await logs.get_by_task_id(task_id)
     if log is None:
         raise NotFoundError("Задача импорта не найдена")
     return _format_log(log)

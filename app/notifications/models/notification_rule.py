@@ -28,7 +28,7 @@ class NotificationRule(Base):
         comment="ID пользователя (если recipient_type=user)",
     )
     role_code: Mapped[str | None] = mapped_column(
-        ForeignKey("accounts_role.code"),
+        String(50),
         nullable=True,
         comment="Код роли (если recipient_type=role)",
     )

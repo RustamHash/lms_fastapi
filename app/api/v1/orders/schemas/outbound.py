@@ -25,8 +25,8 @@ class OutboundOrderRead(BaseRead):
     number: str = Field(..., title="Номер заявки")
     customer_code: str = Field("", title="Код клиента")
     customer_name: str = Field("", title="Наименование клиента")
-    client_id: int | None = Field(
-        None,
+    client_id: int = Field(
+        ...,
         title="Клиент",
         json_schema_extra={"ui_type": "select", "endpoint": "/api/v1/clients"},
     )
@@ -69,8 +69,11 @@ class OutboundOrderCreate(BaseModel):
         json_schema_extra={"ui_type": "select", "endpoint": "/api/v1/warehouse/topology/warehouses"},
     )
     number: str = Field(..., title="Номер заявки", min_length=1, max_length=100)
-    customer_code: str = Field("", title="Код клиента")
-    customer_name: str = Field("", title="Наименование клиента")
+    client_id: int = Field(
+        ...,
+        title="Клиент",
+        json_schema_extra={"ui_type": "select", "endpoint": "/api/v1/clients"},
+    )
     delivery_address_name: str = Field("", title="Адрес доставки")
     order_date: date = Field(..., title="Дата заявки")
     shipping_date: date | None = Field(None, title="Планируемая дата отгрузки")
@@ -84,7 +87,11 @@ class OutboundOrderCreate(BaseModel):
 
 class OutboundOrderUpdate(BaseModel):
     warehouse_id: int | None = Field(None, title="Склад")
-    customer_name: str | None = Field(None, title="Наименование клиента")
+    client_id: int | None = Field(
+        None,
+        title="Клиент",
+        json_schema_extra={"ui_type": "select", "endpoint": "/api/v1/clients"},
+    )
     delivery_address_name: str | None = Field(None, title="Адрес доставки")
     shipping_date: date | None = Field(None, title="Планируемая дата отгрузки")
     needs_delivery: bool | None = Field(None, title="Нужна доставка")

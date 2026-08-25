@@ -20,6 +20,7 @@ export const depositorConfig = {
     entityKey: 'depositors',
     title: 'Поклажедатели',
     apiUrl: '/api/v1/depositors',
+    listPath: '/reference/depositors',
     columns: [
       { id: 'id', label: 'ID', type: 'number' },
       { id: 'legal_entity.name', label: 'Юрлицо', type: 'text' },

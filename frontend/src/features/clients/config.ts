@@ -18,6 +18,7 @@ export const clientConfig = {
     entityKey: 'clients',
     title: 'Клиенты',
     apiUrl: '/api/v1/clients',
+    listPath: '/reference/clients',
     columns: [
       { id: 'id', label: 'ID', type: 'number' },
       { id: 'code', label: 'Код клиента', type: 'text' },
@@ -38,9 +39,8 @@ export const clientConfig = {
     toolbar: {
       createHref: '/reference/clients/new',
     },
+    columnOverrides: {
+      id: { href: (row: { id: number }) => `/reference/clients/${row.id}` },
+    },
   } as ListPageConfig<ClientRow>,
-
-  columnOverrides: {
-    id: { href: (row: { id: number }) => `/reference/clients/${row.id}` },
-  },
 }

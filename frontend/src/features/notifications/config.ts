@@ -16,6 +16,7 @@ export const notificationsConfig: ListPageConfig<NotificationRow> = {
   entityKey: 'notifications',
   title: 'Уведомления',
   apiUrl: '/api/v1/notifications',
+  listPath: '/notifications',
   columns: [
     { id: 'id', label: 'ID', type: 'number' },
     { id: 'title', label: 'Заголовок', type: 'text' },
@@ -30,6 +31,6 @@ export const notificationsConfig: ListPageConfig<NotificationRow> = {
   ],
 
   columnOverrides: {
-    id: { href: (row) => `/reference/notifications/${row.id}` },
+    id: { href: (row) => `/notifications/${row.id}` },
   },
 }

@@ -135,7 +135,7 @@ Inbound/OutboundOrder  ──?──  Document  ──FK──  Task
 
 **Сейчас.**
 
-- `Document` не ссылается на inbound/outbound. Связь только через совпадение `document_number` и создание в `IntegrationService`.
+- `Document` ссылается на inbound через `inbound_order_id` (PORDER / `InboundExchangeService`). Outbound/return FK ещё нет.
 - `Task` ссылается на `document_id`, не на заказ.
 - `DeliveryOrder` имеет и `document_id`, и `outbound_order_id` — хорошо.
 - `OutboundOrder.delivery_status` дублирует `DeliveryOrder.status`.
@@ -345,7 +345,7 @@ warehouse_stock_movement
 
 ### IntegrationProfile / Log / Error
 
-- `config` JSONB с паролем FTP. Это не колонка «улучшить тип», это секрет в БД. **Совет:** вынести секреты в vault/env, в config — host/path; или хотя бы не отдавать password в API Read-схеме (это уже не модель, но колонка провоцирует утечку).
+- `config` JSONB с паролем FTP. Это не колонка «улучшить тип», это секрет в БД. API и карточка отдают его открытым текстом. **Совет:** вынести секреты в vault/env, в config — host/path.
 - `task_id` без unique — два лога на одну Celery-задачу. Unique обязателен.
 - `messages`/`errors` JSONB-массивы растут бесконечно на одном логе. Либо таблица `IntegrationError` (она уже есть!) и не дублировать текст в JSON лога, либо ограничить размер. Сейчас и JSON, и таблица error — два канала.
 - `File` импортируется в `integration_profile.py` ради type? Только `file_id` на логе. Неиспользуемый import `File` в модели профиля — убрать.

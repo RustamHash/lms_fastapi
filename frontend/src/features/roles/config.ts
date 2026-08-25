@@ -11,6 +11,7 @@ export const rolesConfig: ListPageConfig<RoleRow> = {
   entityKey: 'roles',
   title: 'Роли',
   apiUrl: '/api/v1/roles',
+  listPath: '/roles',
   columns: [
     { id: 'id', label: 'ID', type: 'number' },
     { id: 'name', label: 'Название', type: 'text' },
@@ -22,6 +23,6 @@ export const rolesConfig: ListPageConfig<RoleRow> = {
   ],
 
   columnOverrides: {
-    id: { href: (row) => `/reference/roles/${row.id}` },
+    id: { href: (row) => `/roles/${row.id}` },
   },
 }

@@ -19,6 +19,7 @@ export const documentsConfig: ListPageConfig<DocumentRow> = {
   entityKey: 'documents',
   title: 'Документы',
   apiUrl: '/api/v1/documents',
+  listPath: '/documents',
   columns: [
     { id: 'id', label: 'ID', type: 'number' },
     { id: 'document_number', label: 'Номер', type: 'text' },
@@ -35,6 +36,6 @@ export const documentsConfig: ListPageConfig<DocumentRow> = {
   ],
 
   columnOverrides: {
-    id: { href: (row) => `/reference/documents/${row.id}` },
+    id: { href: (row) => `/documents/${row.id}` },
   },
 }

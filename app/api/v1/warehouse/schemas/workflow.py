@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 
 from pydantic import BaseModel, Field
@@ -31,3 +31,54 @@ class PickingFromOutbound(BaseModel):
 
 class PickLineBody(BaseModel):
     quantity: Decimal = Field(..., title="Количество")
+
+
+class PlanFactLineRead(BaseModel):
+    id: int
+    product_id: int | None = None
+    product_sku: str = ""
+    product_name: str = ""
+    quantity: Decimal
+    batch_number: str = ""
+    manufacture_date: date | None = None
+
+
+class PlanFactMovementRead(BaseModel):
+    id: int
+    moved_at: datetime
+    direction: str
+    quantity: Decimal
+    product_id: int
+    product_sku: str = ""
+    product_name: str = ""
+    batch_number: str = ""
+    lpn_number: str = ""
+    location_id: int
+    task_line_id: int | None = None
+    production_date: date | None = None
+    expiration_date: date | None = None
+    remaining_days: int | None = None
+    remaining_percent: Decimal | None = None
+
+
+class PlanFactDiscrepancyRead(BaseModel):
+    inbound_order_line_id: int | None = None
+    product_id: int | None = None
+    product_sku: str = ""
+    product_name: str = ""
+    qty_planned: Decimal
+    qty_fact: Decimal
+    qty_diff: Decimal
+    kind: str
+
+
+class PlanFactRead(BaseModel):
+    plan: list[PlanFactLineRead]
+    fact: list[PlanFactMovementRead]
+    discrepancies: list[PlanFactDiscrepancyRead]
+
+
+InboundPlanLineRead = PlanFactLineRead
+InboundFactMovementRead = PlanFactMovementRead
+InboundDiscrepancyRead = PlanFactDiscrepancyRead
+InboundPlanFactRead = PlanFactRead

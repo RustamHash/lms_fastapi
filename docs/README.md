@@ -17,6 +17,7 @@ HTTP → Router → Service → Repository → PostgreSQL
 |------|------------|
 | Этот файл | Карта проекта, запуск, ссылки на модули |
 | [modules/…](modules/) | Деталка по каждой фиче: модели, сервисы, API, связи |
+| [flows/…](flows/) | Пошаговые сценарии UI → API → фон |
 | [../ARCHITECTURE.md](../ARCHITECTURE.md) | Слои, DI, транзакции — **источник истины по устройству кода** |
 | [09_models_improvements.md](09_models_improvements.md) | Долг по ORM-моделям |
 | [../plans/rewrite-phases.md](../plans/rewrite-phases.md) | Спека догонки до WMS_01 |
@@ -60,7 +61,7 @@ Docker (dev): `docker compose -f docker-compose.dev.yml up` — Postgres, Redis,
 - `scripts/create_default_roles.py`
 - `scripts/clear_orders.py`
 
-Фронт в dev: Vite на `:5173` (CORS уже в настройках). В prod собранный `frontend/dist` раздаётся из FastAPI.
+Фронт в dev: Vite на `:5173` (CORS уже в настройках). FastAPI `:8080` отдаёт собранный `frontend/dist` (том в `docker-compose.dev.yml`). После правок UI: `docker exec lms_dev_frontend npm run build` и Ctrl+F5.
 
 Тесты склада: `pytest tests/warehouse` (нужен PostgreSQL; БД `lms_fastapi_test` создаётся сама).
 
@@ -79,7 +80,7 @@ Docker (dev): `docker compose -f docker-compose.dev.yml up` — Postgres, Redis,
 | **documents** | Складские документы и строки | `app/documents/` | `/documents` | [documents.md](modules/documents.md) |
 | **delivery** | Заявки на доставку, водители, ТС, маршруты, отклонения | `app/delivery/` | `/delivery/...` | [delivery.md](modules/delivery.md) |
 | **notifications** | In-app / email по правилам и событиям | `app/notifications/` | `/notifications`, `/notification-rules` | [notifications.md](modules/notifications.md) |
-| **integration** | FTP, адаптер XML, журнал; заказ создаёт orders | `app/integration/` | `/integrations` | [integration.md](modules/integration.md) |
+| **integration** | Транспорт и адаптер (FTP/XML), профили-способы обмена; заказ создаёт orders | `app/integration/` | `/integrations` | [integration.md](modules/integration.md) |
 | **files** | Загрузка и выдача файлов | `app/files/` | `/files` | [files.md](modules/files.md) |
 | **core** | Конфиг, JWT, исключения, middleware, статусы | `app/core/` | — | [core.md](modules/core.md) |
 | **infrastructure** | ORM Base, репозиторий, UoW, события, DaData, логи | `app/infrastructure/` | — | [infrastructure.md](modules/infrastructure.md) |

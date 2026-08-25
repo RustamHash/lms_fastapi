@@ -13,6 +13,7 @@ export const keepersConfig: ListPageConfig<KeeperRow> = {
   entityKey: 'keepers',
   title: 'Хранители',
   apiUrl: '/api/v1/keepers',
+  listPath: '/keepers',
   columns: [
     { id: 'id', label: 'ID', type: 'number' },
     { id: 'name', label: 'Название', type: 'text' },
@@ -25,6 +26,6 @@ export const keepersConfig: ListPageConfig<KeeperRow> = {
   ],
 
   columnOverrides: {
-    id: { href: (row) => `/reference/keepers/${row.id}` },
+    id: { href: (row) => `/keepers/${row.id}` },
   },
 }

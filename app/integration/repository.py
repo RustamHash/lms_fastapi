@@ -6,7 +6,6 @@ from __future__ import annotations
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
 from app.integration.models import IntegrationError, IntegrationLog, IntegrationProfile
 
@@ -29,6 +28,7 @@ class IntegrationProfileRepository:
         row = IntegrationProfile(**kwargs)
         self._s.add(row)
         await self._s.flush()
+        await self._s.refresh(row)
         return row
 
     async def update(self, id: int, **kwargs) -> IntegrationProfile | None:
@@ -38,6 +38,7 @@ class IntegrationProfileRepository:
         for field, value in kwargs.items():
             setattr(row, field, value)
         await self._s.flush()
+        await self._s.refresh(row)
         return row
 
     async def soft_delete(self, id: int, user_id: int | None = None) -> bool:

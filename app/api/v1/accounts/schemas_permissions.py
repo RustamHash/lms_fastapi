@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field, field_validator
 
+from app.accounts.permissions_catalog import validate_permissions_map
+
 
 class UserPermissionsRead(BaseModel):
     """Права пользователя."""
@@ -22,16 +24,7 @@ class UserPermissionsUpdate(BaseModel):
     @field_validator("extra_permissions")
     @classmethod
     def validate_permissions(cls, v: dict[str, list[str]]) -> dict[str, list[str]]:
-        """Проверяет, что entity и action валидны."""
-        from app.api.v1.accounts.routes_permissions import AVAILABLE_MODULES, AVAILABLE_ACTIONS
-        
-        for entity, actions in v.items():
-            if entity not in AVAILABLE_MODULES:
-                raise ValueError(f"Неизвестный модуль: {entity}")
-            for action in actions:
-                if action not in AVAILABLE_ACTIONS:
-                    raise ValueError(f"Неизвестное действие: {action} для модуля {entity}")
-        return v
+        return validate_permissions_map(v)
 
 
 class AvailablePermissionsRead(BaseModel):
@@ -39,3 +32,5 @@ class AvailablePermissionsRead(BaseModel):
 
     modules: list[str] = Field(default_factory=list)
     actions: list[str] = Field(default_factory=list)
+    module_labels: dict[str, str] = Field(default_factory=dict)
+    action_labels: dict[str, str] = Field(default_factory=dict)

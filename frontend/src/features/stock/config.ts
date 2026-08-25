@@ -14,6 +14,7 @@ export const stockConfig: ListPageConfig<StockRow> = {
   entityKey: 'stock',
   title: 'Остатки на складе',
   apiUrl: '/api/v1/warehouse/stock',
+  listPath: '/stock',
   columns: [
     { id: 'id', label: 'ID', type: 'number' },
     { id: 'product_id', label: 'Товар ID', type: 'number' },
@@ -30,6 +31,6 @@ export const stockConfig: ListPageConfig<StockRow> = {
   ],
 
   columnOverrides: {
-    id: { href: (row) => `/reference/stock/${row.id}` },
+    id: { href: (row) => `/stock/${row.id}` },
   },
 }

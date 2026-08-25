@@ -20,7 +20,7 @@
 
 ## Сервис
 
-`DocumentService`: CRUD документа, `list_by_type`, `add_line` (qty > 0), `set_status`.
+`DocumentService`: CRUD документа, `list_by_type`, `add_line` (qty > 0), `set_status`, `plan_fact` (строки = план, движения по `document_id` = факт, сверка `quantity` vs `processed_quantity`).
 
 Не проводит остаток сам — это `StockService` / задания. Связь «заказ → документ → задание» в целевом контуре этапа 3.
 
@@ -31,7 +31,10 @@
 ## API
 
 `/api/v1/documents` — CRUD, строки, смена статуса.  
+`GET /documents/{id}/plan-fact` — план/факт/сверка для карточки (право `view` на `documents`).  
 RBAC: `documents`.
+
+Карточка `/documents/:id`: шапка документа и вкладки **План** (строки), **Факт** (движения), **Расхождения** (`quantity` vs `processed_quantity`).
 
 ---
 

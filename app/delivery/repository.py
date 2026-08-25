@@ -6,21 +6,39 @@ from __future__ import annotations
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
+from app.accounts.scope import DataScope
 from app.delivery.models import DeliveryDeviation, DeliveryOrder, Driver, Route, RouteLine, Vehicle
+from app.orders.models import OutboundOrder
 
 
 class DeliveryOrderRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._s = session
 
-    async def get_by_id(self, id: int) -> DeliveryOrder | None:
-        stmt = select(DeliveryOrder).where(DeliveryOrder.id == id).options(selectinload(DeliveryOrder.outbound_order), selectinload(DeliveryOrder.document), selectinload(DeliveryOrder.deviations))
-        return await self._s.scalar(stmt)
+    async def get_by_id(self, id: int, scope: DataScope | None = None) -> DeliveryOrder | None:
+        row = await self._s.get(DeliveryOrder, id)
+        if row is None:
+            return None
+        if scope is not None and not scope.unrestricted:
+            if row.outbound_order_id is None:
+                return None
+            outbound = await self._s.get(OutboundOrder, row.outbound_order_id)
+            if outbound is None or not scope.allows_client(
+                outbound.client_id, outbound.depositor_id
+            ):
+                return None
+        return row
 
-    async def list_all(self) -> list[DeliveryOrder]:
-        stmt = select(DeliveryOrder).options(selectinload(DeliveryOrder.outbound_order))
+    async def list_all(self, scope: DataScope | None = None) -> list[DeliveryOrder]:
+        stmt = select(DeliveryOrder)
+        if scope is not None and not scope.unrestricted:
+            stmt = stmt.join(
+                OutboundOrder, DeliveryOrder.outbound_order_id == OutboundOrder.id
+            )
+            stmt = scope.filter_client(
+                stmt, OutboundOrder.client_id, OutboundOrder.depositor_id
+            )
         return list(await self._s.scalars(stmt))
 
     async def create(self, **kwargs) -> DeliveryOrder:
@@ -120,12 +138,10 @@ class RouteRepository:
         self._s = session
 
     async def get_by_id(self, id: int) -> Route | None:
-        stmt = select(Route).where(Route.id == id).options(selectinload(Route.driver), selectinload(Route.vehicle), selectinload(Route.lines))
-        return await self._s.scalar(stmt)
+        return await self._s.get(Route, id)
 
     async def list_all(self) -> list[Route]:
-        stmt = select(Route).options(selectinload(Route.driver), selectinload(Route.vehicle))
-        return list(await self._s.scalars(stmt))
+        return list(await self._s.scalars(select(Route)))
 
     async def create(self, **kwargs) -> Route:
         row = Route(**kwargs)

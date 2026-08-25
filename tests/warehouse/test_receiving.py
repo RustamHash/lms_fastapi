@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.orders.models import InboundOrder, InboundOrderLine
 from app.orders.repository import InboundOrderLineRepository, InboundOrderRepository
+from app.parties.models.client import Client
 from app.warehouse.repository import (
     BatchRepository,
     LocationRepository,
@@ -44,10 +45,20 @@ def _receiving(session: AsyncSession) -> ReceivingService:
 
 
 async def test_inbound_receive_grows_stock(session: AsyncSession, stock_ctx: dict) -> None:
+    supplier = Client(
+        depositor_id=stock_ctx["depositor_id"],
+        code=f"S-{stock_ctx['product_id']}",
+        name="Поставщик",
+    )
+    session.add(supplier)
+    await session.flush()
     order = InboundOrder(
         depositor_id=stock_ctx["depositor_id"],
         warehouse_id=stock_ctx["warehouse_id"],
+        supplier_id=supplier.id,
+        supplier_code=supplier.code,
         number=f"IN-{stock_ctx['product_id']}",
+        loc_code="0001",
         order_date=date.today(),
     )
     session.add(order)

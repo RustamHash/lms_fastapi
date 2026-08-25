@@ -14,6 +14,7 @@ export const vehiclesConfig: ListPageConfig<VehicleRow> = {
   entityKey: 'vehicles',
   title: 'Транспорт',
   apiUrl: '/api/v1/delivery/vehicles',
+  listPath: '/reference/vehicles',
   columns: [
     { id: 'id', label: 'ID', type: 'number' },
     { id: 'number', label: 'Гос. номер', type: 'text' },

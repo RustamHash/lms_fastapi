@@ -79,46 +79,38 @@ class InboundExchangeService:
             except ValueError as e:
                 raise BadRequestError(f"Товар {product.external_id}: {e}") from e
 
-        supplier_id = None
-        supplier_code = ""
-        if message.vendor is not None and message.vendor.code:
-            supplier, _ = await self._clients.get_or_create(
-                user_id=user_id,
-                depositor_id=depositor_id,
-                code=message.vendor.code,
-                name=message.vendor.name or message.vendor.code,
-                legal_name=message.vendor.legal_name,
-                inn=message.vendor.inn,
-                kpp=message.vendor.kpp,
-            )
-            supplier_id = supplier.id
-            supplier_code = message.vendor.code
+        supplier, _ = await self._clients.get_or_create(
+            user_id=user_id,
+            depositor_id=depositor_id,
+            code=message.vendor.code,
+            name=message.vendor.name,
+            legal_name=message.vendor.legal_name,
+            inn=message.vendor.inn,
+            kpp=message.vendor.kpp,
+        )
 
-        loc_code = (message.loc_code or "").strip()
-        warehouse_id = None
-        vw_id = None
-        if loc_code:
-            vw = await self._vw.get_by_depositor_code(depositor_id, loc_code)
-            if vw is None:
-                raise BadRequestError(
-                    f'Для LOC="{loc_code}" не найден виртуальный склад. '
-                    "Создайте его в топологии для этого поклажедателя."
-                )
-            warehouse_id = vw.warehouse_id
-            vw_id = vw.id
+        loc_code = message.loc_code.strip()
+        vw = await self._vw.get_by_depositor_code(depositor_id, loc_code)
+        if vw is None:
+            raise BadRequestError(
+                f'Для LOC="{loc_code}" не найден виртуальный склад. '
+                "Создайте его в топологии для этого поклажедателя."
+            )
+        warehouse_id = vw.warehouse_id
+        vw_id = vw.id
 
         order_date = message.document_date or message.delivery_date or date.today()
-        notes = f"LOC: {loc_code}" if loc_code else "LOC: "
 
         order = await self._orders.create(
             depositor_id=depositor_id,
             warehouse_id=warehouse_id,
             number=message.number,
-            supplier_code=supplier_code,
-            supplier_id=supplier_id,
+            order_number=message.order_number,
+            loc_code=loc_code,
+            supplier_code=message.vendor.code,
+            supplier_id=supplier.id,
             order_date=order_date,
             planned_date=message.delivery_date,
-            notes=notes,
         )
 
         for line in message.lines:
@@ -134,18 +126,6 @@ class InboundExchangeService:
                 product_id=product.id,
                 quantity=line.quantity,
             )
-
-        if warehouse_id is None:
-            await event_bus.emit(
-                EventTypes.INBOUND_ORDER_ACCEPTED_FROM_EXCHANGE,
-                {
-                    "_event_type": EventTypes.INBOUND_ORDER_ACCEPTED_FROM_EXCHANGE,
-                    "order_id": order.id,
-                    "order_number": order.number,
-                    "depositor_id": depositor_id,
-                },
-            )
-            return InboundExchangeAcceptResult(skipped=False, order=order)
 
         document = await self._documents.create(
             user_id=user_id,

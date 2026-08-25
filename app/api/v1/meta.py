@@ -42,7 +42,8 @@ from app.api.v1.delivery.schemas import (
 )
 from app.api.v1.documents.schemas import DocumentRead
 from app.api.v1.notifications.schemas import NotificationRead
-from app.api.v1.integration.schemas import IntegrationProfileRead
+from app.api.v1.integration.schemas import IntegrationLogRead, IntegrationProfileRead
+from app.files.schemas import FileRead
 
 router = APIRouter(prefix="/entities", tags=["meta"])
 
@@ -78,6 +79,8 @@ MODEL_MAP: dict[str, type] = {
     "documents": DocumentRead,
     "notifications": NotificationRead,
     "integration_profiles": IntegrationProfileRead,
+    "integration_logs": IntegrationLogRead,
+    "files": FileRead,
 }
 
 # Ключи, которые нужно прокидывать через $ref

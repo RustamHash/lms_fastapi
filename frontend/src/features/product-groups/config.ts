@@ -11,6 +11,7 @@ export const productGroupsConfig: ListPageConfig<ProductGroupRow> = {
   entityKey: 'product_groups',
   title: 'Группы товаров',
   apiUrl: '/api/v1/warehouse/product-groups',
+  listPath: '/reference/product-groups',
   columns: [
     { id: 'id', label: 'ID', type: 'number' },
     { id: 'name', label: 'Название', type: 'text' },

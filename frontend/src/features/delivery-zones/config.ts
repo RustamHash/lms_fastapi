@@ -12,6 +12,7 @@ export const deliveryZoneConfig = {
     entityKey: 'delivery_zones',
     title: 'Зоны доставки',
     apiUrl: '/api/v1/delivery-zones',
+    listPath: '/reference/delivery-zones',
     
     columns: [
       { id: 'id', label: 'ID', type: 'number' },

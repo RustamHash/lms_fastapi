@@ -4,13 +4,35 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends
 
-from app.api.deps import UserDep, require_permission
+from app.api.deps import ScopeDep, SessionDep, UserDep, require_permission
 from app.api.v1.warehouse.deps import get_picking_service
 from app.api.v1.warehouse.schemas.tasks import TaskRead
-from app.api.v1.warehouse.schemas.workflow import PickLineBody, PickingFromOutbound
+from app.api.v1.warehouse.schemas.workflow import PickLineBody, PickingFromOutbound, PlanFactRead
+from app.core.exceptions import NotFoundError
+from app.orders.repository import OutboundOrderRepository
 from app.warehouse.services.picking_service import PickingService
 
 router = APIRouter(prefix="/warehouse/picking", tags=["warehouse-picking"])
+
+
+@router.get(
+    "/outbound/{outbound_order_id}",
+    response_model=PlanFactRead,
+    dependencies=[Depends(require_permission("view", "orders"))],
+)
+async def outbound_plan_fact(
+    outbound_order_id: int,
+    scope: ScopeDep,
+    session: SessionDep,
+    service: PickingService = Depends(get_picking_service),
+) -> PlanFactRead:
+    order = await OutboundOrderRepository(session).get_by_id(
+        outbound_order_id, scope=scope
+    )
+    if order is None:
+        raise NotFoundError("Исходящий заказ не найден")
+    data = await service.plan_fact_for_outbound(outbound_order_id)
+    return PlanFactRead.model_validate(data)
 
 
 @router.post(

@@ -17,6 +17,7 @@ export const addressInputAliasConfig = {
     entityKey: 'address_input_aliases',
     title: 'Варианты ввода адресов',
     apiUrl: '/api/v1/aliases',
+    listPath: '/reference/address-input-aliases',
     
     columns: [
       { id: 'id', label: 'ID', type: 'number' },

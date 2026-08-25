@@ -2,15 +2,25 @@
 
 from __future__ import annotations
 
-from typing import Any
-
-from sqlalchemy import Boolean, String
+from sqlalchemy import Boolean, Index, String, text
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from app.accounts.models.role import Role
+    from app.accounts.models.user_client import UserClient
+    from app.accounts.models.user_depositor import UserDepositor
+
+from app.accounts.permissions import (
+    get_all_permissions as _get_all_permissions,
+)
+from app.accounts.permissions import (
+    has_group_access as _has_group_access,
+)
+from app.accounts.permissions import (
+    has_permission as _has_permission,
+)
 from app.infrastructure.orm_base import Base
 
 
@@ -18,13 +28,29 @@ class User(Base):
     """Пользователь системы."""
 
     __tablename__ = "accounts_user"
+    __table_args__ = (
+        Index(
+            "uq_accounts_user_username_alive",
+            "username",
+            unique=True,
+            postgresql_where=text("is_deleted = false"),
+        ),
+        Index(
+            "uq_accounts_user_email_alive",
+            "email",
+            unique=True,
+            postgresql_where=text("email IS NOT NULL AND is_deleted = false"),
+        ),
+    )
 
     username: Mapped[str] = mapped_column(
-        String(64), unique=True, index=True, comment="Имя пользователя"
+        String(64), index=True, comment="Имя пользователя"
     )
     password_hash: Mapped[str] = mapped_column(String(255), comment="Хэш пароля")
     phone: Mapped[str] = mapped_column(String(20), default="", comment="Телефон")
-    email: Mapped[str] = mapped_column(String(255), default="", comment="Email")
+    email: Mapped[str | None] = mapped_column(
+        String(255), nullable=True, comment="Email"
+    )
     is_superuser: Mapped[bool] = mapped_column(
         Boolean, default=False, comment="Суперпользователь"
     )
@@ -34,105 +60,58 @@ class User(Base):
         comment="Дополнительные права пользователя",
     )
 
-    roles: Mapped[list["Role"]] = relationship(lazy="selectin", 
+    roles: Mapped[list["Role"]] = relationship(
         secondary="accounts_user_roles",
         back_populates="users",
     )
+    user_depositors: Mapped[list["UserDepositor"]] = relationship(
+        back_populates="user",
+        foreign_keys="UserDepositor.user_id",
+    )
+    user_clients: Mapped[list["UserClient"]] = relationship(
+        back_populates="user",
+        foreign_keys="UserClient.user_id",
+    )
+
+    @validates("email")
+    def _normalize_email(self, _key: str, value: str | None) -> str | None:
+        if value is None:
+            return None
+        stripped = value.strip()
+        return stripped or None
 
     def has_permission(self, action: str, entity: str) -> bool:
-        """
-        Проверка права пользователя.
-
-        Args:
-            action: Действие (view, create, update, delete, approve, execute, complete)
-            entity: Сущность/модуль (products, documents, delivery, users, ...)
-
-        Returns:
-            True, если право есть
-        """
-        # Суперпользователь имеет все права
-        if self.is_superuser:
-            return True
-
-        # Проверяем личные дополнительные права
-        if self._has_extra_permission(action, entity):
-            return True
-
-        # Проверяем права ролей
-        for role in self.roles:
-            if self._has_role_permission(role, action, entity):
-                return True
-
-        return False
-
-    def _has_extra_permission(self, action: str, entity: str) -> bool:
-        """Проверка личных прав пользователя."""
-        if not self.extra_permissions:
-            return False
-
-        allowed_actions = self.extra_permissions.get(entity, [])
-        return action in allowed_actions
-
-    def _has_role_permission(self, role: "Role", action: str, entity: str) -> bool:
-        """Проверка прав роли."""
-        permissions = role.permissions or {}
-        allowed_actions = permissions.get(entity, [])
-        return action in allowed_actions
+        return _has_permission(self, action, entity)
 
     def get_all_permissions(self) -> dict[str, list[str]]:
-        """
-        Возвращает все права пользователя (объединение ролей и личных).
-
-        Returns:
-            Словарь вида: {"products": ["view", "create"], ...}
-        """
-        if self.is_superuser:
-            return {"all": ["all"]}
-
-        result: dict[str, list[str]] = {}
-
-        # Собираем права из ролей
-        for role in self.roles:
-            permissions = role.permissions or {}
-            for entity, actions in permissions.items():
-                if entity not in result:
-                    result[entity] = []
-                for action in actions:
-                    if action not in result[entity]:
-                        result[entity].append(action)
-
-        # Добавляем личные права
-        if self.extra_permissions:
-            for entity, actions in self.extra_permissions.items():
-                if entity not in result:
-                    result[entity] = []
-                for action in actions:
-                    if action not in result[entity]:
-                        result[entity].append(action)
-
-        return result
+        return _get_all_permissions(self)
 
     def has_group_access(self, entity: str) -> bool:
+        return _has_group_access(self, entity)
+
+    @property
+    def depositor_ids(self) -> list[int]:
+        """ID поклажедателей пользователя (без удалённых связей).
+
+        Пустой список = доступ ко всем поклажедателям (оператор склада,
+        логист, суперпользователь). Непустой = сотрудник поклажедателя:
+        видит только своих.
         """
-        Проверка доступа к группе (модулю).
+        return [
+            row.depositor_id
+            for row in self.user_depositors
+            if not row.is_deleted
+        ]
 
-        Args:
-            entity: Модуль (products, documents, delivery, ...)
+    @property
+    def client_ids(self) -> list[int]:
+        """ID клиентов пользователя (без удалённых связей).
 
-        Returns:
-            True, если есть хоть какое-то право на модуль
+        Пустой список при непустых depositor_ids = менеджер поклажедателя
+        (все клиенты своих поклажедателей). Непустой = торговый агент.
         """
-        if self.is_superuser:
-            return True
-
-        # Проверяем личные права
-        if self.extra_permissions and entity in self.extra_permissions:
-            return bool(self.extra_permissions[entity])
-
-        # Проверяем роли
-        for role in self.roles:
-            permissions = role.permissions or {}
-            if entity in permissions and permissions[entity]:
-                return True
-
-        return False
+        return [
+            row.client_id
+            for row in self.user_clients
+            if not row.is_deleted
+        ]

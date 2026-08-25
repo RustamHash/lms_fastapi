@@ -61,7 +61,9 @@ const DeviationsPage = lazy(() => import('./pages/DeviationsPage').then(m => ({ 
 const RouteLinesPage = lazy(() => import('./pages/RouteLinesPage').then(m => ({ default: m.RouteLinesPage })))
 const StockPage = lazy(() => import('./pages/StockPage').then(m => ({ default: m.StockPage })))
 const TopologyWarehousesPage = lazy(() => import('./pages/TopologyWarehousesPage').then(m => ({ default: m.TopologyWarehousesPage })))
+const TopologyWarehouseCreatePage = lazy(() => import('./pages/TopologyWarehouseCreatePage').then(m => ({ default: m.TopologyWarehouseCreatePage })))
 const TopologyVirtualWarehousesPage = lazy(() => import('./pages/TopologyVirtualWarehousesPage').then(m => ({ default: m.TopologyVirtualWarehousesPage })))
+const TopologyVirtualWarehouseCreatePage = lazy(() => import('./pages/TopologyVirtualWarehouseCreatePage').then(m => ({ default: m.TopologyVirtualWarehouseCreatePage })))
 const TopologyZonesPage = lazy(() => import('./pages/TopologyZonesPage').then(m => ({ default: m.TopologyZonesPage })))
 const TopologyRowsPage = lazy(() => import('./pages/TopologyRowsPage').then(m => ({ default: m.TopologyRowsPage })))
 const TopologyLocationsPage = lazy(() => import('./pages/TopologyLocationsPage').then(m => ({ default: m.TopologyLocationsPage })))
@@ -79,6 +81,7 @@ const InboundOrderDetailPage = lazy(() => import('./pages/InboundOrderDetailPage
 const IntegrationLogDetailPage = lazy(() => import('./pages/IntegrationLogDetailPage').then(m => ({ default: m.IntegrationLogDetailPage })))
 const IntegrationProfileCreatePage = lazy(() => import('./pages/IntegrationProfileCreatePage').then(m => ({ default: m.IntegrationProfileCreatePage })))
 const IntegrationProfileDetailPage = lazy(() => import('./pages/IntegrationProfileDetailPage').then(m => ({ default: m.IntegrationProfileDetailPage })))
+const IntegrationProfileEditPage = lazy(() => import('./pages/IntegrationProfileEditPage').then(m => ({ default: m.IntegrationProfileEditPage })))
 const KeeperDetailPage = lazy(() => import('./pages/KeeperDetailPage').then(m => ({ default: m.KeeperDetailPage })))
 const LpnDetailPage = lazy(() => import('./pages/LpnDetailPage').then(m => ({ default: m.LpnDetailPage })))
 const OutboundOrderDetailPage = lazy(() => import('./pages/OutboundOrderDetailPage').then(m => ({ default: m.OutboundOrderDetailPage })))
@@ -110,6 +113,8 @@ const ProductLocationsPage = lazy(() => import('./pages/ProductLocationsPage').t
 const VehicleDetailPage = lazy(() => import('./pages/VehicleDetailPage').then(m => ({ default: m.VehicleDetailPage })))
 
 
+import { entityCrudRoutes } from './pages/entityCrudRoutes'
+
 import './App.css'
 
 const queryClient = new QueryClient()
@@ -134,28 +139,24 @@ function App() {
                   
                   {/* Справочники */}
                   <Route path="/reference/addresses" element={<AddressesPage />} />
-                  <Route path="/reference/addresses/:addressId" element={<AddressDetailPage />} />
                   <Route path="/reference/address-input-aliases" element={<AddressInputAliasesPage />} />
-                  <Route path="/reference/address-input-aliases/:aliasId" element={<AddressInputAliasDetailPage />} />
                   <Route path="/reference/delivery-zones" element={<DeliveryZonesPage />} />
                   <Route path="/reference/legal-entities" element={<LegalEntitiesPage />} />
+                  <Route path="/reference/legal-entities/new" element={<LegalEntityCreatePage />} />
                   <Route path="/reference/legal-entities/:entityId" element={<LegalEntityDetailPage />} />
                   <Route path="/reference/legal-entities/:entityId/edit" element={<LegalEntityEditPage />} />
-                  <Route path="/reference/legal-entities/new" element={<LegalEntityCreatePage />} />
                   <Route path="/reference/depositors" element={<DepositorsPage />} />
+                  <Route path="/reference/depositors/new" element={<DepositorCreatePage />} />
                   <Route path="/reference/depositors/:depositorId" element={<DepositorDetailPage />} />
                   <Route path="/reference/depositors/:depositorId/edit" element={<DepositorEditPage />} />
-                  <Route path="/reference/depositors/new" element={<DepositorCreatePage />} />
                   <Route path="/reference/clients" element={<ClientsPage />} />
-                  <Route path="/reference/clients/:clientId" element={<ClientDetailPage />} />
                   <Route path="/reference/clients/new" element={<ClientCreatePage />} />
+                  <Route path="/reference/clients/:clientId" element={<ClientDetailPage />} />
                   <Route path="/reference/contracts" element={<ContractsPage />} />
-                  <Route path="/reference/contracts/:contractId" element={<ContractDetailPage />} />
                   <Route path="/reference/contracts/new" element={<ContractCreatePage />} />
+                  <Route path="/reference/contracts/:contractId" element={<ContractDetailPage />} />
                   <Route path="/reference/tariffs" element={<TariffsPage />} />
-                  <Route path="/reference/tariffs/:tariffId" element={<TariffDetailPage />} />
                   <Route path="/reference/tariff-documents" element={<TariffDocumentsPage />} />
-                  <Route path="/reference/tariff-documents/:docId" element={<TariffDocumentDetailPage />} />
                   
                   {/* Склад */}
                   <Route path="/reference/products" element={<ProductsPage />} />
@@ -179,7 +180,6 @@ function App() {
                   {/* Система */}
                   <Route path="/audit" element={<AuditPage />} />
                   <Route path="/notification-rules" element={<NotificationRulesPage />} />
-                  <Route path="/notification-rules/:ruleId" element={<NotificationRuleDetailPage />} />
                   <Route path="/notifications" element={<NotificationsPage />} />
                   <Route path="/users" element={<UsersPage />} />
                   <Route path="/roles" element={<RolesPage />} />
@@ -187,6 +187,7 @@ function App() {
                   {/* Интеграции */}
                   <Route path="/integrations/profiles" element={<IntegrationProfilesPage />} />
                   <Route path="/integrations/profiles/new" element={<IntegrationProfileCreatePage />} />
+                  <Route path="/integrations/profiles/:id/edit" element={<IntegrationProfileEditPage />} />
                   <Route path="/integrations/logs" element={<IntegrationLogsPage />} />
                   
                   {/* Перевозчики и хранители */}
@@ -202,7 +203,9 @@ function App() {
                   
                   {/* Топология */}
                   <Route path="/topology/warehouses" element={<TopologyWarehousesPage />} />
+                  <Route path="/topology/warehouses/new" element={<TopologyWarehouseCreatePage />} />
                   <Route path="/topology/virtual-warehouses" element={<TopologyVirtualWarehousesPage />} />
+                  <Route path="/topology/virtual-warehouses/new" element={<TopologyVirtualWarehouseCreatePage />} />
                   <Route path="/topology/zones" element={<TopologyZonesPage />} />
                   <Route path="/topology/rows" element={<TopologyRowsPage />} />
                   <Route path="/topology/locations" element={<TopologyLocationsPage />} />
@@ -211,8 +214,13 @@ function App() {
                   <Route path="/documents-hub" element={<DocumentsHubPage />} />
                   <Route path="/files-hub" element={<FilesHubPage />} />
                   <Route path="/files" element={<FilesPage />} />
-                  
-                                    <Route path="/reference/batches/:id" element={<BatchDetailPage />} />
+
+                  {entityCrudRoutes()}
+                  <Route path="/reference/addresses/:addressId" element={<AddressDetailPage />} />
+                  <Route path="/reference/address-input-aliases/:aliasId" element={<AddressInputAliasDetailPage />} />
+                  <Route path="/reference/tariffs/:tariffId" element={<TariffDetailPage />} />
+                  <Route path="/reference/tariff-documents/:docId" element={<TariffDocumentDetailPage />} />
+                  <Route path="/reference/batches/:id" element={<BatchDetailPage />} />
                   <Route path="/carriers/:id" element={<CarrierDetailPage />} />
                   <Route path="/delivery/orders/:id" element={<DeliveryOrderDetailPage />} />
                   <Route path="/reference/delivery-zones/new" element={<DeliveryZoneCreatePage />} />
@@ -229,6 +237,7 @@ function App() {
                   <Route path="/reference/products/:id" element={<ProductDetailPage />} />
                   <Route path="/orders/return/:id" element={<ReturnOrderDetailPage />} />
                   <Route path="/roles/:id" element={<RoleDetailPage />} />
+                  <Route path="/notification-rules/:ruleId" element={<NotificationRuleDetailPage />} />
                   <Route path="/route-lines/:id" element={<RouteLineDetailPage />} />
                   <Route path="/reference/routes/:id" element={<RouteDetailPage />} />
                   <Route path="/stock/:id" element={<StockDetailPage />} />

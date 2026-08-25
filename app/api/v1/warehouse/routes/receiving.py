@@ -4,17 +4,41 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends
 
-from app.api.deps import UserDep, require_permission
+from app.api.deps import ScopeDep, SessionDep, UserDep, require_permission
 from app.api.v1.warehouse.deps import get_receiving_service
+from app.core.exceptions import NotFoundError
+from app.orders.repository import InboundOrderRepository
 from app.api.v1.warehouse.schemas.tasks import TaskRead
 from app.api.v1.warehouse.schemas.workflow import (
     ReceiveLineBody,
     ReceivingCompleteBody,
     ReceivingFromInbound,
+    InboundPlanFactRead,
 )
 from app.warehouse.services.receiving_service import ReceivingService
 
 router = APIRouter(prefix="/warehouse/receiving", tags=["warehouse-receiving"])
+
+
+@router.get(
+    "/inbound/{inbound_order_id}",
+    response_model=InboundPlanFactRead,
+    dependencies=[Depends(require_permission("view", "orders"))],
+)
+async def inbound_plan_fact(
+    inbound_order_id: int,
+    scope: ScopeDep,
+    session: SessionDep,
+    service: ReceivingService = Depends(get_receiving_service),
+) -> InboundPlanFactRead:
+    """План, движения и сверка по входящему заказу."""
+    order = await InboundOrderRepository(session).get_by_id(
+        inbound_order_id, scope=scope
+    )
+    if order is None:
+        raise NotFoundError("Входящий заказ не найден")
+    data = await service.plan_fact_for_inbound(inbound_order_id)
+    return InboundPlanFactRead.model_validate(data)
 
 
 @router.post(

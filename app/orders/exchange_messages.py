@@ -38,12 +38,17 @@ class ExchangeLine:
 
 @dataclass(frozen=True)
 class InboundExchangeMessage:
-    """Заявка на приёмку от партнёра (PORDER после перевода адаптером)."""
+    """Заявка на приёмку от партнёра (PORDER после перевода адаптером).
+
+    Поставщик обязателен: в XML `VENDOR/ID` и `VENDOR/NAME`.
+    Код склада обязателен: `LOC`. Номер заказа в PORDER сейчас нет — поле пустое.
+    """
 
     number: str
     document_date: date | None
     delivery_date: date | None
     loc_code: str
-    vendor: ExchangeVendor | None
+    vendor: ExchangeVendor
     products: tuple[ExchangeProduct, ...]
     lines: tuple[ExchangeLine, ...]
+    order_number: str = ""

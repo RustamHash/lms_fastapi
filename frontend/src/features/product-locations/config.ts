@@ -12,6 +12,7 @@ export const productLocationsConfig: ListPageConfig<ProductLocationRow> = {
   entityKey: 'product_locations',
   title: 'Товар-ячейка',
   apiUrl: '/api/v1/warehouse/product-locations',
+  listPath: '/reference/product-locations',
   columns: [
     { id: 'id', label: 'ID', type: 'number' },
     { id: 'product_id', label: 'Товар ID', type: 'number' },

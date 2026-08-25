@@ -13,6 +13,7 @@ export const packagesConfig: ListPageConfig<PackageRow> = {
   entityKey: 'packages',
   title: 'Упаковки',
   apiUrl: '/api/v1/warehouse/packages',
+  listPath: '/reference/packages',
   columns: [
     { id: 'id', label: 'ID', type: 'number' },
     { id: 'name', label: 'Название', type: 'text' },

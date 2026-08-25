@@ -297,6 +297,23 @@
   min-height: 120px;
 }
 
+.detail-data-table {
+  margin-top: 4px;
+}
+
+.detail-data-table .table-wrap {
+  flex: none;
+  max-height: min(62vh, 560px);
+}
+
+.detail-data-table .list-table tbody tr.detail-data-table__row--shortage td {
+  background: #fef2f2;
+}
+
+.detail-data-table .list-table tbody tr.detail-data-table__row--surplus td {
+  background: #fff7ed;
+}
+
 .entity-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(320px, 1fr));
@@ -318,7 +335,7 @@
 }
 
 .entity-dl {
-  margin: 0;
+  margin: 0 0 16px;
   max-width: 100%;
 }
 

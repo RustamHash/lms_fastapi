@@ -1,12 +1,6 @@
-// {
-//   "reportMissingImports": false,
-//   "reportUnknownMemberType": false,
-//   "reportUnknownVariableType": false,
-//   "reportUnknownParameterType": false,
-//   "reportUndefinedVariable": false,
-//   "reportGeneralTypeIssues": false
-// }
 {
+  "venvPath": ".",
+  "venv": ".venv",
   "reportMissingImports": "warning",
   "reportUnknownMemberType": "warning",
   "reportUnknownVariableType": "warning",

@@ -11,6 +11,7 @@ export const driversConfig: ListPageConfig<DriverRow> = {
   entityKey: 'drivers',
   title: 'Водители',
   apiUrl: '/api/v1/delivery/drivers',
+  listPath: '/reference/drivers',
   columns: [
     { id: 'id', label: 'ID', type: 'number' },
     { id: 'name', label: 'ФИО', type: 'text' },

@@ -354,3 +354,16 @@ col.list-table__col-cb {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+.list-table__nav {
+  display: inline;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: var(--text-link);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}

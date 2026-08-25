@@ -34,7 +34,9 @@ async def create_profile(body: IntegrationProfileCreate, services: Services, use
 
 @router.patch("/profiles/{profile_id}", response_model=IntegrationProfileRead, dependencies=[Depends(require_permission("update", "integrations"))])
 async def update_profile(profile_id: int, body: IntegrationProfileCreate, services: Services, user_id: UserDep) -> IntegrationProfileRead:
-    profile = await IntegrationProfileRepository(services.session).update(profile_id, **body.model_dump(exclude_unset=True))
+    profile = await IntegrationProfileRepository(services.session).update(
+        profile_id, **body.model_dump(exclude_unset=True)
+    )
     if profile is None:
         raise NotFoundError("Профиль не найден")
     return IntegrationProfileRead.model_validate(profile)

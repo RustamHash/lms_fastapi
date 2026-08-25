@@ -86,12 +86,12 @@ async def validation_exception_handler(
     """Обработчик ошибок валидации Pydantic."""
     logger.warning(
         "Validation error: %s | Path: %s",
-        exc.errors(),
+        exc.errors(include_url=False, include_input=False),
         request.url.path,
     )
     return JSONResponse(
         status_code=422,
-        content={"detail": exc.errors()},
+        content={"detail": exc.errors(include_url=False, include_input=False)},
     )
 
 

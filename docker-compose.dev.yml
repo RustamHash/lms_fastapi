@@ -40,12 +40,11 @@ services:
         condition: service_started
     volumes:
       - ./app:/app/app
+      - ./frontend/dist:/app/frontend/dist
       - ./logs:/app/logs
       - ./uploads:/app/uploads
       - ./alembic:/app/alembic
       - ./alembic.ini:/app/alembic.ini
-      - ./logs:/app/logs
-      - ./uploads:/app/uploads
 
   celery_worker:
     build: .

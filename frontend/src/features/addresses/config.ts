@@ -24,6 +24,7 @@ export const addressConfig = {
     entityKey: 'addresses',
     title: 'Адреса',
     apiUrl: '/api/v1/addresses',
+    listPath: '/reference/addresses',
     
     columns: [
       { id: 'id', label: 'ID', type: 'number' },

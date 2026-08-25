@@ -16,6 +16,7 @@ export const tariffDocumentsConfig: ListPageConfig<TariffDocumentRow> = {
   entityKey: 'tariff_documents',
   title: 'Документы тарифов',
   apiUrl: '/api/v1/tariff-documents',
+  listPath: '/reference/tariff-documents',
   columns: [
     { id: 'id', label: 'ID', type: 'number' },
     { id: 'number', label: 'Номер', type: 'text' },

@@ -12,6 +12,7 @@ export const routeLinesConfig: ListPageConfig<RouteLineRow> = {
   entityKey: 'route_lines',
   title: 'Строки маршрутов',
   apiUrl: '/api/v1/route-lines',
+  listPath: '/route-lines',
   columns: [
     { id: 'id', label: 'ID', type: 'number' },
     { id: 'route_id', label: 'Маршрут ID', type: 'number' },
@@ -25,6 +26,6 @@ export const routeLinesConfig: ListPageConfig<RouteLineRow> = {
   ],
 
   columnOverrides: {
-    id: { href: (row) => `/reference/route-lines/${row.id}` },
+    id: { href: (row) => `/route-lines/${row.id}` },
   },
 }

@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.accounts.models import User
 from app.accounts.repository import UserRepository
+from app.accounts.scope import DataScope
 from app.core.database import async_session_factory
 from app.core.exceptions import ForbiddenError
 from app.core.security import decode_token_sub_user_id
@@ -57,7 +58,7 @@ async def get_current_user(
         ) from None
     repo = UserRepository(session)
     user = await repo.get_by_id(user_id)
-    if user is None or not user.is_active:
+    if user is None or user.is_deleted or not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Пользователь не найден или деактивирован",
@@ -70,6 +71,24 @@ async def get_current_user(
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 UserDep = Annotated[int | None, Depends(get_current_user_id)]
 CurrentUser = Annotated[User, Depends(get_current_user)]
+
+
+async def get_data_scope(
+    user: CurrentUser,
+    session: AsyncSession = Depends(get_session),
+) -> DataScope:
+    full = await UserRepository(session).get_by_id(user.id, with_depositors=True)
+    if full is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Пользователь не найден или деактивирован",
+        )
+    from app.accounts.scope import build_scope
+
+    return build_scope(full)
+
+
+ScopeDep = Annotated[DataScope, Depends(get_data_scope)]
 
 
 # ========== Проверка прав ==========
@@ -102,6 +121,26 @@ class ServiceContainer:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
 
+        # ===== Accounts =====
+        from app.accounts.repository import (
+            RoleRepository,
+            UserClientRepository,
+            UserDepositorRepository,
+            UserRepository,
+        )
+        from app.accounts.services.role_service import RoleService
+        from app.accounts.services.user_service import UserService
+
+        user_repo = UserRepository(session)
+        role_repo = RoleRepository(session)
+        self.user = UserService(
+            user_repo,
+            role_repo,
+            UserDepositorRepository(session),
+            UserClientRepository(session),
+        )
+        self.role = RoleService(role_repo)
+
         # ===== Parties =====
         from app.parties.repository import (
             AddressRepository,
@@ -128,7 +167,9 @@ class ServiceContainer:
         from app.parties.services.tariff_document_service import TariffDocumentService
         from app.parties.services.tariff_service import TariffService
 
-        self.address = AddressService(AddressRepository(session))
+        self.address = AddressService(
+            AddressRepository(session), RawAddressRepository(session)
+        )
         self.carrier = CarrierService(CarrierRepository(session))
         self.client = ClientService(ClientRepository(session))
         self.contract = ContractService(ContractRepository(session))
@@ -136,7 +177,9 @@ class ServiceContainer:
         self.depositor = DepositorService(DepositorRepository(session))
         self.keeper = KeeperService(KeeperRepository(session))
         self.legal_entity = LegalEntityService(LegalEntityRepository(session))
-        self.raw_address = RawAddressService(RawAddressRepository(session))
+        self.raw_address = RawAddressService(
+            RawAddressRepository(session), self.address
+        )
         self.tariff = TariffService(TariffRepository(session))
         self.tariff_document = TariffDocumentService(TariffDocumentRepository(session))
 

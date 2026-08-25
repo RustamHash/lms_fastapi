@@ -7,6 +7,7 @@ import tempfile
 from dataclasses import dataclass
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from sqlalchemy.orm.attributes import flag_modified
 
 from app.core.exceptions import BadRequestError
 from app.infrastructure.uow import UnitOfWork
@@ -26,7 +27,7 @@ class _ProfileFtp:
     host: str
     username: str
     password: str
-    out_path: str
+    in_path: str
 
 
 class ImportRunService:
@@ -48,7 +49,9 @@ class ImportRunService:
             log = await IntegrationLogRepository(session).get_by_task_id(task_id)
             if log is None:
                 return
-            log.status = "completed"
+            has_ok = (log.success_rows or 0) > 0
+            has_errors = bool(log.errors)
+            log.status = "failed" if has_errors and not has_ok else "completed"
             log.current_step = "Импорт завершён"
             log.messages = (log.messages or []) + ["Импорт завершён"]
 
@@ -66,38 +69,79 @@ class ImportRunService:
                     created_by_id=user_id,
                 )
             log.status = "processing"
+            log.current_step = "Ищем профили"
+            type_label = document_type or "все"
+            log.messages = (log.messages or []) + [
+                f"Задача принята, тип документов: {type_label}",
+                "Ищем активные профили интеграции",
+            ]
 
             profiles = await IntegrationProfileRepository(session).list_active()
             logger.info("Найдено профилей: %d", len(profiles))
             if not profiles:
                 log.status = "failed"
+                log.current_step = "Нет профилей"
                 log.errors = ["Нет активных профилей интеграции"]
+                log.messages = (log.messages or []) + [
+                    "Активных профилей интеграции нет"
+                ]
                 return None
+
+            log.messages = (log.messages or []) + [
+                f"Найдено активных профилей: {len(profiles)}"
+            ]
 
             result: list[_ProfileFtp] = []
             for profile in profiles:
                 ftp_config = (profile.config or {}).get("ftp") or {}
                 if not ftp_config:
-                    log.errors = (log.errors or []) + [
-                        f"Профиль {profile.name}: нет FTP-конфигурации"
-                    ]
-                    log.status = "failed"
+                    msg = f"Профиль «{profile.name}»: нет настроек FTP"
+                    log.errors = (log.errors or []) + [msg]
+                    log.messages = (log.messages or []) + [msg]
+                    continue
+                in_path = str(ftp_config.get("in_path") or "").strip()
+                if not in_path:
+                    msg = f"Профиль «{profile.name}»: нет папки входящих (in_path)"
+                    log.errors = (log.errors or []) + [msg]
+                    log.messages = (log.messages or []) + [msg]
+                    continue
+                host = str(ftp_config.get("host") or "").strip()
+                username = str(ftp_config.get("username") or "")
+                password = str(ftp_config.get("password") or "")
+                if not host:
+                    msg = f"Профиль «{profile.name}»: не указан FTP-хост"
+                    log.errors = (log.errors or []) + [msg]
+                    log.messages = (log.messages or []) + [msg]
                     continue
                 result.append(
                     _ProfileFtp(
                         name=profile.name,
                         depositor_id=profile.depositor_id,
-                        host=ftp_config["host"],
-                        username=ftp_config["username"],
-                        password=ftp_config["password"],
-                        out_path=ftp_config.get("out_path", "/out"),
+                        host=host,
+                        username=username,
+                        password=password,
+                        in_path=in_path,
                     )
                 )
+
             if not result:
                 log.status = "failed"
+                log.current_step = "Нет FTP"
                 if not log.errors:
                     log.errors = ["Нет профилей с FTP-конфигурацией"]
+                log.messages = (log.messages or []) + [
+                    "Подходящих настроек FTP нет — импорт остановлен"
+                ]
                 return None
+
+            depositors = {p.depositor_id for p in result}
+            log.messages = (log.messages or []) + [
+                (
+                    f"С FTP и папкой входящих: {len(result)} "
+                    f"(поклажедателей: {len(depositors)})"
+                )
+            ]
+            log.current_step = "Подключение к FTP"
             return result
 
     async def _run_profile(
@@ -108,11 +152,22 @@ class ImportRunService:
         adapter: ZLNAdapter,
         profile: _ProfileFtp,
     ) -> None:
-        logger.info("Обработка профиля: %s", profile.name)
+        await self._emit(
+            task_id,
+            message=(
+                f"Профиль «{profile.name}», поклажедатель #{profile.depositor_id}: "
+                f"подключаемся к FTP {profile.host}, каталог {profile.in_path}"
+            ),
+            step=f"FTP: {profile.name}",
+        )
         ftp = FTPService(profile.host, profile.username, profile.password)
         try:
             ftp.connect()
-            all_files = ftp.list_files(profile.out_path)
+            await self._emit(
+                task_id,
+                message=f"Профиль «{profile.name}»: подключение к FTP успешно",
+            )
+            all_files = ftp.list_files(profile.in_path)
             if document_type == "order":
                 files = [f for f in all_files if f.startswith("order_")]
             elif document_type == "porder":
@@ -120,24 +175,33 @@ class ImportRunService:
             else:
                 files = all_files
 
+            if not files:
+                message = (
+                    f"Профиль «{profile.name}»: в {profile.in_path} нет файлов "
+                    f"типа '{document_type}_*' (всего в каталоге: {len(all_files)})"
+                )
+                await self._emit(task_id, message=message, step="Файлы не найдены")
+                return
+
+            await self._emit(
+                task_id,
+                message=(
+                    f"Профиль «{profile.name}»: в каталоге {len(all_files)} файлов, "
+                    f"к обработке {len(files)}"
+                ),
+                step="Обработка файлов",
+            )
             async with UnitOfWork(self._factory) as session:
                 log = await self._require_log(session, task_id)
-                if not files:
-                    message = (
-                        f"Нет файлов типа '{document_type}_*' на FTP. "
-                        f"Всего файлов: {len(all_files)}"
-                    )
-                    log.status = "failed"
-                    log.errors = (log.errors or []) + [message]
-                    log.messages = (log.messages or []) + [message]
-                    log.current_step = "Файлы не найдены"
-                    return
                 log.total_rows = (log.total_rows or 0) + len(files)
-                log.messages = (log.messages or []) + [f"Найдено файлов: {len(files)}"]
-                log.current_step = "Обработка файлов"
 
             for filename in files:
-                remote_path = f"{profile.out_path}/{filename}"
+                await self._emit(
+                    task_id,
+                    message=f"Обрабатываем файл {filename}",
+                    step=filename,
+                )
+                remote_path = f"{profile.in_path}/{filename}"
                 remove_ftp = False
                 with tempfile.TemporaryDirectory() as tmp_dir:
                     local_path = ftp.download(remote_path, tmp_dir)
@@ -160,10 +224,12 @@ class ImportRunService:
                         )
         except Exception as e:
             logger.error("Ошибка импорта: %s", e, exc_info=True)
-            async with UnitOfWork(self._factory) as session:
-                log = await self._require_log(session, task_id)
-                log.status = "failed"
-                log.errors = (log.errors or []) + [str(e)]
+            await self._emit(
+                task_id,
+                message=f"Профиль «{profile.name}»: ошибка FTP — {e}",
+                error=str(e),
+                step="Ошибка FTP",
+            )
         finally:
             try:
                 ftp.disconnect()
@@ -189,12 +255,17 @@ class ImportRunService:
             log.processed_rows = (log.processed_rows or 0) + 1
             log.error_rows = (log.error_rows or 0) + 1
             log.errors = (log.errors or []) + parse_errors
+            log.messages = (log.messages or []) + [
+                f"Файл {filename}: {err}" for err in parse_errors
+            ]
             return False
 
         if message is None:
             log.processed_rows = (log.processed_rows or 0) + 1
             log.error_rows = (log.error_rows or 0) + 1
-            log.errors = (log.errors or []) + ["Ошибка парсинга: пустой документ"]
+            empty = f"Файл {filename}: пустой документ"
+            log.errors = (log.errors or []) + [empty]
+            log.messages = (log.messages or []) + [empty]
             return False
 
         exchange = inbound_exchange_from_session(session)
@@ -209,20 +280,43 @@ class ImportRunService:
             log = await self._require_log(session, task_id)
             log.processed_rows = (log.processed_rows or 0) + 1
             log.error_rows = (log.error_rows or 0) + 1
-            log.errors = (log.errors or []) + [str(e.detail)]
+            detail = str(e.detail)
+            log.errors = (log.errors or []) + [detail]
+            log.messages = (log.messages or []) + [f"Файл {filename}: {detail}"]
             return False
 
         log.processed_rows = (log.processed_rows or 0) + 1
         is_porder_file = filename.lower().startswith("porder_")
         if result.skipped:
             log.messages = (log.messages or []) + [
-                f"Заказ {message.number} уже есть, пропуск"
+                f"Файл {filename}: заявка {message.number} уже есть, пропуск"
             ]
             return is_porder_file
 
         log.success_rows = (log.success_rows or 0) + 1
-        log.messages = (log.messages or []) + [f"Заказ {message.number} создан"]
+        log.messages = (log.messages or []) + [
+            f"Файл {filename}: заявка {message.number} создана"
+        ]
         return is_porder_file
+
+    async def _emit(
+        self,
+        task_id: str,
+        *,
+        message: str | None = None,
+        error: str | None = None,
+        step: str | None = None,
+    ) -> None:
+        async with UnitOfWork(self._factory) as session:
+            log = await self._require_log(session, task_id)
+            if message:
+                log.messages = list(log.messages or []) + [message]
+                flag_modified(log, "messages")
+            if error:
+                log.errors = list(log.errors or []) + [error]
+                flag_modified(log, "errors")
+            if step:
+                log.current_step = step
 
     async def _require_log(
         self, session: AsyncSession, task_id: str

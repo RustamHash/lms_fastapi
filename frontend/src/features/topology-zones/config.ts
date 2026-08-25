@@ -12,6 +12,7 @@ export const zonesConfig: ListPageConfig<ZoneRow> = {
   entityKey: 'topology_zones',
   title: 'Зоны склада',
   apiUrl: '/api/v1/warehouse/topology/zones',
+  listPath: '/topology/zones',
   columns: [
     { id: 'id', label: 'ID', type: 'number' },
     { id: 'warehouse_id', label: 'Склад ID', type: 'number' },
@@ -25,6 +26,6 @@ export const zonesConfig: ListPageConfig<ZoneRow> = {
   ],
 
   columnOverrides: {
-    id: { href: (row) => `/reference/topology-zones/${row.id}` },
+    id: { href: (row) => `/topology/zones/${row.id}` },
   },
 }

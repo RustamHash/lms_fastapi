@@ -6,6 +6,12 @@ from decimal import Decimal
 
 from app.documents.models import Document, DocumentLine
 from app.documents.repository import DocumentLineRepository, DocumentRepository
+from app.warehouse.repository import StockRepository
+from app.warehouse.services.plan_fact_view import (
+    discrepancy_kind,
+    movement_row,
+    product_label,
+)
 
 
 class DocumentService:
@@ -48,3 +54,36 @@ class DocumentService:
 
     async def set_status(self, *, user_id: int, document_id: int, status: str) -> Document | None:
         return await self._docs.update(document_id, status=status)
+
+    async def plan_fact(self, document_id: int, stock_repo: StockRepository) -> dict:
+        """План (строки документа), факт (движения) и сверка."""
+        lines = await self._lines.list_by_document(document_id)
+        movements = await stock_repo.list_movements_for_document(document_id)
+        plan = [
+            {
+                "id": line.id,
+                "product_id": line.product_id,
+                **product_label(line.product),
+                "quantity": line.quantity,
+                "batch_number": line.batch.batch_number if line.batch else "",
+                "manufacture_date": line.batch.production_date if line.batch else None,
+            }
+            for line in lines
+        ]
+        fact = [movement_row(move) for move in movements]
+        discrepancies = []
+        for line in lines:
+            planned = line.quantity
+            fact_qty = line.processed_quantity
+            discrepancies.append(
+                {
+                    "inbound_order_line_id": None,
+                    "product_id": line.product_id,
+                    **product_label(line.product),
+                    "qty_planned": planned,
+                    "qty_fact": fact_qty,
+                    "qty_diff": fact_qty - planned,
+                    "kind": discrepancy_kind(planned, fact_qty),
+                }
+            )
+        return {"plan": plan, "fact": fact, "discrepancies": discrepancies}

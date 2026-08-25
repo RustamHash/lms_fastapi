@@ -8,6 +8,7 @@ from app.accounts.repository import AuditRepository
 from app.accounts.services import AuditService
 from app.api.deps import Services, UserDep, require_permission
 from app.api.v1.accounts.schemas import AuditCreate, AuditRead
+from app.core.exceptions import NotFoundError
 
 router = APIRouter(tags=["audit"])
 
@@ -20,6 +21,15 @@ async def list_audit(services: Services, user_id: int | None = None) -> list[Aud
     else:
         rows = await service.list_all()
     return [AuditRead.model_validate(r) for r in rows]
+
+
+@router.get("/audit/{audit_id}", response_model=AuditRead, dependencies=[Depends(require_permission("view", "audit"))])
+async def get_audit(audit_id: int, services: Services) -> AuditRead:
+    service = AuditService(AuditRepository(services.session))
+    row = await service.get_by_id(audit_id)
+    if row is None:
+        raise NotFoundError("Запись аудита не найдена")
+    return AuditRead.model_validate(row)
 
 
 @router.post("/audit", response_model=AuditRead, status_code=201, dependencies=[Depends(require_permission("create", "audit"))])

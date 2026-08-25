@@ -14,6 +14,7 @@ export const deviationsConfig: ListPageConfig<DeviationRow> = {
   entityKey: 'deviations',
   title: 'Отклонения',
   apiUrl: '/api/v1/deviations',
+  listPath: '/deviations',
   columns: [
     { id: 'id', label: 'ID', type: 'number' },
     { id: 'deviation_type', label: 'Тип', type: 'text' },
@@ -28,6 +29,6 @@ export const deviationsConfig: ListPageConfig<DeviationRow> = {
   ],
 
   columnOverrides: {
-    id: { href: (row) => `/reference/deviations/${row.id}` },
+    id: { href: (row) => `/deviations/${row.id}` },
   },
 }

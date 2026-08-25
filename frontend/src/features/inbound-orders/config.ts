@@ -1,10 +1,14 @@
 import type { ListPageConfig } from '../entity-system/types'
+import { getStatusLabel } from '../../lib/statusLabels'
 
 type InboundOrderRow = {
   id: number
   depositor_id: number
   warehouse_id: number | null
+  warehouse_name: string
   number: string
+  order_number: string
+  loc_code: string
   supplier_code: string
   order_date: string
   planned_date: string | null
@@ -19,9 +23,13 @@ export const inboundOrdersConfig: ListPageConfig<InboundOrderRow> = {
   entityKey: 'inbound_orders',
   title: 'Входящие заказы',
   apiUrl: '/api/v1/inbound-orders',
+  listPath: '/orders/inbound',
   columns: [
     { id: 'id', label: 'ID', type: 'number' },
-    { id: 'number', label: 'Номер', type: 'text' },
+    { id: 'number', label: 'Номер заявки', type: 'text' },
+    { id: 'order_number', label: 'Номер заказа', type: 'text' },
+    { id: 'loc_code', label: 'Код склада', type: 'text' },
+    { id: 'warehouse_name', label: 'Склад', type: 'text' },
     { id: 'supplier_code', label: 'Поставщик', type: 'text' },
     { id: 'order_date', label: 'Дата заказа', type: 'date' },
     { id: 'planned_date', label: 'Плановая дата', type: 'date' },
@@ -37,6 +45,8 @@ export const inboundOrdersConfig: ListPageConfig<InboundOrderRow> = {
   ],
 
   columnOverrides: {
-    id: { href: (row) => `/reference/inbound-orders/${row.id}` },
+    id: { href: (row) => `/orders/inbound/${row.id}` },
+    number: { href: (row) => `/orders/inbound/${row.id}` },
+    status: { render: (row) => getStatusLabel(row.status) },
   },
 }

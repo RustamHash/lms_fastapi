@@ -22,8 +22,19 @@ export type FilterConfig = {
   options?: { value: string; label: string }[]
 }
 
+export type CreateFieldType = 'text' | 'number' | 'bool' | 'date' | 'password' | 'textarea'
+
+export type CreateField = {
+  key: string
+  label: string
+  type: CreateFieldType
+  required?: boolean
+}
+
 export type ToolbarConfig = {
   createHref?: string
+  /** Не предлагать «+», даже если есть listPath (логи, журнал). */
+  disableCreate?: boolean
   canCreate?: boolean
   showExport?: boolean
   showRefresh?: boolean
@@ -91,6 +102,11 @@ export type ListPageConfig<Row extends { id: number }> = {
   title: string
   subtitle?: string
   apiUrl: string
+  /** SPA-путь списка. Деталка: `{listPath}/{id}`, создание: `{listPath}/new`. */
+  listPath?: string
+  createFields?: CreateField[]
+  /** POST, если отличается от apiUrl (список `/list`, остаток `/stock/add`). */
+  createApiUrl?: string
   staleTime?: number
   
   columns?: ColumnConfig[]

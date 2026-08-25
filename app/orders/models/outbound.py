@@ -38,8 +38,8 @@ class OutboundOrder(Base):
     customer_name: Mapped[str] = mapped_column(
         String(255), default="", comment="Наименование клиента"
     )
-    client_id: Mapped[int | None] = mapped_column(
-        ForeignKey("parties_client.id"), nullable=True, comment="Клиент"
+    client_id: Mapped[int] = mapped_column(
+        ForeignKey("parties_client.id"), nullable=False, comment="Клиент"
     )
     delivery_address_name: Mapped[str] = mapped_column(
         String(255), default="", comment="Адрес доставки"
@@ -104,9 +104,9 @@ class OutboundOrder(Base):
     )
 
     lines: Mapped[list["OutboundOrderLine"]] = relationship(back_populates="order")
-    depositor: Mapped["Depositor"] = relationship(lazy="selectin")
-    client: Mapped["Client | None"] = relationship(lazy="selectin")
-    warehouse: Mapped["Warehouse | None"] = relationship(lazy="selectin")
+    depositor: Mapped["Depositor"] = relationship()
+    client: Mapped["Client"] = relationship()
+    warehouse: Mapped["Warehouse | None"] = relationship()
 
 
 class OutboundOrderLine(Base):

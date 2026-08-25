@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiClient } from '../../../lib/apiClient'
 import { useColumnPrefs } from '../../../hooks/useColumnPrefs'
@@ -15,6 +15,7 @@ type SortState = {
 }
 
 export function useEntityList<Row extends { id: number }>(config: ListPageConfig<Row>) {
+  const navigate = useNavigate()
   const queryClient = useQueryClient()
   
   const { data: rows = [], isLoading, error } = useQuery({
@@ -204,12 +205,26 @@ export function useEntityList<Row extends { id: number }>(config: ListPageConfig
       if (override?.render) {
         return override.render(row)
       }
-      if (override?.href) {
-        return <Link to={override.href(row)}>{cellText(row, colId)}</Link>
+      const to =
+        override?.href?.(row) ??
+        (colId === 'id' && config.listPath ? `${config.listPath}/${row.id}` : undefined)
+      if (to) {
+        return (
+          <button
+            type="button"
+            className="list-table__nav"
+            onClick={(e) => {
+              e.stopPropagation()
+              navigate(to)
+            }}
+          >
+            {cellText(row, colId)}
+          </button>
+        )
       }
       return cellText(row, colId)
     },
-    [config.columnOverrides, cellText],
+    [config.columnOverrides, cellText, navigate],
   )
   
   const hasActiveFilters = useMemo(() => {

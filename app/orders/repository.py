@@ -5,9 +5,10 @@
 from __future__ import annotations
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.accounts.scope import DataScope
 from app.orders.models import InboundOrder, InboundOrderLine, OutboundOrder, OutboundOrderLine, ReturnOrder, ReturnOrderLine
 
 
@@ -15,12 +16,20 @@ class InboundOrderRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._s = session
 
-    async def get_by_id(self, id: int) -> InboundOrder | None:
-        stmt = select(InboundOrder).where(InboundOrder.id == id).options(selectinload(InboundOrder.depositor), selectinload(InboundOrder.supplier), selectinload(InboundOrder.warehouse), selectinload(InboundOrder.lines))
-        return await self._s.scalar(stmt)
+    async def get_by_id(self, id: int, scope: DataScope | None = None) -> InboundOrder | None:
+        row = await self._s.get(
+            InboundOrder, id, options=[selectinload(InboundOrder.warehouse)]
+        )
+        if row is None:
+            return None
+        if scope is not None and not scope.allows_depositor(row.depositor_id):
+            return None
+        return row
 
-    async def list_all(self) -> list[InboundOrder]:
-        stmt = select(InboundOrder).options(selectinload(InboundOrder.depositor), selectinload(InboundOrder.supplier), selectinload(InboundOrder.warehouse))
+    async def list_all(self, scope: DataScope | None = None) -> list[InboundOrder]:
+        stmt = select(InboundOrder).options(selectinload(InboundOrder.warehouse))
+        if scope is not None:
+            stmt = scope.filter_depositor(stmt, InboundOrder.depositor_id)
         return list(await self._s.scalars(stmt))
 
     async def get_by_depositor_number(
@@ -67,7 +76,14 @@ class InboundOrderLineRepository:
         return list(await self._s.scalars(select(InboundOrderLine)))
 
     async def list_by_order(self, order_id: int) -> list[InboundOrderLine]:
-        stmt = select(InboundOrderLine).where(InboundOrderLine.order_id == order_id)
+        stmt = (
+            select(InboundOrderLine)
+            .options(selectinload(InboundOrderLine.product))
+            .where(
+                InboundOrderLine.order_id == order_id,
+                InboundOrderLine.is_deleted.is_(False),
+            )
+        )
         return list(await self._s.scalars(stmt))
 
     async def create(self, **kwargs) -> InboundOrderLine:
@@ -98,12 +114,20 @@ class OutboundOrderRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._s = session
 
-    async def get_by_id(self, id: int) -> OutboundOrder | None:
-        stmt = select(OutboundOrder).where(OutboundOrder.id == id).options(selectinload(OutboundOrder.depositor), selectinload(OutboundOrder.client), selectinload(OutboundOrder.warehouse), selectinload(OutboundOrder.lines))
-        return await self._s.scalar(stmt)
+    async def get_by_id(self, id: int, scope: DataScope | None = None) -> OutboundOrder | None:
+        row = await self._s.get(OutboundOrder, id)
+        if row is None:
+            return None
+        if scope is not None and not scope.allows_client(row.client_id, row.depositor_id):
+            return None
+        return row
 
-    async def list_all(self) -> list[OutboundOrder]:
-        stmt = select(OutboundOrder).options(selectinload(OutboundOrder.depositor), selectinload(OutboundOrder.client), selectinload(OutboundOrder.warehouse))
+    async def list_all(self, scope: DataScope | None = None) -> list[OutboundOrder]:
+        stmt = select(OutboundOrder)
+        if scope is not None:
+            stmt = scope.filter_client(
+                stmt, OutboundOrder.client_id, OutboundOrder.depositor_id
+            )
         return list(await self._s.scalars(stmt))
 
     async def create(self, **kwargs) -> OutboundOrder:
@@ -141,7 +165,14 @@ class OutboundOrderLineRepository:
         return list(await self._s.scalars(select(OutboundOrderLine)))
 
     async def list_by_order(self, order_id: int) -> list[OutboundOrderLine]:
-        stmt = select(OutboundOrderLine).where(OutboundOrderLine.order_id == order_id)
+        stmt = (
+            select(OutboundOrderLine)
+            .options(selectinload(OutboundOrderLine.product))
+            .where(
+                OutboundOrderLine.order_id == order_id,
+                OutboundOrderLine.is_deleted.is_(False),
+            )
+        )
         return list(await self._s.scalars(stmt))
 
     async def create(self, **kwargs) -> OutboundOrderLine:
@@ -172,11 +203,21 @@ class ReturnOrderRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._s = session
 
-    async def get_by_id(self, id: int) -> ReturnOrder | None:
-        return await self._s.get(ReturnOrder, id)
+    async def get_by_id(self, id: int, scope: DataScope | None = None) -> ReturnOrder | None:
+        row = await self._s.get(ReturnOrder, id)
+        if row is None:
+            return None
+        if scope is not None and not scope.allows_client(row.client_id, row.depositor_id):
+            return None
+        return row
 
-    async def list_all(self) -> list[ReturnOrder]:
-        return list(await self._s.scalars(select(ReturnOrder)))
+    async def list_all(self, scope: DataScope | None = None) -> list[ReturnOrder]:
+        stmt = select(ReturnOrder)
+        if scope is not None:
+            stmt = scope.filter_client(
+                stmt, ReturnOrder.client_id, ReturnOrder.depositor_id
+            )
+        return list(await self._s.scalars(stmt))
 
     async def create(self, **kwargs) -> ReturnOrder:
         row = ReturnOrder(**kwargs)

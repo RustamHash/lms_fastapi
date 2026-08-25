@@ -12,6 +12,7 @@ export const rowsConfig: ListPageConfig<RowRow> = {
   entityKey: 'topology_rows',
   title: 'Ряды',
   apiUrl: '/api/v1/warehouse/topology/rows',
+  listPath: '/topology/rows',
   columns: [
     { id: 'id', label: 'ID', type: 'number' },
     { id: 'zone_id', label: 'Зона ID', type: 'number' },
@@ -25,6 +26,6 @@ export const rowsConfig: ListPageConfig<RowRow> = {
   ],
 
   columnOverrides: {
-    id: { href: (row) => `/reference/topology-rows/${row.id}` },
+    id: { href: (row) => `/topology/rows/${row.id}` },
   },
 }

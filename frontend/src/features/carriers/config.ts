@@ -13,6 +13,7 @@ export const carriersConfig: ListPageConfig<CarrierRow> = {
   entityKey: 'carriers',
   title: 'Перевозчики',
   apiUrl: '/api/v1/carriers',
+  listPath: '/carriers',
   columns: [
     { id: 'id', label: 'ID', type: 'number' },
     { id: 'name', label: 'Название', type: 'text' },
@@ -26,6 +27,6 @@ export const carriersConfig: ListPageConfig<CarrierRow> = {
   ],
 
   columnOverrides: {
-    id: { href: (row) => `/reference/carriers/${row.id}` },
+    id: { href: (row) => `/carriers/${row.id}` },
   },
 }

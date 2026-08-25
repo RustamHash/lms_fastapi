@@ -6,11 +6,17 @@ from __future__ import annotations
 
 from app.parties.models import RawAddress
 from app.parties.repository import RawAddressRepository
+from app.parties.services.address_service import AddressService
 
 
 class RawAddressService:
-    def __init__(self, repo: RawAddressRepository) -> None:
+    def __init__(
+        self,
+        repo: RawAddressRepository,
+        addresses: AddressService,
+    ) -> None:
         self._repo = repo
+        self._addresses = addresses
 
     async def get_by_id(self, id: int) -> RawAddress | None:
         return await self._repo.get_by_id(id)
@@ -19,7 +25,10 @@ class RawAddressService:
         return await self._repo.list_all()
 
     async def create(self, **kwargs) -> RawAddress:
-        return await self._repo.create(**kwargs)
+        return await self._addresses.resolve_alias(
+            kwargs["raw_text"],
+            source=kwargs.get("source") or "",
+        )
 
     async def update(self, id: int, **kwargs) -> RawAddress | None:
         return await self._repo.update(id, **kwargs)

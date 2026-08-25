@@ -1,5 +1,7 @@
 # LMS FastAPI
 
+Документация: [docs/README.md](docs/README.md) (карта модулей). Слои: [ARCHITECTURE.md](ARCHITECTURE.md).
+
 ## Установка
 
 python -m venv .venv

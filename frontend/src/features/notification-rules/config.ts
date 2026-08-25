@@ -14,6 +14,7 @@ export const notificationRulesConfig: ListPageConfig<NotificationRuleRow> = {
   entityKey: 'notification_rules',
   title: 'Правила уведомлений',
   apiUrl: '/api/v1/notification-rules',
+  listPath: '/notification-rules',
   columns: [
     { id: 'id', label: 'ID', type: 'number' },
     { id: 'event_type', label: 'Событие', type: 'text' },
@@ -30,6 +31,6 @@ export const notificationRulesConfig: ListPageConfig<NotificationRuleRow> = {
   ],
 
   columnOverrides: {
-    id: { href: (row) => `/reference/notification-rules/${row.id}` },
+    id: { href: (row) => `/notification-rules/${row.id}` },
   },
 }

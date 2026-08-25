@@ -33,6 +33,11 @@ class ReturnOrderRead(BaseRead):
     )
     customer_code: str = Field("", title="Код клиента")
     customer_name: str = Field("", title="Наименование клиента")
+    client_id: int = Field(
+        ...,
+        title="Клиент",
+        json_schema_extra={"ui_type": "select", "endpoint": "/api/v1/clients"},
+    )
     return_date: date = Field(..., title="Дата возврата")
     return_type: str = Field("partial", title="Тип возврата")
     status: str = Field("new", title="Статус возврата")
@@ -52,8 +57,6 @@ class ReturnOrderCreate(BaseModel):
         json_schema_extra={"ui_type": "select", "endpoint": "/api/v1/depositors"},
     )
     warehouse_id: int | None = Field(None, title="Склад")
-    customer_code: str = Field("", title="Код клиента")
-    customer_name: str = Field("", title="Наименование клиента")
     return_date: date = Field(..., title="Дата возврата")
     return_type: str = Field("partial", title="Тип возврата")
     notes: str = Field("", title="Примечания")
