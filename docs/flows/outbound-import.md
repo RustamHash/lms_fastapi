@@ -42,6 +42,6 @@
 
 ## 3. Итог
 
-С исходящих массовый прогон создаёт расходные заявки из XML ORDER. При `needs_delivery` подписчик создаёт `DeliveryOrder` после commit. Ответный XML партнёру (ordrsp) — этап 4.
+С исходящих массовый прогон создаёт расходные заявки из XML ORDER. При `needs_delivery` подписчик создаёт `DeliveryOrder` после commit. После успешного accept (не skip) выгружается ORDRSP в `out_path`; после complete отбора — DESADV.
 
 Входящие (`porder`) — зеркальный контур с созданием номенклатуры и receipt.

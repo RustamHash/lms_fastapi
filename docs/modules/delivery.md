@@ -35,7 +35,7 @@
 - Иначе создаёт заявку: `number` = номер outbound, `delivery_date` = `shipping_date` или `order_date`, контакт и комментарий из outbound, `status` = `created`; на outbound ставит `delivery_status` = `created`.
 - Эмитит `delivery_order.created` через `DeliveryOrderService` (`schedule_event` после commit).
 
-Подписчики (`subscribers/outbound_handlers.py`), регистрация в `main.py` → `setup_delivery_subscribers()`:
+Подписчики (`subscribers/outbound_handlers.py`), регистрация через `bootstrap_background_subscribers()` (FastAPI `main` и Celery worker):
 
 | Событие | Когда |
 |---------|--------|

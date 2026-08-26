@@ -132,7 +132,7 @@ Docker (dev): `docker compose -f docker-compose.dev.yml up` — Postgres, Redis,
 outbound + needs_delivery ──► delivery order ──► route
 ```
 
-Задание приёмки/отбора создаётся из заказа (`ReceivingService` / `PickingService`), не руками через generic Task CRUD. TSD API — этап 5. XML-ответ партнёру — этап 4.
+Задание приёмки/отбора создаётся из заказа (`ReceivingService` / `PickingService`), не руками через generic Task CRUD. TSD API — этап 5. XML-ответ партнёру (PORDRSP/ORDRSP/RECADV/DESADV) — в `integration` ExportService.
 
 ---
 

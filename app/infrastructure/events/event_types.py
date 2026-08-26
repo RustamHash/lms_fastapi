@@ -26,3 +26,5 @@ class EventTypes:
 
     TASK_CREATED = "task.created"
     TASK_COMPLETED = "task.completed"
+    RECEIVING_TASK_COMPLETED = "receiving_task.completed"
+    PICKING_TASK_COMPLETED = "picking_task.completed"

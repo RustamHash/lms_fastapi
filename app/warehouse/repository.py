@@ -240,11 +240,18 @@ class TaskLineRepository(BaseRepository[TaskLine]):
         super().__init__(session, TaskLine)
 
     async def list_by_task(self, task_id: int) -> list[TaskLine]:
-        stmt = select(TaskLine).where(
-            TaskLine.task_id == task_id,
-            TaskLine.is_deleted.is_(False),
+        stmt = (
+            select(TaskLine)
+            .options(
+                selectinload(TaskLine.product),
+                selectinload(TaskLine.batch),
+            )
+            .where(
+                TaskLine.task_id == task_id,
+                TaskLine.is_deleted.is_(False),
+            )
         )
-        return list(await self._s.scalars(stmt))
+        return list((await self._s.scalars(stmt)).unique().all())
 
     async def list_for_inbound(self, inbound_order_id: int) -> list[TaskLine]:
         stmt = (

@@ -7,6 +7,8 @@ from decimal import Decimal
 
 from app.core.exceptions import BadRequestError, NotFoundError
 from app.core.statuses import OrderStatus, TaskStatus
+from app.infrastructure.events import schedule_event
+from app.infrastructure.events.event_types import EventTypes
 from app.orders.repository import InboundOrderLineRepository, InboundOrderRepository
 from app.warehouse.models import Task, TaskLine
 from app.warehouse.repository import (
@@ -226,6 +228,15 @@ class ReceivingService:
                 task.inbound_order_id,
                 status=OrderStatus.COMPLETED.value,
                 has_shortage=shortage,
+            )
+            schedule_event(
+                self._tasks._s,
+                EventTypes.RECEIVING_TASK_COMPLETED,
+                {
+                    "task_id": task.id,
+                    "inbound_order_id": task.inbound_order_id,
+                    "has_shortage": shortage,
+                },
             )
         await self._tasks._s.flush()
         return task

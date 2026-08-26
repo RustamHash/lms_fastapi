@@ -64,3 +64,14 @@ class FTPService:
         if self._ftp is None:
             raise RuntimeError("FTP не подключён")
         self._ftp.delete(remote_path)
+
+    def upload(self, remote_dir: str, filename: str, data: bytes) -> str:
+        """Загрузить файл в каталог исходящих. Возвращает remote path."""
+        if self._ftp is None:
+            raise RuntimeError("FTP не подключён")
+        from io import BytesIO
+
+        remote_dir = remote_dir.rstrip("/")
+        self._ftp.cwd(remote_dir)
+        self._ftp.storbinary(f"STOR {filename}", BytesIO(data))
+        return f"{remote_dir}/{filename}"

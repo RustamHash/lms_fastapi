@@ -80,13 +80,13 @@ API воркфлоу (RBAC entity `tasks`):
 
 - `POST /warehouse/receiving/from-inbound` `{inbound_order_id, receiving_location_id}`
 - `POST /warehouse/receiving/lines/{id}/receive`
-- `POST /warehouse/receiving/{task_id}/complete` `{confirm_shortage}`
+- `POST /warehouse/receiving/{task_id}/complete` `{confirm_shortage}` — после commit событие `receiving_task.completed` → RECADV
 - `POST /warehouse/receiving/movements/{id}/cancel`
 - `GET /warehouse/receiving/inbound/{id}` — план/факт/сверка для карточки входящего заказа (право `view` на `orders`). На факте: партия, дата изготовления, срок годности, остаток срока в днях и % на сегодня (`expiration − today`; % = остаток / (`expiration − production`))
 - `POST /warehouse/picking/from-outbound` `{outbound_order_id}`
 - `POST /warehouse/picking/{task_id}/plan`
 - `POST /warehouse/picking/lines/{id}/pick`
-- `POST /warehouse/picking/{task_id}/complete`
+- `POST /warehouse/picking/{task_id}/complete` — после commit `picking_task.completed` → DESADV
 - `GET /warehouse/picking/outbound/{id}` — план/факт/сверка для карточки исходящего заказа (право `view` на `orders`)
 
 Generic `/warehouse/tasks` (CRUD, `from-document`, `complete_line`) ещё есть; для приёмки и отбора это не основной путь. Карточки заказов и документов показывают план/факт (см. [orders.md](orders.md), [documents.md](documents.md), [frontend.md](frontend.md)). Факт собирается через `movement_row`: даты партии и остаток срока на сегодня.

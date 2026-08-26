@@ -24,6 +24,19 @@ class IntegrationProfileRepository:
         stmt = select(IntegrationProfile).where(IntegrationProfile.is_active.is_(True))
         return list(await self._s.scalars(stmt))
 
+    async def get_active_with_out_path(
+        self, depositor_id: int
+    ) -> IntegrationProfile | None:
+        """Первый активный профиль поклажедателя с config.ftp.out_path."""
+        profiles = await self.list_active()
+        for profile in profiles:
+            if profile.depositor_id != depositor_id:
+                continue
+            ftp = (profile.config or {}).get("ftp") or {}
+            if str(ftp.get("out_path") or "").strip():
+                return profile
+        return None
+
     async def create(self, **kwargs) -> IntegrationProfile:
         row = IntegrationProfile(**kwargs)
         self._s.add(row)

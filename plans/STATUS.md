@@ -32,7 +32,7 @@
 | 1 | done | 0 | Этап 1. DI склада: `app/api/v1/warehouse/deps.py`, роуты без `Services` и `*Repository` | agent 2026-08-25 | Фабрики `get_*_service` в `warehouse/deps.py`. Роуты склада без `Services` и `*Repository`. Топология/группы/упаковки — тонкие сервисы. `ServiceContainer` не трогали. |
 | 2 | done | 1 | Этап 2. Остаток: unique, LPN обязателен, moved_at, StockService writer, pytest | agent 2026-08-25 | Unique (product, location, batch, lpn), пустого LPN нет. `moved_at`/`task_line_id` на движении. Pytest гонки зелёный. |
 | 3 | done | 2 | Этап 3. Приёмка и FEFO-отбор, задания из заказа, не generic Task CRUD | agent 2026-08-25 | Задание из inbound/outbound: приёмка (факт, расхождение, сторно) и FEFO-отбор (резерв → списание). Pytest: остаток+ / остаток− без add_stock из роута. |
-| 4 | todo | 3 | Этап 4. XML-ответ Zilandi + маппинг LOC + фильтр списков по depositor | | | Скоуп поклажедатель+клиент уже в коде (accounts/scope, outbound/return/inbound/delivery/clients). Осталось XML и маппинг LOC. |
+| 4 | done | 3 | Этап 4. XML-ответ Zilandi + маппинг LOC + фильтр списков по depositor | agent 2026-08-26 | PORDRSP/ORDRSP после accept, RECADV/DESADV после complete; даты из заказа, Moscow TZ, без ответа на skip; подписчики delivery/export в Celery; LOC→VW и фильтры списков уже были. |
 | 5 | todo | 3 | Этап 5. TSD API на сервисах этапа 3 | | |
 | 6 | todo | 3 | Этап 6. Инвентаризация dry-run/post и перемещения через StockService | | |
 | 7 | todo | 3 | Этап 7. Убрать ServiceContainer, deps по доменам, BaseRepository, ошибки сервиса | | |

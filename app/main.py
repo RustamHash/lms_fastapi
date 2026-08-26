@@ -13,7 +13,7 @@ from app.core.config import get_settings
 from app.core.model_rebuilder import rebuild_all_models
 from app.core.middleware import setup_middleware
 from app.infrastructure.logging import setup_logging
-from app.delivery.subscribers import setup_delivery_subscribers
+from app.infrastructure.bootstrap_workers import bootstrap_background_subscribers
 from app.notifications.services.dispatcher import setup_notification_dispatcher
 
 settings = get_settings()
@@ -22,7 +22,7 @@ setup_logging(settings)
 logger.info("Environment: %s", settings.environment)
 logger.info("Log level: %s", settings.log_level)
 setup_notification_dispatcher(None)
-setup_delivery_subscribers()
+bootstrap_background_subscribers()
 
 app = FastAPI(title="LMS FastAPI")
 

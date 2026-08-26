@@ -35,9 +35,11 @@
 - `document.created` / `document.status_changed`
 - `delivery_order.*`, `route.assigned`
 - `task.created` / `task.completed`
+- `receiving_task.completed` / `picking_task.completed` → выгрузка RECADV / DESADV
 
-Эмитить через **`schedule_event(session, …)`** из сервиса, не `emit` напрямую и не из репозитория. Подписчику нужна БД — своя сессия + UoW (пример: `app/delivery/subscribers/outbound_handlers.py`, `app/notifications/services/dispatcher.py`).
+Эмитить через **`schedule_event(session, …)`** из сервиса, не `emit` напрямую и не из репозитория. Подписчику нужна БД — своя сессия + UoW (пример: `app/delivery/subscribers/outbound_handlers.py`, `app/integration/subscribers/export_handlers.py`, `app/notifications/services/dispatcher.py`).
 
+Подписчики delivery и export регистрируются и в FastAPI (`bootstrap_background_subscribers` из `main`), и в Celery worker (сигнал `on_after_configure` + старт задачи импорта) — иначе accept в воркере не создаёт доставку и не шлёт ORDRSP.
 ---
 
 ## Прочее

@@ -26,9 +26,20 @@ celery_app.conf.update(
 )
 
 
+@celery_app.on_after_configure.connect
+def _register_worker_subscribers(sender, **kwargs):
+    """Delivery/export handlers: воркер не импортирует main.py."""
+    from app.infrastructure.bootstrap_workers import bootstrap_background_subscribers
+
+    bootstrap_background_subscribers()
+
+
 @celery_app.task(name="app.tasks.run_import", bind=True, max_retries=3)
 def run_import_task(self, task_id: str, user_id: int, document_type: str | None):
     """Задача импорта — Celery только ставит UoW-прогон, сущности не создаёт."""
+    from app.infrastructure.bootstrap_workers import bootstrap_background_subscribers
+
+    bootstrap_background_subscribers()
     from app.accounts.models import (  # noqa: F401
         User,
         Role,

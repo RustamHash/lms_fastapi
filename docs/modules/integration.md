@@ -37,7 +37,7 @@
 | `archive_path` | архив успешно обработанных |
 | `error_path` | файлы, которые не приняли |
 
-Импорт **сейчас** ходит только во входящие (`in_path`). Без `in_path` профиль пропускается. Пустая папка — нормальный итог («файлов нет»), не ошибка. Подключение к FTP рвётся через 15 с, если хост не отвечает. Исходящие / PDF / архив / ошибки хранятся, в прогоне не используются. Пароль FTP в карточке и в Read отдаётся как есть.
+Импорт **сейчас** ходит только во входящие (`in_path`). Без `in_path` профиль пропускается. Пустая папка — нормальный итог («файлов нет»), не ошибка. Подключение к FTP рвётся через 15 с, если хост не отвечает. **Исходящие ответы** кладутся в `out_path` (`ExportService` + `FTPService.upload`). PDF / архив / ошибки хранятся в конфиге, в прогоне не используются. Пароль FTP в карточке и в Read отдаётся как есть.
 
 **IntegrationLog** / **IntegrationError**: прогресс прогона и ошибки строк.
 
@@ -51,16 +51,27 @@
 4. `InboundExchangeService.accept(depositor_id=профиль)` — поставщик, заявка, всегда receipt (LOC обязателен).
 5. Успех или пропуск дубликата: файл `porder_*` снимается с FTP. Ошибка — файл остаётся.
 6. На файл — свой `UnitOfWork`. Сервис заказов не коммитит.
+7. После успешного accept (не skip): событие `inbound_order.accepted_from_exchange` → `ExportService.export_pordrsp` → FTP `out_path`. Даты в XML — `order_date` заявки, TZ имени файла — Europe/Moscow. На дубликат ответа нет.
 
 ## Поток импорта (ORDER)
 
 1–2. Как у PORDER; фильтр файлов `order_*`.
 3. `ZLNAdapter` → `OutboundExchangeMessage`. Обязательны `DOC_NO`, `LOC`, `CUSTOMER` (ID+NAME), `DELIV_ADDR`, `LN`. `ITEMS` / `SUM` / `COLLECT` игнорируются. `DELIV=1` → доставка, иначе самовывоз. Без `DELIV_ADDR` сообщение не собирается.
-4. `OutboundExchangeService.accept`: товары только из справочника (не создаём); адрес `get_or_create`; клиент `(code, delivery_address_id)`; без товара/адреса/клиента/LOC→VW — заказ не создаём, файл остаётся. Успех → событие `outbound_order.accepted_from_exchange` (deferred emit после commit) → подписчик delivery.
-5. Успех или дубликат: `order_*` снимается с FTP.
+4. `OutboundExchangeService.accept`: товары только из справочника (не создаём); адрес `get_or_create`; клиент `(code, delivery_address_id)`; без товара/адреса/клиента/LOC→VW — заказ не создаём, файл остаётся. Успех → событие `outbound_order.accepted_from_exchange` (deferred emit после commit) → подписчики delivery **и** `export_ordrsp`.
+5. Успех или дубликат: `order_*` снимается с FTP. На дубликат ORDRSP не шлём.
 
-Ответный XML (ordrsp/desadv) — подписчик на событие, этап 4 (`ExportService` ещё нет).
+## Ответный XML (выгрузка)
 
+| Когда | Файл | Корневой тег | Строки LN |
+|-------|------|--------------|-----------|
+| После accept PORDER | `pordrsp_{номер}_{YYYYMMDD-HHMMSS}.xml` | `PORDRSP` | нет |
+| После accept ORDER | `ordrsp_…` | `ORDRSP` | нет |
+| После complete приёмки | `recadv_…` | `RECADV` | ITEM/LOT/DATE_EXP/UNIT/QNT из факта задания |
+| После complete отбора | `desadv_…` | `DESADV` | то же; номер заказа — теги `ORDER_NO` / `ORDER_DATE` (не `ORD_*`) |
+
+Профиль: первый активный с `config.ftp.out_path` у поклажедателя. `PARTNER` — `config.partner` / `ftp.partner` / `ZLN`. Флаги на заказе: `pordrsp_exported` / `recadv_exported` / `ordrsp_exported` / `desadv_exported`. События complete: `receiving_task.completed` / `picking_task.completed`. Подписчики регистрируются в `bootstrap_background_subscribers()` (main + Celery worker).
+
+Код: `exporters/zln_xml.py`, `services/export_service.py`, `subscribers/export_handlers.py`.
 ---
 
 ## Экраны
@@ -79,8 +90,11 @@
 
 | Файл | Роль |
 |------|------|
-| `services/ftp_service.py` | FTP |
+| `services/ftp_service.py` | FTP (list/download/delete/upload) |
 | `services/import_run_service.py` | Прогон: лог, FTP, адаптер, вызов `accept` |
+| `services/export_service.py` | PORDRSP/ORDRSP/RECADV/DESADV → FTP `out_path` |
+| `exporters/zln_xml.py` | Сборка XML |
+| `subscribers/export_handlers.py` | Подписчики на accept/complete |
 | `adapters/zln_adapter.py` | XML Зиландии → сообщение orders |
 | `tasks.py` | Celery: свой Postgres-движок на задачу + `ImportRunService.run`. Воркер **не** перечитывает код сам — после правок `docker compose -f docker-compose.dev.yml restart celery_worker`. |
 

@@ -28,7 +28,10 @@ async def handle_outbound_needs_delivery(data: dict) -> None:
 
 
 def setup_delivery_subscribers() -> None:
-    """Подписать обработчики delivery на события outbound."""
+    """Подписать обработчики delivery на события outbound. Идемпотентно."""
+    handlers = event_bus._handlers.get(EventTypes.OUTBOUND_ORDER_ACCEPTED_FROM_EXCHANGE, [])
+    if handle_outbound_needs_delivery in handlers:
+        return
     event_bus.subscribe(
         EventTypes.OUTBOUND_ORDER_ACCEPTED_FROM_EXCHANGE,
         handle_outbound_needs_delivery,

@@ -7,6 +7,8 @@ from decimal import Decimal
 
 from app.core.exceptions import BadRequestError, NotFoundError
 from app.core.statuses import OrderStatus, TaskStatus
+from app.infrastructure.events import schedule_event
+from app.infrastructure.events.event_types import EventTypes
 from app.orders.repository import OutboundOrderLineRepository, OutboundOrderRepository
 from app.warehouse.models import Task, TaskLine
 from app.warehouse.repository import StockRepository, TaskLineRepository, TaskRepository
@@ -197,6 +199,15 @@ class PickingService:
             await self._outbound.update(
                 task.outbound_order_id,
                 status=OrderStatus.COMPLETED.value,
+            )
+            schedule_event(
+                self._tasks._s,
+                EventTypes.PICKING_TASK_COMPLETED,
+                {
+                    "task_id": task.id,
+                    "outbound_order_id": task.outbound_order_id,
+                    "has_shortfall": shortfall,
+                },
             )
         await self._tasks._s.flush()
         return task
