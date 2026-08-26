@@ -16,6 +16,20 @@
   align-items: center;
 }
 
+.list-toolbar__group {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-right: 8px;
+}
+
+.tb--group {
+  background: #0d9488;
+}
+.tb--group:hover:not(:disabled) {
+  background: #0f766e;
+}
+
 .tb {
   display: inline-flex;
   align-items: center;

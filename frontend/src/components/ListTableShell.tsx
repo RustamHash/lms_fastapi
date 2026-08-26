@@ -86,6 +86,7 @@ type Props<Row extends { id: number }> = {
   onInvertSelection?: () => void
   onImport?: () => void
   filtersBar?: ReactNode
+  toolbarExtra?: ReactNode
 }
 
 function ListTableShellInner<Row extends { id: number }>({
@@ -138,6 +139,7 @@ function ListTableShellInner<Row extends { id: number }>({
   onInvertSelection,
   onImport,
   filtersBar,
+  toolbarExtra,
 }: Props<Row>) {
   const navigate = useNavigate()
 
@@ -291,6 +293,7 @@ function ListTableShellInner<Row extends { id: number }>({
         toolbarLeft={toolbarLeft}
         onInvertSelection={onInvertSelection}
         selectionCount={selectionCount}
+        toolbarExtra={toolbarExtra}
       />
 
       <div className="list-table-area">

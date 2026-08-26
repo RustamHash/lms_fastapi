@@ -94,11 +94,14 @@ services:
       - ./app:/app/app
       - ./logs:/app/logs
 
+
   flower:
     image: mher/flower:2.0
     container_name: lms_flower
     restart: unless-stopped
-    command: celery flower --broker=redis://redis:6379/0 --port=5555
+    environment:
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - FLOWER_PORT=5555
     ports:
       - "5555:5555"
     depends_on:

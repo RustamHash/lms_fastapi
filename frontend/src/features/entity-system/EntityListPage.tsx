@@ -164,20 +164,6 @@ export function EntityListPage<Row extends { id: number }>({
         </div>
       </div>
       
-      {config.groupActions && entity.selectedCount > 0 ? (
-        <GroupActionsBar
-          actions={config.groupActions}
-          selectedRows={entity.rows.filter((r) => entity.selected.has(r.id))}
-          context={{
-            selectedRows: entity.rows.filter((r) => entity.selected.has(r.id)),
-            selectedIds: Array.from(entity.selected),
-            reload: entity.reload,
-            clearSelection: entity.clearSelection,
-            notify,
-          }}
-        />
-      ) : null}
-      
       <QuickFiltersBar
         quickFilters={entity.quickFilters}
         filters={entity.filters}
@@ -254,6 +240,21 @@ export function EntityListPage<Row extends { id: number }>({
         plainCellText={entity.cellText}
         onImport={onImport}
         onInvertSelection={() => entity.toggleAll(!entity.allSelected)}
+        toolbarExtra={
+          config.groupActions && entity.selectedCount > 0 ? (
+            <GroupActionsBar
+              actions={config.groupActions}
+              selectedRows={entity.rows.filter((r) => entity.selected.has(r.id))}
+              context={{
+                selectedRows: entity.rows.filter((r) => entity.selected.has(r.id)),
+                selectedIds: Array.from(entity.selected),
+                reload: entity.reload,
+                clearSelection: entity.clearSelection,
+                notify,
+              }}
+            />
+          ) : null
+        }
         onRowDoubleClick={(row) => {
           const to = listDetailPath(config, row)
           if (to) {

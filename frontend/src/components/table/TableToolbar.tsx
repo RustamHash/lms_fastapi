@@ -15,6 +15,7 @@ type Props = {
   toolbarLeft?: ReactNode
   onInvertSelection?: () => void
   selectionCount: number
+  toolbarExtra?: ReactNode
 }
 
 function IconRefresh() {
@@ -86,12 +87,14 @@ function TableToolbarInner({
   toolbarLeft,
   onInvertSelection,
   selectionCount,
+  toolbarExtra,
 }: Props) {
   return (
     <div className="list-page-toolbar-row">
       {toolbarLeft ? <div className="list-toolbar-left">{toolbarLeft}</div> : <div className="list-toolbar-left" />}
       <div className="list-toolbar">
         <div className="list-toolbar__right">
+          {toolbarExtra}
           <button
             type="button"
             className={`tb tb--icon tb--refresh${refreshing ? ' tb--loading' : ''}`}
