@@ -43,7 +43,7 @@ class TariffDocument(Base):
     )
 
     contract: Mapped["Contract"] = relationship(
-        back_populates="tariff_documents", lazy="selectin"
+        back_populates="tariff_documents"
     )
     tariffs: Mapped[list["Tariff"]] = relationship(
         back_populates="document"
@@ -76,7 +76,7 @@ class Tariff(Base):
     )
 
     document: Mapped["TariffDocument"] = relationship(
-        back_populates="tariffs", lazy="selectin"
+        back_populates="tariffs"
     )
 
     def __repr__(self) -> str:

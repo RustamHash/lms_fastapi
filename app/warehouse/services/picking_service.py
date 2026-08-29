@@ -209,6 +209,25 @@ class PickingService:
                     "has_shortfall": shortfall,
                 },
             )
+            # DeliveryOrder создаётся по needs_delivery через event_bus
+            # (OUTBOUND_ORDER_CREATED), не в момент завершения отбора.
+            outbound = await self._outbound.get_by_id(task.outbound_order_id)
+            if (
+                outbound is not None
+                and outbound.needs_delivery
+                and not (outbound.delivery_status or "").strip()
+            ):
+                schedule_event(
+                    self._tasks._s,
+                    EventTypes.OUTBOUND_ORDER_CREATED,
+                    {
+                        "order_id": outbound.id,
+                        "order_number": outbound.number,
+                        "depositor_id": outbound.depositor_id,
+                        "client_id": outbound.client_id,
+                        "needs_delivery": True,
+                    },
+                )
         await self._tasks._s.flush()
         return task
 

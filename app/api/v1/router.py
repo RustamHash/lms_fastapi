@@ -27,6 +27,10 @@ api_router.include_router(notifications_router)
 api_router.include_router(integration_router)
 api_router.include_router(files_router)
 
+from app.api.v1.portal import router as portal_router
+
+api_router.include_router(portal_router)
+
 # Метаданные
 from app.api.v1.meta import router as meta_router
 api_router.include_router(meta_router)

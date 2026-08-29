@@ -10,12 +10,20 @@ import {
 import { apiClient } from '../lib/apiClient'
 import { getAccessToken, setAccessToken } from '../lib/token'
 
-export type AuthUser = { id: number; username: string; is_superuser?: boolean; permissions?: Record<string, string[] | boolean> }
+export type AuthUser = {
+  id: number
+  username: string
+  is_superuser?: boolean
+  is_portal_user?: boolean
+  permissions?: Record<string, string[] | boolean>
+  depositor_ids?: number[]
+  client_ids?: number[]
+}
 
 type AuthContextValue = {
   user: AuthUser | null
   loading: boolean
-  login: (username: string, password: string) => Promise<void>
+  login: (username: string, password: string) => Promise<AuthUser>
   logout: () => void
 }
 
@@ -63,6 +71,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setAccessToken(data.access_token)
     const me = await apiClient.get<AuthUser>('/api/v1/auth/me')
     setUser(me)
+    return me
   }, [])
 
   const logout = useCallback(() => {

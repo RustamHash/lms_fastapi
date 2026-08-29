@@ -17,6 +17,11 @@ class DeliveryOrderRead(BaseRead):
         title="Договор перевозки",
         json_schema_extra={"ui_type": "select", "endpoint": "/api/v1/contracts"},
     )
+    tariff_id: int | None = Field(
+        None,
+        title="Тариф",
+        json_schema_extra={"ui_type": "select", "endpoint": "/api/v1/tariffs"},
+    )
     document_id: int | None = Field(
         None,
         title="Документ склада",
@@ -43,6 +48,11 @@ class DeliveryOrderCreate(BaseModel):
         None,
         title="Договор перевозки",
         json_schema_extra={"ui_type": "select", "endpoint": "/api/v1/contracts"},
+    )
+    tariff_id: int | None = Field(
+        None,
+        title="Тариф",
+        json_schema_extra={"ui_type": "select", "endpoint": "/api/v1/tariffs"},
     )
     document_id: int | None = Field(
         None,

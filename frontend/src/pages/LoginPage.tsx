@@ -19,8 +19,8 @@ export function LoginPage() {
     setError(null)
     setLoading(true)
     try {
-      await login(username, password)
-      navigate(from, { replace: true })
+      const me = await login(username, password)
+      navigate(me.is_portal_user ? '/portal' : from, { replace: true })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Ошибка входа')
     } finally {

@@ -15,10 +15,6 @@ export function AssignDeliveryZoneDialog({ addressIds, onComplete, onCancel }: P
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (zoneId == null) {
-      setError('Выберите зону доставки')
-      return
-    }
     setSaving(true)
     setError(null)
     const failures: string[] = []
@@ -36,7 +32,11 @@ export function AssignDeliveryZoneDialog({ addressIds, onComplete, onCancel }: P
       setError(`Не удалось обновить ${failures.length} из ${addressIds.length}: ${failures.slice(0, 3).join('; ')}`)
       return
     }
-    onComplete(`Зона назначена для ${addressIds.length} адрес(ов)`)
+    const msg =
+      zoneId == null
+        ? `Зона снята у ${addressIds.length} адрес(ов)`
+        : `Зона назначена для ${addressIds.length} адрес(ов)`
+    onComplete(msg)
   }
 
   return (
@@ -48,18 +48,16 @@ export function AssignDeliveryZoneDialog({ addressIds, onComplete, onCancel }: P
         </p>
         <form onSubmit={(e) => void onSubmit(e)} className="wh-form">
           <label>
-            Зона доставки *
+            Зона доставки
             <DeliveryZoneSelect
               value={zoneId}
               onChange={setZoneId}
-              allowEmpty={false}
-              required
             />
           </label>
           {error ? <p className="wh-form__err">{error}</p> : null}
           <div className="dialog__actions">
             <button type="submit" className="tb tb--create" disabled={saving}>
-              {saving ? 'Сохранение…' : 'Назначить'}
+              {saving ? 'Сохранение…' : 'Применить'}
             </button>
             <button type="button" className="tb tb--reset" onClick={onCancel} disabled={saving}>
               Отмена

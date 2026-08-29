@@ -16,13 +16,20 @@ class DocumentRepository:
         self._s = session
 
     async def get_by_id(self, id: int) -> Document | None:
-        return await self._s.get(Document, id)
+        row = await self._s.get(Document, id)
+        if row is None or row.is_deleted:
+            return None
+        return row
 
     async def list_all(self) -> list[Document]:
-        return list(await self._s.scalars(select(Document)))
+        stmt = select(Document).where(Document.is_deleted.is_(False))
+        return list(await self._s.scalars(stmt))
 
     async def list_by_type(self, document_type: str) -> list[Document]:
-        stmt = select(Document).where(Document.document_type == document_type)
+        stmt = select(Document).where(
+            Document.document_type == document_type,
+            Document.is_deleted.is_(False),
+        )
         return list(await self._s.scalars(stmt))
 
     async def create(self, **kwargs) -> Document:
@@ -32,7 +39,7 @@ class DocumentRepository:
         return row
 
     async def update(self, id: int, **kwargs) -> Document | None:
-        row = await self._s.get(Document, id)
+        row = await self.get_by_id(id)
         if row is None:
             return None
         for field, value in kwargs.items():
@@ -41,7 +48,7 @@ class DocumentRepository:
         return row
 
     async def soft_delete(self, id: int, user_id: int | None = None) -> bool:
-        row = await self._s.get(Document, id)
+        row = await self.get_by_id(id)
         if row is None:
             return False
         row.soft_delete(user_id)

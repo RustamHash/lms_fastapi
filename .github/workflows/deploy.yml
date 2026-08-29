@@ -93,9 +93,16 @@ jobs:
           done
 
       - name: Health check
+        working-directory: /data/projects/lms_fastapi
         run: |
           set -e
-          echo "Проверка API..."
-          curl -s -o /dev/null -w "HTTP %{http_code}\n" http://localhost:8003/docs || true
+          echo "Проверка API /health..."
+          code=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8003/health)
+          echo "HTTP $code"
+          if [ "$code" != "200" ]; then
+            echo "❌ API health failed"
+            docker compose logs fastapi --tail=50 || true
+            exit 1
+          fi
           echo "Проверка Flower..."
           curl -s -o /dev/null -w "HTTP %{http_code}\n" http://localhost:5555 || true

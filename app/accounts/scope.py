@@ -1,8 +1,8 @@
 """Скоуп данных пользователя: поклажедатели и клиенты.
 
-Пустые привязки = сотрудник склада, видит всё.
-Только поклажедатели = менеджер поклажедателя.
-Поклажедатели + клиенты = торговый агент.
+Оператор склада (is_portal_user=False) — все поклажедатели, режут только роли.
+Пользователь портала (is_portal_user=True) — только свои depositor_ids;
+без привязки → пустой scope (ничего не видно), не «открой всё».
 """
 
 from __future__ import annotations
@@ -21,6 +21,7 @@ class DataScope:
     unrestricted: bool
     depositor_ids: frozenset[int]
     client_ids: frozenset[int] | None
+    is_portal_user: bool = False
 
     def allows_depositor(self, depositor_id: int) -> bool:
         if self.unrestricted:
@@ -49,14 +50,35 @@ class DataScope:
             return stmt.where(false())
         return stmt.where(client_column.in_(self.client_ids))
 
+    @property
+    def single_depositor_id(self) -> int | None:
+        """Единственный депозитор портала, если ровно один."""
+        if self.unrestricted or len(self.depositor_ids) != 1:
+            return None
+        return next(iter(self.depositor_ids))
+
 
 def build_scope(user: "User") -> DataScope:
+    """Построить рамку видимости.
+
+    Оператор / суперпользователь → unrestricted (роли отдельно).
+    Portal-user → только привязанные депозиторы; без привязок — пустой набор.
+    """
     depositor_ids = frozenset(user.depositor_ids)
     client_ids = frozenset(user.client_ids)
-    if not depositor_ids:
-        return DataScope(unrestricted=True, depositor_ids=frozenset(), client_ids=None)
+    is_portal = bool(getattr(user, "is_portal_user", False))
+
+    if user.is_superuser or not is_portal:
+        return DataScope(
+            unrestricted=True,
+            depositor_ids=frozenset(),
+            client_ids=None,
+            is_portal_user=False,
+        )
+
     return DataScope(
         unrestricted=False,
         depositor_ids=depositor_ids,
         client_ids=client_ids if client_ids else None,
+        is_portal_user=True,
     )

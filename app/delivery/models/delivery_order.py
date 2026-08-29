@@ -18,6 +18,9 @@ class DeliveryOrder(Base):
     contract_id: Mapped[int | None] = mapped_column(
         ForeignKey("parties_contract.id"), nullable=True, comment="Договор перевозки"
     )
+    tariff_id: Mapped[int | None] = mapped_column(
+        ForeignKey("parties_tariff.id"), nullable=True, comment="Тариф доставки"
+    )
     document_id: Mapped[int | None] = mapped_column(
         ForeignKey("documents_document.id"), nullable=True, comment="Документ склада"
     )
@@ -37,6 +40,7 @@ class DeliveryOrder(Base):
     comment: Mapped[str] = mapped_column(Text, default="", comment="Комментарий")
 
     contract: Mapped["Contract | None"] = relationship()
+    tariff: Mapped["Tariff | None"] = relationship()
     document: Mapped["Document | None"] = relationship()
     outbound_order: Mapped["OutboundOrder | None"] = relationship()
     deviations: Mapped[list["DeliveryDeviation"]] = relationship(back_populates="delivery_order")

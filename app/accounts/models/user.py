@@ -54,6 +54,12 @@ class User(Base):
     is_superuser: Mapped[bool] = mapped_column(
         Boolean, default=False, comment="Суперпользователь"
     )
+    is_portal_user: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        server_default="false",
+        comment="Пользователь портала поклажедателя (не оператор)",
+    )
     extra_permissions: Mapped[dict[str, list[str]]] = mapped_column(
         JSONB,
         default=dict,
@@ -91,11 +97,10 @@ class User(Base):
 
     @property
     def depositor_ids(self) -> list[int]:
-        """ID поклажедателей пользователя (без удалённых связей).
+        """ID поклажедателей из связей UserDepositor (без soft-deleted).
 
-        Пустой список = доступ ко всем поклажедателям (оператор склада,
-        логист, суперпользователь). Непустой = сотрудник поклажедателя:
-        видит только своих.
+        Для оператора склада связи не ограничивают данные (см. DataScope).
+        Для portal-пользователя обязательна хотя бы одна связь.
         """
         return [
             row.depositor_id

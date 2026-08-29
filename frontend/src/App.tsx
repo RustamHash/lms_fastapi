@@ -114,7 +114,14 @@ const ProductLocationsPage = lazy(() => import('./pages/ProductLocationsPage').t
 const VehicleDetailPage = lazy(() => import('./pages/VehicleDetailPage').then(m => ({ default: m.VehicleDetailPage })))
 
 
+const PortalLayout = lazy(() => import('./pages/PortalLayout').then(m => ({ default: m.PortalLayout })))
+const PortalHomePage = lazy(() => import('./pages/PortalHomePage').then(m => ({ default: m.PortalHomePage })))
+const PortalProductsPage = lazy(() => import('./pages/PortalProductsPage').then(m => ({ default: m.PortalProductsPage })))
+const PortalOrdersPage = lazy(() => import('./pages/PortalOrdersPage').then(m => ({ default: m.PortalOrdersPage })))
+const PortalStockPage = lazy(() => import('./pages/PortalStockPage').then(m => ({ default: m.PortalStockPage })))
+
 import { entityCrudRoutes } from './pages/entityCrudRoutes'
+import { RequireOperator } from './components/RequireOperator'
 
 import './App.css'
 
@@ -130,6 +137,13 @@ function App() {
             <Routes>
               <Route path="/login" element={<LoginPage />} />
               <Route element={<RequireAuth />}>
+                <Route path="/portal" element={<PortalLayout />}>
+                  <Route index element={<PortalHomePage />} />
+                  <Route path="products" element={<PortalProductsPage />} />
+                  <Route path="orders" element={<PortalOrdersPage />} />
+                  <Route path="stock" element={<PortalStockPage />} />
+                </Route>
+                <Route element={<RequireOperator />}>
                 <Route element={<Layout />}>
                   <Route path="/" element={<HomePage />} />
                   <Route path="/references" element={<ReferencesPage />} />
@@ -262,6 +276,7 @@ function App() {
 
                   <Route path="/integrations/profiles/:id" element={<IntegrationProfileDetailPage />} />
                   <Route path="*" element={<Navigate to="/" replace />} />
+                </Route>
                 </Route>
               </Route>
             </Routes>

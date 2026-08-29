@@ -44,10 +44,10 @@ class Contract(Base):
     terms: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, comment="Условия")
 
     customer: Mapped["LegalEntity"] = relationship(
-        foreign_keys=[customer_id], lazy="selectin"
+        foreign_keys=[customer_id]
     )
     executor: Mapped["LegalEntity"] = relationship(
-        foreign_keys=[executor_id], lazy="selectin"
+        foreign_keys=[executor_id]
     )
     tariff_documents: Mapped[list["TariffDocument"]] = relationship(
         back_populates="contract"

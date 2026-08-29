@@ -56,7 +56,7 @@ class Document(Base):
     lines: Mapped[list["DocumentLine"]] = relationship(
         back_populates="document", cascade="all, delete-orphan"
     )
-    warehouse: Mapped["Warehouse | None"] = relationship(lazy="selectin")
+    warehouse: Mapped["Warehouse | None"] = relationship()
 
 
 class DocumentLine(Base):
@@ -81,5 +81,5 @@ class DocumentLine(Base):
     )
 
     document: Mapped["Document"] = relationship(back_populates="lines")
-    product: Mapped["Product"] = relationship(lazy="selectin")
-    batch: Mapped["Batch | None"] = relationship(lazy="selectin")
+    product: Mapped["Product"] = relationship()
+    batch: Mapped["Batch | None"] = relationship()

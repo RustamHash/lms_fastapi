@@ -21,6 +21,7 @@ class UserRead(BaseRead):
     phone: str = ""
     email: str | None = None
     is_superuser: bool = False
+    is_portal_user: bool = False
     roles: list[RoleBrief] = Field(default_factory=list)
     depositor_ids: list[int] = Field(default_factory=list)
     client_ids: list[int] = Field(default_factory=list)
@@ -40,12 +41,14 @@ class UserCreate(BaseModel):
     password: str = Field(min_length=8, max_length=128)
     phone: str = ""
     email: str | None = None
+    is_portal_user: bool = False
 
 
 class UserUpdate(BaseModel):
     phone: str | None = None
     email: str | None = None
     is_active: bool | None = None
+    is_portal_user: bool | None = None
 
 
 class UserRolesUpdate(BaseModel):
@@ -63,14 +66,14 @@ class UserClientsUpdate(BaseModel):
 class MeRead(BaseModel):
     """Текущий пользователь.
 
-    Пустой depositor_ids = все поклажедатели (сотрудник склада).
-    Непустой depositor_ids без client_ids = менеджер поклажедателя.
-    Непустой client_ids = торговый агент.
+    is_portal_user=True → только портал и свои depositor_ids.
+    is_portal_user=False (оператор) → все поклажедатели, режут роли.
     """
 
     id: int
     username: str
     is_superuser: bool
+    is_portal_user: bool = False
     permissions: dict[str, list[str]] = Field(default_factory=dict)
     roles: list[RoleBrief] = Field(default_factory=list)
     depositor_ids: list[int] = Field(default_factory=list)

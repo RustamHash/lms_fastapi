@@ -20,7 +20,15 @@ async def login(services: Services, form: Annotated[OAuth2PasswordRequestForm, D
     user = await services.user.authenticate(form.username, form.password)
     if user is None:
         raise UnauthorizedError("Неверное имя пользователя или пароль")
-    token = create_access_token(user.id, user.username)
+    if user.is_portal_user:
+        full = await services.user.get_by_id(user.id, with_depositors=True)
+        if full is None or not full.depositor_ids:
+            raise UnauthorizedError(
+                "Пользователь портала не привязан к поклажедателю"
+            )
+    token = create_access_token(
+        user.id, user.username, is_portal_user=user.is_portal_user
+    )
     return TokenResponse(access_token=token)
 
 
@@ -38,6 +46,7 @@ async def me(user: CurrentUser, services: Services) -> MeRead:
         id=full.id,
         username=full.username,
         is_superuser=full.is_superuser,
+        is_portal_user=full.is_portal_user,
         permissions=full.get_all_permissions(),
         roles=[
             RoleBrief.model_validate(role)

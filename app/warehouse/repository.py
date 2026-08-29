@@ -11,6 +11,7 @@ from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.infrastructure.repo_base import BaseRepository
+from app.accounts.scope import DataScope
 from app.core.statuses import TaskStatus
 from app.warehouse.models import (
     Batch,
@@ -36,8 +37,31 @@ class ProductRepository(BaseRepository[Product]):
     def __init__(self, session: AsyncSession) -> None:
         super().__init__(session, Product)
 
-    async def list_by_depositor(self, depositor_id: int) -> list[Product]:
-        stmt = select(Product).where(Product.depositor_id == depositor_id)
+    async def list_all(self, scope: DataScope | None = None) -> list[Product]:
+        stmt = select(Product).where(Product.is_deleted.is_(False))
+        if scope is not None:
+            stmt = scope.filter_depositor(stmt, Product.depositor_id)
+        return list(await self._s.scalars(stmt))
+
+    async def get_by_id(
+        self, id: int, scope: DataScope | None = None, *, include_deleted: bool = False
+    ) -> Product | None:
+        row = await super().get_by_id(id, include_deleted=include_deleted)
+        if row is None:
+            return None
+        if scope is not None and not scope.allows_depositor(row.depositor_id):
+            return None
+        return row
+
+    async def list_by_depositor(
+        self, depositor_id: int, scope: DataScope | None = None
+    ) -> list[Product]:
+        if scope is not None and not scope.allows_depositor(depositor_id):
+            return []
+        stmt = select(Product).where(
+            Product.depositor_id == depositor_id,
+            Product.is_deleted.is_(False),
+        )
         return list(await self._s.scalars(stmt))
 
     async def get_by_external_id(
@@ -140,6 +164,18 @@ class StockRepository(BaseRepository[StockBalance]):
                 (StockBalance.quantity - StockBalance.reserved_quantity) > 0,
             )
             .order_by(Batch.expiration_date.asc().nulls_last(), StockBalance.id.asc())
+        )
+        return list(await self._s.scalars(stmt))
+
+    async def list_by_depositor(self, depositor_id: int) -> list[StockBalance]:
+        stmt = (
+            select(StockBalance)
+            .join(Product, StockBalance.product_id == Product.id)
+            .where(
+                Product.depositor_id == depositor_id,
+                StockBalance.is_deleted.is_(False),
+                Product.is_deleted.is_(False),
+            )
         )
         return list(await self._s.scalars(stmt))
 

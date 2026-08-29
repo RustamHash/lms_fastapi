@@ -113,3 +113,49 @@
 .task-filter__date-input:focus {
   border-color: #2563eb;
 }
+
+/* Портал поклажедателя */
+.portal-shell {
+  min-height: 100vh;
+  background: #f8fafc;
+  color: #0f172a;
+}
+.portal-header {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 0.75rem 1.25rem;
+  background: #0f172a;
+  color: #f8fafc;
+}
+.portal-brand {
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+.portal-nav {
+  display: flex;
+  gap: 1rem;
+  flex: 1;
+}
+.portal-nav a {
+  color: #cbd5e1;
+  text-decoration: none;
+}
+.portal-nav a:hover {
+  color: #fff;
+}
+.portal-user {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+.portal-user button {
+  border: 1px solid #64748b;
+  background: transparent;
+  color: #f8fafc;
+  padding: 0.25rem 0.6rem;
+  cursor: pointer;
+}
+.portal-main {
+  padding: 1.25rem;
+}

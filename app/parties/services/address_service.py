@@ -71,14 +71,12 @@ class AddressService:
             raise BadRequestError(str(e)) from e
 
         address = await self._find_or_create_address(cleaned)
-        alias = await self._raw.create(
+        return await self._raw.create(
             raw_text=text,
             hash=digest,
             normalized_address_id=address.id,
             source=source,
         )
-        await self._raw._s.refresh(alias, attribute_names=["normalized_address"])
-        return alias
 
     async def _find_or_create_address(self, cleaned: dict) -> Address:
         fias_id = cleaned.get("fias_id") or ""

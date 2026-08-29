@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+from app.accounts.scope import DataScope
 from app.parties.models import Depositor
 from app.parties.repository import DepositorRepository
 
@@ -12,11 +13,13 @@ class DepositorService:
     def __init__(self, repo: DepositorRepository) -> None:
         self._repo = repo
 
-    async def get_by_id(self, id: int) -> Depositor | None:
-        return await self._repo.get_by_id(id)
+    async def get_by_id(
+        self, id: int, scope: DataScope | None = None
+    ) -> Depositor | None:
+        return await self._repo.get_by_id(id, scope=scope)
 
-    async def list_all(self) -> list[Depositor]:
-        return await self._repo.list_all()
+    async def list_all(self, scope: DataScope | None = None) -> list[Depositor]:
+        return await self._repo.list_all(scope=scope)
 
     async def create(self, **kwargs) -> Depositor:
         return await self._repo.create(**kwargs)

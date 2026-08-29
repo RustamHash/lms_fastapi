@@ -49,12 +49,14 @@ async def inbound_plan_fact(
 async def create_receiving_from_inbound(
     body: ReceivingFromInbound,
     user_id: UserDep,
+    scope: ScopeDep,
     service: ReceivingService = Depends(get_receiving_service),
 ) -> TaskRead:
     task = await service.create_from_inbound(
         user_id=user_id,
         inbound_order_id=body.inbound_order_id,
         receiving_location_id=body.receiving_location_id,
+        scope=scope,
     )
     return TaskRead.model_validate(task)
 

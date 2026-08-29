@@ -7,6 +7,7 @@ from decimal import Decimal
 
 from app.core.exceptions import BadRequestError, NotFoundError
 from app.core.statuses import OrderStatus, TaskStatus
+from app.accounts.scope import DataScope
 from app.infrastructure.events import schedule_event
 from app.infrastructure.events.event_types import EventTypes
 from app.orders.repository import InboundOrderLineRepository, InboundOrderRepository
@@ -66,8 +67,9 @@ class ReceivingService:
         user_id: int | None,
         inbound_order_id: int,
         receiving_location_id: int | None = None,
+        scope: DataScope | None = None,
     ) -> Task:
-        order = await self._inbound.get_by_id(inbound_order_id)
+        order = await self._inbound.get_by_id(inbound_order_id, scope=scope)
         if order is None:
             raise NotFoundError("Входящий заказ не найден")
         if not order.warehouse_id:

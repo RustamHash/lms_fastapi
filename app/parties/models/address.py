@@ -55,7 +55,7 @@ class Address(Base):
     )
 
     delivery_zone: Mapped[DeliveryZone | None] = relationship(
-        back_populates="addresses", lazy="selectin"
+        back_populates="addresses"
     )
     raw_addresses: Mapped[list["RawAddress"]] = relationship(
         back_populates="normalized_address"
@@ -82,7 +82,7 @@ class RawAddress(Base):
     source: Mapped[str] = mapped_column(String(50), default="", comment="Источник")
 
     normalized_address: Mapped[Address] = relationship(
-        back_populates="raw_addresses", lazy="selectin"
+        back_populates="raw_addresses"
     )
 
     def __repr__(self) -> str:

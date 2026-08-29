@@ -108,9 +108,16 @@ class NotificationDispatcher:
         )
 
 
-def setup_notification_dispatcher(session=None) -> None:
-    """Подписать диспетчер на все события."""
-    dispatcher = NotificationDispatcher(session)
+_bootstrapped = False
+
+
+def setup_notification_dispatcher() -> None:
+    """Подписать диспетчер на все события. Идемпотентно; сессию handler открывает сам."""
+    global _bootstrapped
+    if _bootstrapped:
+        return
+
+    dispatcher = NotificationDispatcher(None)
 
     event_bus.subscribe(EventTypes.IMPORT_COMPLETED, dispatcher.handle_event)
     event_bus.subscribe(EventTypes.IMPORT_FAILED, dispatcher.handle_event)
@@ -118,4 +125,5 @@ def setup_notification_dispatcher(session=None) -> None:
     event_bus.subscribe(EventTypes.ROUTE_ASSIGNED, dispatcher.handle_event)
     event_bus.subscribe(EventTypes.TASK_COMPLETED, dispatcher.handle_event)
 
+    _bootstrapped = True
     logger.info("Диспетчер уведомлений подписан на события")

@@ -5,7 +5,12 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, status
 
 from app.api.deps import Services, UserDep, require_permission
-from app.api.v1.delivery.schemas import RouteCreate, RouteRead
+from app.api.v1.delivery.schemas import (
+    RouteAssignOrder,
+    RouteCreate,
+    RouteLineRead,
+    RouteRead,
+)
 from app.core.exceptions import NotFoundError
 from app.delivery.repository import RouteRepository
 
@@ -30,6 +35,24 @@ async def get_route(route_id: int, services: Services) -> RouteRead:
     if route is None:
         raise NotFoundError("Маршрут не найден")
     return RouteRead.model_validate(route)
+
+
+@router.post(
+    "/{route_id}/assign",
+    response_model=RouteLineRead,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_permission("update", "routes"))],
+)
+async def assign_order_to_route(
+    route_id: int,
+    body: RouteAssignOrder,
+    services: Services,
+    user_id: UserDep,
+) -> RouteLineRead:
+    line = await services.route.assign_order(
+        route_id, body.delivery_order_id, user_id=user_id
+    )
+    return RouteLineRead.model_validate(line)
 
 
 @router.patch("/{route_id}", response_model=RouteRead, dependencies=[Depends(require_permission("update", "routes"))])

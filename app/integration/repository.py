@@ -7,6 +7,7 @@ from __future__ import annotations
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.accounts.scope import DataScope
 from app.integration.models import IntegrationError, IntegrationLog, IntegrationProfile
 
 
@@ -14,14 +15,31 @@ class IntegrationProfileRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._s = session
 
-    async def get_by_id(self, id: int) -> IntegrationProfile | None:
-        return await self._s.get(IntegrationProfile, id)
+    async def get_by_id(
+        self, id: int, scope: DataScope | None = None
+    ) -> IntegrationProfile | None:
+        row = await self._s.get(IntegrationProfile, id)
+        if row is None or row.is_deleted:
+            return None
+        if scope is not None and not scope.allows_depositor(row.depositor_id):
+            return None
+        return row
 
-    async def list_all(self) -> list[IntegrationProfile]:
-        return list(await self._s.scalars(select(IntegrationProfile)))
+    async def list_all(
+        self, scope: DataScope | None = None
+    ) -> list[IntegrationProfile]:
+        stmt = select(IntegrationProfile).where(
+            IntegrationProfile.is_deleted.is_(False)
+        )
+        if scope is not None:
+            stmt = scope.filter_depositor(stmt, IntegrationProfile.depositor_id)
+        return list(await self._s.scalars(stmt))
 
     async def list_active(self) -> list[IntegrationProfile]:
-        stmt = select(IntegrationProfile).where(IntegrationProfile.is_active.is_(True))
+        stmt = select(IntegrationProfile).where(
+            IntegrationProfile.is_active.is_(True),
+            IntegrationProfile.is_deleted.is_(False),
+        )
         return list(await self._s.scalars(stmt))
 
     async def get_active_with_out_path(
@@ -45,7 +63,7 @@ class IntegrationProfileRepository:
         return row
 
     async def update(self, id: int, **kwargs) -> IntegrationProfile | None:
-        row = await self._s.get(IntegrationProfile, id)
+        row = await self.get_by_id(id)
         if row is None:
             return None
         for field, value in kwargs.items():
@@ -55,7 +73,7 @@ class IntegrationProfileRepository:
         return row
 
     async def soft_delete(self, id: int, user_id: int | None = None) -> bool:
-        row = await self._s.get(IntegrationProfile, id)
+        row = await self.get_by_id(id)
         if row is None:
             return False
         row.soft_delete(user_id)

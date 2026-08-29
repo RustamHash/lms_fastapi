@@ -8,11 +8,11 @@ import logging
 import time
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from fastapi.responses import StreamingResponse
 
-from app.api.deps import SessionDep, UserDep, require_permission
+from app.api.deps import CurrentUser, SessionDep, require_permission
 from app.core.exceptions import NotFoundError
 from app.integration.models import IntegrationLog
 
@@ -34,42 +34,42 @@ router = APIRouter(prefix="/integrations", tags=["integrations"])
     dependencies=[Depends(require_permission("create", "integrations"))],
 )
 async def start_import(
-    request: Request,
     session: SessionDep,
-    user_id: UserDep,
+    current_user: CurrentUser,
     body: ImportRequest | None = None,
 ) -> dict:
     """Запустить импорт. Возвращает task_id."""
-    # Извлечь document_type из body или query
     document_type = None
     if body:
         document_type = body.document_type or body.documentType
 
-    logger.info("ПОЛУЧЕН ЗАПРОС: document_type=%s, user_id=%s", document_type, user_id)
+    logger.info(
+        "ПОЛУЧЕН ЗАПРОС: document_type=%s, user_id=%s",
+        document_type,
+        current_user.id,
+    )
 
-    # Общий task_id для всей задачи
     task_id = str(uuid4())
 
-    # Создаём запись в логе СРАЗУ, чтобы фронтенд мог получить статус
     from app.integration.repository import IntegrationLogRepository
 
     await IntegrationLogRepository(session).create(
         task_id=task_id,
         status="starting",
         document_type=document_type,
-        created_by_id=user_id,
+        created_by_id=current_user.id,
         current_step="В очереди",
         messages=["Задача поставлена в очередь, ждём воркер"],
     )
-    # До send_task и ответа клиенту: иначе GET /status гоняется с commit UoW после yield.
+    # Ранний commit нужен: GET /status иначе гоняется с UoW после yield.
+    # Статус бизнеса — IntegrationLog; Celery SUCCESS ≠ успешный импорт (см. tasks.run_import).
     await session.commit()
 
-    # Отправляем задачу в Celery
     from app.tasks import celery_app
 
     celery_task = celery_app.send_task(
         "app.tasks.run_import",
-        args=[task_id, user_id or 1, document_type],
+        args=[task_id, current_user.id, document_type],
     )
     return {
         "task_id": task_id,

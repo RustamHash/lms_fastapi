@@ -46,12 +46,12 @@ class Client(Base):
     )
     is_edo: Mapped[bool] = mapped_column(Boolean, default=False, comment="Признак ЭДО")
 
-    depositor: Mapped["Depositor"] = relationship(lazy="selectin")
+    depositor: Mapped["Depositor"] = relationship()
     legal_address: Mapped["Address | None"] = relationship(
-        foreign_keys=[legal_address_id], lazy="selectin"
+        foreign_keys=[legal_address_id]
     )
     delivery_address: Mapped["Address | None"] = relationship(
-        foreign_keys=[delivery_address_id], lazy="selectin"
+        foreign_keys=[delivery_address_id]
     )
 
     def __repr__(self) -> str:

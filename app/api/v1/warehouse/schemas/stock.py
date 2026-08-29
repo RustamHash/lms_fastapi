@@ -30,8 +30,8 @@ class StockBalanceRead(BaseRead):
         title="Партия",
         json_schema_extra={"ui_type": "select", "endpoint": "/api/v1/warehouse/batches"},
     )
-    quantity: Decimal = Field(..., title="Количество")
-    reserved_quantity: Decimal = Field(Decimal("0"), title="Зарезервировано")
+    quantity: Decimal = Field(..., title="Количество", ge=0)
+    reserved_quantity: Decimal = Field(Decimal("0"), title="Зарезервировано", ge=0)
 
 
 class StockAdd(BaseModel):
@@ -45,7 +45,7 @@ class StockAdd(BaseModel):
         title="Ячейка",
         json_schema_extra={"ui_type": "select", "endpoint": "/api/v1/warehouse/topology/locations"},
     )
-    quantity: Decimal = Field(..., title="Количество")
+    quantity: Decimal = Field(..., title="Количество", gt=0)
     lpn_id: int = Field(
         ...,
         title="LPN",
@@ -74,7 +74,7 @@ class StockRemove(BaseModel):
         title="Ячейка",
         json_schema_extra={"ui_type": "select", "endpoint": "/api/v1/warehouse/topology/locations"},
     )
-    quantity: Decimal = Field(..., title="Количество")
+    quantity: Decimal = Field(..., title="Количество", gt=0)
     lpn_id: int = Field(
         ...,
         title="LPN",
@@ -108,7 +108,7 @@ class StockMove(BaseModel):
         title="Куда",
         json_schema_extra={"ui_type": "select", "endpoint": "/api/v1/warehouse/topology/locations"},
     )
-    quantity: Decimal = Field(..., title="Количество")
+    quantity: Decimal = Field(..., title="Количество", gt=0)
     lpn_id: int = Field(
         ...,
         title="LPN",

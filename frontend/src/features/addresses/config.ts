@@ -34,7 +34,7 @@ export const addressConfig = {
       { id: 'street', label: 'Улица', type: 'text' },
       { id: 'house', label: 'Дом', type: 'text' },
       { id: 'postal_code', label: 'Индекс', type: 'text' },
-      { id: 'zone_name', label: 'Зона доставки', type: 'text' },
+      { id: 'delivery_zone.name', label: 'Зона доставки', type: 'text' },
       { id: 'latitude', label: 'Широта', type: 'number' },
       { id: 'longitude', label: 'Долгота', type: 'number' },
       { id: 'is_active', label: 'Активен', type: 'bool' },

@@ -8,6 +8,7 @@ import logging
 
 from app.warehouse.models import Product, Package
 from app.warehouse.repository import ProductRepository
+from app.accounts.scope import DataScope
 
 logger = logging.getLogger(__name__)
 
@@ -16,14 +17,18 @@ class ProductService:
     def __init__(self, repo: ProductRepository) -> None:
         self._repo = repo
 
-    async def get_by_id(self, product_id: int) -> Product | None:
-        return await self._repo.get_by_id(product_id)
+    async def get_by_id(
+        self, product_id: int, scope: DataScope | None = None
+    ) -> Product | None:
+        return await self._repo.get_by_id(product_id, scope=scope)
 
-    async def list_all(self) -> list[Product]:
-        return await self._repo.list_all()
+    async def list_all(self, scope: DataScope | None = None) -> list[Product]:
+        return await self._repo.list_all(scope=scope)
 
-    async def list_by_depositor(self, depositor_id: int) -> list[Product]:
-        return await self._repo.list_by_depositor(depositor_id)
+    async def list_by_depositor(
+        self, depositor_id: int, scope: DataScope | None = None
+    ) -> list[Product]:
+        return await self._repo.list_by_depositor(depositor_id, scope=scope)
 
     async def get_by_external_id(self, depositor_id: int, external_id: str) -> Product | None:
         return await self._repo.get_by_external_id(depositor_id, external_id)

@@ -24,7 +24,7 @@ class Depositor(Base):
         comment="Юрлицо",
     )
 
-    legal_entity: Mapped["LegalEntity"] = relationship(lazy="selectin")
+    legal_entity: Mapped["LegalEntity"] = relationship()
     code: Mapped[str] = mapped_column(
         String(50), default="", comment="Код поклажедателя"
     )
@@ -45,7 +45,7 @@ class Keeper(Base):
         comment="Юрлицо",
     )
 
-    legal_entity: Mapped["LegalEntity"] = relationship(lazy="selectin")
+    legal_entity: Mapped["LegalEntity"] = relationship()
 
     def __repr__(self) -> str:
         return f"<Keeper(id={self.id})>"
@@ -63,7 +63,7 @@ class Carrier(Base):
         comment="Юрлицо",
     )
 
-    legal_entity: Mapped["LegalEntity"] = relationship(lazy="selectin")
+    legal_entity: Mapped["LegalEntity"] = relationship()
 
     def __repr__(self) -> str:
         return f"<Carrier(id={self.id})>"

@@ -46,6 +46,12 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://127.0.0.1:8080/health || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 20s
     volumes:
       - ./app:/app/app
       - ./alembic:/app/alembic
@@ -64,6 +70,7 @@ services:
       - .env.docker
     environment:
       - REDIS_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/1
     depends_on:
       postgres:
         condition: service_healthy
@@ -75,25 +82,6 @@ services:
       - ./alembic.ini:/app/alembic.ini
       - ./logs:/app/logs
       - ./uploads:/app/uploads
-
-  celery_beat:
-    build: .
-    container_name: lms_celery_beat
-    restart: unless-stopped
-    command: celery -A app.tasks.celery_app beat --loglevel=info
-    env_file:
-      - .env.docker
-    environment:
-      - REDIS_URL=redis://redis:6379/0
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    volumes:
-      - ./app:/app/app
-      - ./logs:/app/logs
-
 
   flower:
     image: mher/flower:2.0

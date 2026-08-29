@@ -13,17 +13,26 @@ ModelType = TypeVar("ModelType", bound=Base)
 
 
 class BaseRepository(Generic[ModelType]):
-    """Универсальный репозиторий."""
+    """Универсальный репозиторий. Soft-deleted строки скрыты по умолчанию."""
 
     def __init__(self, session: AsyncSession, model: type[ModelType]) -> None:
         self._s = session
         self._model = model
 
-    async def get_by_id(self, id: int) -> ModelType | None:
-        return await self._s.get(self._model, id)
+    async def get_by_id(
+        self, id: int, *, include_deleted: bool = False
+    ) -> ModelType | None:
+        row = await self._s.get(self._model, id)
+        if row is None:
+            return None
+        if not include_deleted and getattr(row, "is_deleted", False):
+            return None
+        return row
 
-    async def list_all(self) -> list[ModelType]:
+    async def list_all(self, *, include_deleted: bool = False) -> list[ModelType]:
         stmt = select(self._model)
+        if not include_deleted and hasattr(self._model, "is_deleted"):
+            stmt = stmt.where(self._model.is_deleted.is_(False))
         return list(await self._s.scalars(stmt))
 
     async def create(self, **kwargs: Any) -> ModelType:

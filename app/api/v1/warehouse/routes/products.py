@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, status
 
-from app.api.deps import UserDep, require_permission
+from app.api.deps import ScopeDep, UserDep, require_permission
 from app.api.v1.warehouse.deps import (
     get_package_service,
     get_product_group_service,
@@ -18,7 +18,7 @@ from app.api.v1.warehouse.schemas import (
     ProductLocationCreate,
     ProductRead,
 )
-from app.core.exceptions import ConflictError, NotFoundError
+from app.core.exceptions import ConflictError, ForbiddenError, NotFoundError
 from app.warehouse.services.package_service import PackageService
 from app.warehouse.services.product_group_service import ProductGroupService
 from app.warehouse.services.product_location_service import ProductLocationService
@@ -29,13 +29,16 @@ router = APIRouter(prefix="/warehouse", tags=["warehouse-products"])
 
 @router.get("/products", response_model=list[ProductRead], dependencies=[Depends(require_permission("view", "products"))])
 async def list_products(
+    scope: ScopeDep,
     service: ProductService = Depends(get_product_service),
     depositor_id: int | None = None,
 ) -> list[ProductRead]:
-    if depositor_id:
-        rows = await service.list_by_depositor(depositor_id)
+    if depositor_id is not None:
+        if not scope.allows_depositor(depositor_id):
+            raise ForbiddenError("Нет доступа к поклажедателю")
+        rows = await service.list_by_depositor(depositor_id, scope=scope)
     else:
-        rows = await service.list_all()
+        rows = await service.list_all(scope=scope)
     return [ProductRead.model_validate(r) for r in rows]
 
 
@@ -43,8 +46,11 @@ async def list_products(
 async def create_product(
     body: ProductCreate,
     user_id: UserDep,
+    scope: ScopeDep,
     service: ProductService = Depends(get_product_service),
 ) -> ProductRead:
+    if not scope.allows_depositor(body.depositor_id):
+        raise ForbiddenError("Нет доступа к поклажедателю")
     try:
         row = await service.create(user_id=user_id, **body.model_dump())
     except ValueError as e:
@@ -55,9 +61,10 @@ async def create_product(
 @router.get("/products/{product_id}", response_model=ProductRead, dependencies=[Depends(require_permission("view", "products"))])
 async def get_product(
     product_id: int,
+    scope: ScopeDep,
     service: ProductService = Depends(get_product_service),
 ) -> ProductRead:
-    product = await service.get_by_id(product_id)
+    product = await service.get_by_id(product_id, scope=scope)
     if product is None:
         raise NotFoundError("Товар не найден")
     return ProductRead.model_validate(product)

@@ -234,7 +234,7 @@ export function useEntityList<Row extends { id: number }>(config: ListPageConfig
   }, [])
   
   const reload = useCallback(() => {
-    queryClient.invalidateQueries({ queryKey: ['entity-system', config.entityKey] })
+    void queryClient.refetchQueries({ queryKey: ['entity-system', config.entityKey] })
     clearSelection()
   }, [queryClient, config.entityKey, clearSelection])
   

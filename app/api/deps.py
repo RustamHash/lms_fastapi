@@ -57,7 +57,7 @@ async def get_current_user(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Недействительный токен"
         ) from None
     repo = UserRepository(session)
-    user = await repo.get_by_id(user_id)
+    user = await repo.get_by_id(user_id, with_depositors=True)
     if user is None or user.is_deleted or not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -73,22 +73,33 @@ UserDep = Annotated[int | None, Depends(get_current_user_id)]
 CurrentUser = Annotated[User, Depends(get_current_user)]
 
 
-async def get_data_scope(
-    user: CurrentUser,
-    session: AsyncSession = Depends(get_session),
-) -> DataScope:
-    full = await UserRepository(session).get_by_id(user.id, with_depositors=True)
-    if full is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Пользователь не найден или деактивирован",
-        )
+async def get_data_scope(user: CurrentUser) -> DataScope:
     from app.accounts.scope import build_scope
 
-    return build_scope(full)
+    return build_scope(user)
 
 
 ScopeDep = Annotated[DataScope, Depends(get_data_scope)]
+
+
+async def require_operator(user: CurrentUser) -> User:
+    """Только сотрудники склада (не portal)."""
+    if user.is_portal_user:
+        raise ForbiddenError("Доступ только через портал поклажедателя")
+    return user
+
+
+async def require_portal_user(user: CurrentUser, scope: ScopeDep) -> User:
+    """Только пользователь портала с привязкой к поклажедателю."""
+    if not user.is_portal_user:
+        raise ForbiddenError("Эндпоинт только для портала поклажедателя")
+    if not scope.depositor_ids:
+        raise ForbiddenError("Пользователь портала не привязан к поклажедателю")
+    return user
+
+
+PortalUser = Annotated[User, Depends(require_portal_user)]
+OperatorUser = Annotated[User, Depends(require_operator)]
 
 
 # ========== Проверка прав ==========

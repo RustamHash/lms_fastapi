@@ -15,9 +15,31 @@ class Settings(BaseSettings):
 
     database_url: str = Field(..., description="SQLAlchemy URL для подключения к БД")
 
+    redis_url: str = Field(
+        default="redis://localhost:6379/0",
+        description="Redis: fallback для Celery broker",
+    )
+    celery_broker_url: str | None = Field(
+        default=None,
+        description="Celery broker; если пусто — redis_url",
+    )
+    celery_result_backend: str | None = Field(
+        default=None,
+        description="Celery result backend; если пусто — тот же host, DB /1",
+    )
+
     jwt_secret_key: str = Field(..., description="Секрет JWT")
     jwt_algorithm: str = Field(default="HS256")
     access_token_expire_minutes: int = Field(default=1440)
+
+    def resolve_celery_broker_url(self) -> str:
+        return self.celery_broker_url or self.redis_url
+
+    def resolve_celery_result_backend(self) -> str:
+        if self.celery_result_backend:
+            return self.celery_result_backend
+        base = self.redis_url.rsplit("/", 1)[0]
+        return f"{base}/1"
 
     dadata_token: str | None = Field(default=None)
     dadata_secret: str | None = Field(default=None)

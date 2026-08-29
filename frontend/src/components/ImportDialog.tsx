@@ -6,6 +6,8 @@ type Props = {
   documentType: 'porder' | 'order' | 'all'
   title: string
   onClose: () => void
+  /** Вызывается при завершении импорта (success/failed), чтобы обновить список на странице. */
+  onSuccess?: () => void
 }
 
 type ImportStatus = {
@@ -21,12 +23,24 @@ type ImportStatus = {
   order_number: string | null
 }
 
-export function ImportDialog({ documentType, title, onClose }: Props) {
+export function ImportDialog({ documentType, title, onClose, onSuccess }: Props) {
   const documentTypeRef = useRef(documentType)
+  const onSuccessRef = useRef(onSuccess)
+  const listNotifiedRef = useRef(false)
 
   useEffect(() => {
     documentTypeRef.current = documentType
   }, [documentType])
+
+  useEffect(() => {
+    onSuccessRef.current = onSuccess
+  }, [onSuccess])
+
+  const notifyList = useCallback(() => {
+    if (listNotifiedRef.current) return
+    listNotifiedRef.current = true
+    onSuccessRef.current?.()
+  }, [])
 
   const [status, setStatus] = useState<ImportStatus | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -140,6 +154,7 @@ export function ImportDialog({ documentType, title, onClose }: Props) {
 
           if (statusData.status === 'completed' || statusData.status === 'failed') {
             stopPolling()
+            notifyList()
             return
           }
 
@@ -153,14 +168,16 @@ export function ImportDialog({ documentType, title, onClose }: Props) {
         }
       }
 
-      if (first.status !== 'completed' && first.status !== 'failed') {
+      if (first.status === 'completed' || first.status === 'failed') {
+        notifyList()
+      } else {
         void longPoll()
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Ошибка импорта')
       stopPolling()
     }
-  }, [applyStatus, stopPolling])
+  }, [applyStatus, stopPolling, notifyList])
 
   const startedRef = useRef(false)
 

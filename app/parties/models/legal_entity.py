@@ -40,10 +40,10 @@ class LegalEntity(Base):
     )
 
     legal_address: Mapped["Address | None"] = relationship(
-        foreign_keys=[legal_address_id], lazy="selectin"
+        foreign_keys=[legal_address_id]
     )
     actual_address: Mapped["Address | None"] = relationship(
-        foreign_keys=[actual_address_id], lazy="selectin"
+        foreign_keys=[actual_address_id]
     )
 
     def __repr__(self) -> str:

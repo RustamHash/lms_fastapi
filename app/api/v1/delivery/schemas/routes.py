@@ -38,3 +38,22 @@ class RouteCreate(BaseModel):
         json_schema_extra={"ui_type": "select", "endpoint": "/api/v1/delivery/vehicles"},
     )
     route_date: date_type = Field(..., title="Дата")
+
+
+class RouteAssignOrder(BaseModel):
+    delivery_order_id: int = Field(
+        ...,
+        title="Заказ на доставку",
+        json_schema_extra={"ui_type": "select", "endpoint": "/api/v1/delivery/orders"},
+    )
+
+
+class RouteLineRead(BaseRead):
+    route_id: int = Field(..., title="Маршрут")
+    delivery_order_id: int = Field(
+        ...,
+        title="Заказ на доставку",
+        json_schema_extra={"ui_type": "select", "endpoint": "/api/v1/delivery/orders"},
+    )
+    order: int = Field(..., title="Порядок")
+    status: str = Field("pending", title="Статус")
